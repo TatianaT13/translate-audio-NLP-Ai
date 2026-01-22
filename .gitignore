@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+flash_audio_archive/
+data/*
+outputs/*
+logs/*
+*.log
+!.gitkeep
