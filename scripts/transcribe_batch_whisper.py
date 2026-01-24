@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+
 from faster_whisper import WhisperModel
 
 
