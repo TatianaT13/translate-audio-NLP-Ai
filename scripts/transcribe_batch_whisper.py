@@ -1,69 +1,15 @@
-import os
 import json
 import time
 import argparse
 from pathlib import Path
 from datetime import datetime
 
-
-from faster_whisper import WhisperModel
-
-
-AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac"}
+from flash_nlp.transcription import WhisperService
+from flash_nlp.io import ensure_dir, load_json, save_json, list_audio_files
 
 
 def utc_now():
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def list_audio_files(root: Path):
-    for p in root.rglob("*"):
-        if p.is_file() and p.suffix.lower() in AUDIO_EXTS:
-            yield p
-
-
-def ensure_dir(p: Path):
-    p.mkdir(parents=True, exist_ok=True)
-
-
-def load_json(p: Path):
-    if not p.exists():
-        return {}
-    return json.loads(p.read_text(encoding="utf-8"))
-
-
-def save_json(p: Path, obj):
-    p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def transcribe_file(model: WhisperModel, audio_path: Path, language: str | None, beam_size: int):
-    segments, info = model.transcribe(
-        str(audio_path),
-        language=language,
-        beam_size=beam_size,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
-    )
-
-    segs = []
-    texts = []
-    for s in segments:
-        segs.append(
-            {
-                "start": float(s.start),
-                "end": float(s.end),
-                "text": s.text.strip(),
-            }
-        )
-        texts.append(s.text.strip())
-
-    return {
-        "language": info.language,
-        "language_probability": float(info.language_probability),
-        "duration": float(info.duration),
-        "segments": segs,
-        "text": " ".join([t for t in texts if t]),
-    }
 
 
 def main():
@@ -90,7 +36,8 @@ def main():
         compute_type = "int8" if args.device == "cpu" else "float16"
 
     print(f"{utc_now()} | Chargement modèle={args.model} device={args.device} compute_type={compute_type}")
-    model = WhisperModel(args.model, device=args.device, compute_type=compute_type)
+    whisper = WhisperService()
+    whisper.load(args.model, device=args.device, compute_type=compute_type)
 
     n_total = 0
     n_done = 0
@@ -110,7 +57,9 @@ def main():
 
         t0 = time.time()
         try:
-            res = transcribe_file(model, audio_path, args.language, args.beam_size)
+            res = whisper.transcribe_wav_with_segments(
+                str(audio_path), args.language, args.beam_size, min_silence_ms=500
+            )
             elapsed = time.time() - t0
 
             meta = {
