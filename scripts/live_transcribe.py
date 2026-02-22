@@ -2,55 +2,12 @@ import argparse
 import queue
 import sys
 import time
-from dataclasses import dataclass
-from typing import Optional, List
+from typing import List
 
 import numpy as np
 import sounddevice as sd
-from scipy.io.wavfile import write as wav_write
-from faster_whisper import WhisperModel
 
-
-@dataclass
-class AudioChunk:
-    pcm: np.ndarray
-    sample_rate: int
-
-
-def list_input_devices():
-    devices = sd.query_devices()
-    for i, d in enumerate(devices):
-        if d.get("max_input_channels", 0) > 0:
-            name = d.get("name", "unknown")
-            print(f"{i}: {name}")
-
-
-def rms(x: np.ndarray) -> float:
-    if x.size == 0:
-        return 0.0
-    return float(np.sqrt(np.mean(x.astype(np.float32) ** 2)))
-
-
-def save_wav(path: str, audio: np.ndarray, sr: int):
-    a = np.clip(audio, -1.0, 1.0)
-    a16 = (a * 32767.0).astype(np.int16)
-    wav_write(path, sr, a16)
-
-
-def transcribe_wav(model: WhisperModel, wav_path: str, language: Optional[str], beam_size: int):
-    segments, info = model.transcribe(
-        wav_path,
-        language=language,
-        beam_size=beam_size,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 350},
-    )
-    texts: List[str] = []
-    for s in segments:
-        t = (s.text or "").strip()
-        if t:
-            texts.append(t)
-    return " ".join(texts), info.language, float(info.language_probability)
+from flash_nlp.transcription import WhisperService, rms, save_wav, list_input_devices
 
 
 def main():
@@ -68,7 +25,8 @@ def main():
     args = ap.parse_args()
 
     if args.list_devices:
-        list_input_devices()
+        for idx, name in list_input_devices():
+            print(f"{idx}: {name}")
         return
 
     sr = args.sample_rate
@@ -79,13 +37,12 @@ def main():
         compute_type = "int8" if args.device == "cpu" else "float16"
 
     print(f"Chargement modèle={args.model} device={args.device} compute_type={compute_type}")
-    model = WhisperModel(args.model, device=args.device, compute_type=compute_type)
+    whisper = WhisperService()
+    whisper.load(args.model, device=args.device, compute_type=compute_type)
 
     q: "queue.Queue[np.ndarray]" = queue.Queue()
 
     def callback(indata, frames, time_info, status):
-        if status:
-            pass
         mono = indata[:, 0].copy()
         q.put(mono)
 
@@ -124,14 +81,14 @@ def main():
                     save_wav(wav_path, chunk, sr)
 
                     t0 = time.time()
-                    text, lang, prob = transcribe_wav(model, wav_path, args.language, args.beam_size)
-                    dt = time.time() - t0
+                    text, lang, prob = whisper.transcribe_wav(wav_path, args.language, args.beam_size)
+                    elapsed = time.time() - t0
 
                     if text:
                         now = time.time()
                         if now - last_print_ts > 0.1:
                             last_print_ts = now
-                            print(f"[{time.strftime('%H:%M:%S')}] ({lang},{prob:.2f}) {text}  (chunk {dt:.2f}s)")
+                            print(f"[{time.strftime('%H:%M:%S')}] ({lang},{prob:.2f}) {text}  (chunk {elapsed:.2f}s)")
                             sys.stdout.flush()
 
     except KeyboardInterrupt:
