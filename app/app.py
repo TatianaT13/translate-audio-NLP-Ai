@@ -2,18 +2,12 @@
 import os
 import sys
 import time
-import json
 import queue
-import shutil
 import tempfile
-import subprocess
-from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
 import numpy as np
 import sounddevice as sd
-from scipy.io.wavfile import write as wav_write
-from faster_whisper import WhisperModel
 
 from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread
 from PySide6.QtWidgets import (
@@ -34,104 +28,13 @@ from PySide6.QtWidgets import (
     QGroupBox,
 )
 
-
-# =========================
-# Utils
-# =========================
-
-def rms(x: np.ndarray) -> float:
-    if x.size == 0:
-        return 0.0
-    return float(np.sqrt(np.mean(x.astype(np.float32) ** 2)))
-
-
-def save_wav(path: str, audio: np.ndarray, sr: int):
-    a = np.clip(audio, -1.0, 1.0)
-    a16 = (a * 32767.0).astype(np.int16)
-    wav_write(path, sr, a16)
-
-
-def which_ffmpeg() -> Optional[str]:
-    exe = shutil.which("ffmpeg")
-    return exe
-
-
-def ensure_ffmpeg_or_raise():
-    if which_ffmpeg() is None:
-        raise RuntimeError(
-            "ffmpeg introuvable. Installe ffmpeg (ex: brew install ffmpeg sur macOS) "
-            "pour supporter tous les formats (mp3, m4a, aac, flac, ogg, webm, etc.)."
-        )
-
-
-def convert_to_wav_16k_mono(src_path: str, dst_path: str) -> None:
-    """
-    Convertit n'importe quel format audio vers WAV 16kHz mono (PCM s16le).
-    Nécessite ffmpeg.
-    """
-    ensure_ffmpeg_or_raise()
-    cmd = [
-        which_ffmpeg(),
-        "-y",
-        "-i", src_path,
-        "-vn",
-        "-ac", "1",
-        "-ar", "16000",
-        "-c:a", "pcm_s16le",
-        dst_path,
-    ]
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if p.returncode != 0:
-        raise RuntimeError(f"ffmpeg conversion échouée:\n{p.stderr}")
-
-
-def list_input_devices() -> List[Tuple[int, str]]:
-    devices = sd.query_devices()
-    res = []
-    for i, d in enumerate(devices):
-        if d.get("max_input_channels", 0) > 0:
-            res.append((i, d.get("name", "unknown")))
-    return res
-
-
-# =========================
-# Whisper Service (shared)
-# =========================
-
-class WhisperService:
-    def __init__(self):
-        self._model: Optional[WhisperModel] = None
-        self._model_name: Optional[str] = None
-        self._device: str = "cpu"
-        self._compute_type: str = "int8"
-
-    def load(self, model_name: str, device: str = "cpu", compute_type: Optional[str] = None):
-        if compute_type is None:
-            compute_type = "int8" if device == "cpu" else "float16"
-
-        if self._model is not None and self._model_name == model_name and self._device == device and self._compute_type == compute_type:
-            return
-
-        self._model_name = model_name
-        self._device = device
-        self._compute_type = compute_type
-        self._model = WhisperModel(model_name, device=device, compute_type=compute_type)
-
-    def transcribe_wav(self, wav_path: str, language: Optional[str], beam_size: int) -> Tuple[str, str, float]:
-        assert self._model is not None, "Model not loaded"
-        segments, info = self._model.transcribe(
-            wav_path,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 350},
-        )
-        texts: List[str] = []
-        for s in segments:
-            t = (s.text or "").strip()
-            if t:
-                texts.append(t)
-        return " ".join(texts), info.language, float(info.language_probability)
+from flash_nlp.transcription import (
+    WhisperService,
+    rms,
+    save_wav,
+    convert_to_wav_16k_mono,
+    list_input_devices,
+)
 
 
 # =========================
