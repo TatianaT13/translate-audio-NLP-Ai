@@ -10,4 +10,4 @@ logs/*
 !.gitkeep
 models
 outputs
-
+.claude/
