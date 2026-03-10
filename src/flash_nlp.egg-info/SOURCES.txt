@@ -1,0 +1,17 @@
+LICENSE
+README.md
+pyproject.toml
+src/flash_nlp/__init__.py
+src/flash_nlp.egg-info/PKG-INFO
+src/flash_nlp.egg-info/SOURCES.txt
+src/flash_nlp.egg-info/dependency_links.txt
+src/flash_nlp.egg-info/requires.txt
+src/flash_nlp.egg-info/top_level.txt
+src/flash_nlp/acquisition/__init__.py
+src/flash_nlp/acquisition/fetcher.py
+src/flash_nlp/io/__init__.py
+src/flash_nlp/io/file_utils.py
+src/flash_nlp/pipeline/__init__.py
+src/flash_nlp/transcription/__init__.py
+src/flash_nlp/transcription/audio_utils.py
+src/flash_nlp/transcription/whisper_service.py
