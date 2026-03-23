@@ -3,6 +3,15 @@ numpy>=1.26
 scipy>=1.11
 sounddevice>=0.5
 requests>=2.31
+httpx>=0.27
+sacrebleu>=2.4
+langfuse>=2.0
+langchain-core>=0.2
+litellm>=1.40
+
+[dev]
+pytest>=8.0
+pytest-mock>=3.12
 
 [gui]
 PySide6>=6.7
