@@ -1,0 +1,62 @@
+# docker-compose.yml — Phase 2 : 3 microservices STT + LLM + TTS
+# Usage local : docker compose up --build
+# Usage VPS   : docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+
+  # ─── STT Service ────────────────────────────────────────────────
+  stt:
+    build:
+      context: .
+      dockerfile: services/stt/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+    volumes:
+      # Cache des modèles Whisper téléchargés (évite re-téléchargement au restart)
+      - whisper_cache:/root/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── LLM Service ────────────────────────────────────────────────
+  llm:
+    build:
+      context: .
+      dockerfile: services/llm/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-groq/llama-3.1-8b-instant}
+      - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── TTS Service ────────────────────────────────────────────────
+  tts:
+    build:
+      context: .
+      dockerfile: services/tts/Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      # Modèles MMS-TTS montés depuis le dossier local (évite de les inclure dans l'image)
+      - ./models:/app/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  whisper_cache:
