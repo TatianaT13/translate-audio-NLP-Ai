@@ -5,7 +5,7 @@ GET  /health      : statut du service
 """
 
 import os
-import sys
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -15,18 +15,28 @@ from fastapi.responses import JSONResponse
 
 load_dotenv()
 
-# Rendre le package src accessible
+# Ajouter src/ au path AVANT les imports du package
+import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from flash_nlp.transcription.audio_utils import convert_to_wav
+# Import direct depuis le module (sans passer par __init__.py qui charge sounddevice)
 from flash_nlp.transcription.whisper_service import WhisperService
 
 app = FastAPI(title="STT Service", version="1.0.0")
 
-# Cache des modèles Whisper (chargés à la demande, gardés en mémoire)
 _whisper_cache: dict[str, WhisperService] = {}
-
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
+
+
+def convert_audio(src: str, dst: str) -> None:
+    """Convertit n'importe quel audio en WAV 16kHz mono via ffmpeg."""
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-vn", "-ac", "1", "-ar", "16000",
+         "-c:a", "pcm_s16le", dst],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg error: {result.stderr.decode()}")
 
 
 def get_whisper(model_name: str) -> WhisperService:
@@ -53,11 +63,11 @@ async def transcribe(
     Transcrit un fichier audio (MP3, WAV, M4A...) en texte.
 
     - **file** : fichier audio
-    - **model** : modèle Whisper à utiliser (small, large-v3...)
-    - **language** : langue source (fr, en, auto...)
-    - **beam_size** : précision de la recherche (5 par défaut)
+    - **model** : whisper model (small, large-v3...)
+    - **language** : langue source (fr, en, auto)
+    - **beam_size** : précision beam search
     """
-    suffix = Path(file.filename).suffix.lower() if file.filename else ".mp3"
+    suffix = Path(file.filename or "audio.mp3").suffix.lower()
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_in:
         tmp_in.write(await file.read())
@@ -66,7 +76,7 @@ async def transcribe(
     tmp_wav_path = tmp_in_path.replace(suffix, ".wav")
 
     try:
-        convert_to_wav(tmp_in_path, tmp_wav_path)
+        convert_audio(tmp_in_path, tmp_wav_path)
         svc = get_whisper(model)
         lang_arg = None if language == "auto" else language
         result = svc.transcribe_wav_with_segments(
