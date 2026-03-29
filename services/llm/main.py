@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 load_dotenv()
@@ -21,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from scripts.run_pipeline import PROMPTS, LANG_LABELS, call_llm
 
 app = FastAPI(title="LLM Service", version="1.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "groq/llama-3.1-8b-instant")
 DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v1.1")

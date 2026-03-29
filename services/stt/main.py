@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 load_dotenv()
@@ -23,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from flash_nlp.transcription.whisper_service import WhisperService
 
 app = FastAPI(title="STT Service", version="1.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _whisper_cache: dict[str, WhisperService] = {}
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
