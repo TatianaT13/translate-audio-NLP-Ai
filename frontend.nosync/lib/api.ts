@@ -1,4 +1,4 @@
-const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8000";
+const PIPELINE_URL = "http://localhost:8000";
 
 export interface ProcessResult {
   source_text: string;
@@ -13,7 +13,7 @@ export interface ProcessResult {
   latency_total_ms: number;
 }
 
-export async function process(
+export async function runPipeline(
   file: File | Blob,
   targetLang = "en",
   llmModel = "groq/llama-3.1-8b-instant",
