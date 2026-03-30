@@ -1,57 +1,77 @@
-# flash-nlp
+# traduction-audio — LLMOps Audio Translation Pipeline
 
-Pipeline Python de transcription audio et d'analyse NLP pour la détection automatique d'événements trafic à partir de flux audio publics.
+Système LLMOps de traduction audio temps réel : **Audio FR → Transcription → Traduction EN/UK/ES/DE → Synthèse vocale**.
+
+Architecture microservices avec orchestration Langchain LCEL, tracing Langfuse, évaluation BLEU sur 84 runs.
 
 ---
 
-## Vue d'ensemble
+## Architecture
 
 ```
-Flux audio (MP3)
-      │
-      ▼
-┌─────────────┐     ┌──────────────┐     ┌───────────────────┐     ┌──────────────┐
-│  Acquisition │────▶│ Transcription │────▶│  Analyse NLP      │────▶│ Notification │
-│  HTTP + CSV  │     │  Whisper ASR  │     │  Extraction regex │     │ Console/Hook │
-└─────────────┘     └──────────────┘     └───────────────────┘     └──────────────┘
+Client (Next.js)
+       │
+       │ POST /process (audio)
+       ▼
+┌─────────────────────────────────────────┐
+│  Pipeline Service  :8000                │
+│  Langchain LCEL orchestrateur           │
+│  STT ──► LLM ──► TTS                   │
+└──────┬──────────┬──────────┬────────────┘
+       │          │          │
+       ▼          ▼          ▼
+  STT :8001   LLM :8002   TTS :8003
+  Whisper     LiteLLM     Mistral
+              + Groq       Voxtral
 ```
 
-Le projet est structuré comme un package Python installable (`flash-nlp`) avec quatre couches indépendantes et une suite de tests complète.
+| Service | Port | Technologie |
+|---------|------|-------------|
+| Pipeline (orchestrateur) | 8000 | FastAPI + Langchain LCEL |
+| STT | 8001 | FastAPI + Faster-Whisper |
+| LLM | 8002 | FastAPI + LiteLLM + Groq |
+| TTS | 8003 | FastAPI + Mistral Voxtral |
+| Frontend | 3000 | Next.js |
 
 ---
 
-## Fonctionnalités
+## Démarrage rapide
 
-- **Acquisition** : téléchargement conditionnel (ETag / If-Modified-Since), déduplification MD5, archivage horodaté, rotation automatique
-- **Transcription** : conversion audio via ffmpeg → WAV 16kHz mono, transcription avec `faster-whisper` + VAD intégré
-- **Analyse NLP** : détection de 8 types d'événements (accident, bouchon, travaux, intempéries…) par expressions régulières, extraction de routes, directions et délais
-- **Notification** : dispatch console, notification macOS native, webhook HTTP, log JSONL
-- **Tests** : 5 fichiers pytest couvrant chaque couche avec mocks
+### Prérequis
 
----
+- Docker Desktop
+- Clé API Groq : [console.groq.com](https://console.groq.com)
+- Clé API Mistral : [console.mistral.ai](https://console.mistral.ai)
 
-## Installation
-
-**Prérequis :** Python 3.11+, ffmpeg
+### Configuration
 
 ```bash
-# macOS
-brew install ffmpeg
-
-# Ubuntu / Debian
-apt install ffmpeg
+cp .env.example .env
+# Renseigner dans .env :
+# GROQ_API_KEY=gsk_...
+# MISTRAL_API_KEY=...
+# MISTRAL_VOICE_ID=...  (voice ID créé sur console.mistral.ai)
 ```
 
+### Lancement avec Docker
+
 ```bash
-git clone <repo>
-cd translate-audio-NLP-Ai
+docker compose up --build
+```
 
-python -m venv .venv
-source .venv/bin/activate
+Les 4 services démarrent :
+- Pipeline : http://localhost:8000/docs
+- STT : http://localhost:8001/docs
+- LLM : http://localhost:8002/docs
+- TTS : http://localhost:8003/docs
 
-pip install -e .
-# ou avec l'interface graphique (PySide6)
-pip install -e ".[gui]"
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+# → http://localhost:3000
 ```
 
 ---
@@ -60,147 +80,90 @@ pip install -e ".[gui]"
 
 ```
 .
-├── pyproject.toml
+├── services/
+│   ├── pipeline/           # Orchestrateur Langchain LCEL (port 8000)
+│   │   ├── main.py
+│   │   └── Dockerfile
+│   ├── stt/                # Speech-to-Text Whisper (port 8001)
+│   │   ├── main.py
+│   │   └── Dockerfile
+│   ├── llm/                # Traduction LiteLLM/Groq (port 8002)
+│   │   ├── main.py
+│   │   └── Dockerfile
+│   └── tts/                # Synthèse vocale Mistral Voxtral (port 8003)
+│       ├── main.py
+│       └── Dockerfile
 ├── src/
-│   └── flash_nlp/
-│       ├── acquisition/
-│       │   └── fetcher.py          # Téléchargement + déduplification + archivage
-│       ├── transcription/
-│       │   ├── whisper_service.py  # ASR via faster-whisper
-│       │   └── audio_utils.py      # Conversion ffmpeg, RMS, WAV
-│       ├── analysis/
-│       │   ├── event_extractor.py  # Détection NLP + dataclass TrafficEvent
-│       │   └── notifier.py         # Console, macOS, webhook, JSONL
-│       └── io/
-│           └── file_utils.py       # JSON, listing audio
-├── tests/
-│   ├── test_fetcher.py
-│   ├── test_whisper_service.py
-│   ├── test_audio_utils.py
-│   ├── test_event_extractor.py
-│   └── test_io.py
+│   └── flash_nlp/          # Package Python (Whisper, audio utils)
+├── frontend/               # Interface Next.js
+├── scripts/
+│   ├── run_pipeline.py     # Pipeline CLI (hors Docker)
+│   ├── eval_golden.py      # Évaluation BLEU sur dataset golden
+│   └── langfuse_import.py  # Import des 84 runs dans Langfuse
+├── outputs/
+│   └── experiments/
+│       ├── results.csv              # 84 runs (12 combos × 7 audios)
+│       └── evaluation_report.md    # Rapport BLEU par modèle/prompt
 ├── data/
-│   └── flash_audio_archive/        # Archive MP3 + index.csv + state.json
-└── models/
-    ├── mms-tts-eng/                # Modèle TTS anglais (Meta MMS)
-    └── mms-tts-ukr/                # Modèle TTS ukrainien (Meta MMS)
+│   └── flash_audio_archive/        # Archive MP3 trafic
+├── docker-compose.yml
+└── pyproject.toml
 ```
 
 ---
 
-## Utilisation
+## Évaluation (Phase 1)
 
-### Acquisition
+84 runs évalués : 3 modèles Whisper × 4 prompts × 7 fichiers audio.
 
-```python
-from pathlib import Path
-from flash_nlp.acquisition.fetcher import fetch_once_conditional, get_tz
+| Rang | Whisper | LLM | Prompt | BLEU moyen |
+|------|---------|-----|--------|-----------|
+| 1 | large-v3 | llama-3.1-8b | v1.1 | 31.55 |
+| 2 | large-v3 | llama-3.1-8b | v1.2 | 30.87 |
+| 3 | medium | llama-3.1-8b | v1.1 | 29.43 |
 
-tz = get_tz("Europe/Paris")
-root = Path("data/flash_audio_archive")
-cond_state = {}  # persister entre les appels pour activer le cache HTTP
+Rapport complet : [outputs/experiments/evaluation_report.md](outputs/experiments/evaluation_report.md)
 
-added = fetch_once_conditional(root, keep_days=30, tz=tz, cond_state=cond_state)
-print(f"{added} nouveaux fichiers sauvegardés")
-```
-
-### Transcription
-
-```python
-from flash_nlp.transcription.whisper_service import WhisperService
-from flash_nlp.transcription.audio_utils import convert_to_wav_16k_mono
-
-# Conversion MP3 → WAV
-convert_to_wav_16k_mono("audio.mp3", "/tmp/audio.wav")
-
-# Transcription
-svc = WhisperService()
-svc.load("small", device="cpu")  # ou "medium", "large-v3"
-
-text, lang, prob = svc.transcribe_wav("/tmp/audio.wav", language="fr", beam_size=5)
-print(f"[{lang} {prob:.0%}] {text}")
-
-# Mode segmenté (avec timestamps)
-result = svc.transcribe_wav_with_segments("/tmp/audio.wav", language="fr", beam_size=5)
-for seg in result["segments"]:
-    print(f"[{seg['start']:.1f}s → {seg['end']:.1f}s] {seg['text']}")
-```
-
-### Analyse NLP
-
-```python
-from flash_nlp.analysis.event_extractor import extract_events, severity_rank
-
-text = "Un accident sur l'A6 sens Paris au km 34. Comptez 20 minutes de retard."
-
-events = extract_events(text, zone="nord", source_file="flash.mp3", timestamp="20260123_1649")
-
-for e in sorted(events, key=lambda x: severity_rank(x.severity), reverse=True):
-    print(f"[{e.severity.upper()}] {e.type} | {e.routes} | {e.direction}")
-    print(f"  → {e.location_hint}")
-```
-
-Sortie :
-```
-[HIGH] accident | ['A6'] | sens Paris
-  → ...Un accident sur l'A6 sens Paris au km 34...
-```
-
-### Notification
-
-```python
-from pathlib import Path
-from flash_nlp.analysis.notifier import dispatch
-
-dispatch(
-    event=events[0],
-    alerts_dir=Path("outputs/alerts"),
-    macos=True,                                 # notification macOS native
-    webhook_url="https://hooks.slack.com/...",  # optionnel
-)
+```bash
+# Relancer l'évaluation
+python scripts/eval_golden.py --whisper-model small --model groq/llama-3.1-8b-instant
 ```
 
 ---
 
-## Événements détectés
+## Pipeline CLI (sans Docker)
 
-| Type | Sévérité | Mots-clés |
-|------|----------|-----------|
-| `accident` | 🔴 high | accident, collision, accrochage, carambolage… |
-| `fermeture` | 🔴 high | fermé, fermeture, déviation, voie fermée… |
-| `bouchon` | 🟠 medium | bouchon, embouteillage, congestion… |
-| `animal` | 🟠 medium | sanglier, animal errant, sur la chaussée… |
-| `intemperies` | 🟠 medium | verglas, neige, brouillard, alerte orange… |
-| `ralentissement` | 🟡 low | ralentissement, trafic dense, circulation difficile… |
-| `travaux` | 🟡 low | travaux, chantier, rétrécissement… |
-| `vehicule_panne` | 🟡 low | véhicule en panne, dépannage… |
+```bash
+# Installer les dépendances
+pip install -e ".[dev]"
+
+# Lancer le pipeline sur un fichier audio
+python scripts/run_pipeline.py \
+    --audio data/flash_audio_archive/2026-01-23/nord/flash_nord_20260123_164916.mp3 \
+    --model groq/llama-3.1-8b-instant \
+    --target-lang en \
+    --prompt-version v1.1
+```
 
 ---
 
-## Format de sortie
+## Tracing Langfuse
 
-### Index CSV (`data/flash_audio_archive/index.csv`)
+Toutes les exécutions sont tracées dans [Langfuse](https://cloud.langfuse.com) :
+- Latences STT / LLM / TTS
+- Score BLEU (quand référence disponible)
+- Version de prompt utilisée
 
+```bash
+# Importer les 84 runs historiques dans Langfuse
+python scripts/langfuse_import.py
 ```
-datetime_local;datetime_utc;zone;filename;filesize;md5
-2026-01-23 16:49:16+0100;2026-01-23 15:49:16;nord;2026-01-23/nord/flash_nord_20260123_164916.mp3;1237850;5ad694...
+
+Variables requises dans `.env` :
 ```
-
-### Alertes JSONL (`outputs/alerts/alerts.jsonl`)
-
-```json
-{
-  "type": "accident",
-  "severity": "high",
-  "routes": ["A6"],
-  "direction": "sens Paris",
-  "location_hint": "...accident sur l'A6 sens Paris au km 34...",
-  "zone": "nord",
-  "timestamp": "20260123_1649",
-  "source_file": "2026-01-23/nord/flash.mp3",
-  "delay_hint": "20 minutes",
-  "alerted_at": "2026-01-23T15:49:16+00:00"
-}
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
 ---
@@ -208,40 +171,44 @@ datetime_local;datetime_utc;zone;filename;filesize;md5
 ## Tests
 
 ```bash
-pip install pytest pytest-mock
-pytest
+pip install -e ".[dev]"
+pytest tests/ -v
 ```
 
-| Fichier | Ce qui est testé |
-|---------|-----------------|
-| `test_fetcher.py` | Déduplification MD5, rotation, CSV, mock HTTP (304, 200, erreur réseau) |
-| `test_whisper_service.py` | Cache modèle, compute_type auto, VAD, segments, mock WhisperModel |
-| `test_audio_utils.py` | RMS, save_wav, clip int16, ffmpeg presence, conversion |
-| `test_event_extractor.py` | Détection par type, faux positifs, routes, direction, sévérité |
-| `test_io.py` | JSON roundtrip, listing audio, ensure_dir |
+81 tests couvrant : acquisition, transcription, audio utils, NLP, I/O.
+
+CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 
 ---
 
-## Dépendances
+## Variables d'environnement
 
-| Package | Rôle |
-|---------|------|
-| `faster-whisper` | ASR (CTranslate2, quantification int8/float16) |
-| `numpy` | Traitement du signal audio |
-| `scipy` | Lecture / écriture WAV |
-| `sounddevice` | Listing des périphériques audio |
-| `requests` | Téléchargement HTTP conditionnel |
-| `ffmpeg` *(externe)* | Conversion audio multi-format |
+| Variable | Description | Requis |
+|----------|-------------|--------|
+| `GROQ_API_KEY` | Clé API Groq (LLM) | Oui |
+| `MISTRAL_API_KEY` | Clé API Mistral (TTS) | Oui |
+| `MISTRAL_VOICE_ID` | ID de voix Mistral Voxtral | Oui |
+| `WHISPER_MODEL` | Modèle Whisper (`small`, `large-v3`) | Non (défaut: `small`) |
+| `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `groq/llama-3.1-8b-instant`) |
+| `PROMPT_VERSION` | Version du prompt (`v1.0`–`v1.2`) | Non (défaut: `v1.1`) |
+| `LANGFUSE_PUBLIC_KEY` | Clé publique Langfuse | Non |
+| `LANGFUSE_SECRET_KEY` | Clé secrète Langfuse | Non |
+| `LANGFUSE_HOST` | URL Langfuse | Non |
 
 ---
 
 ## Roadmap
 
-- [ ] Script `main.py` — pipeline bout-en-bout (acquisition → transcription → NLP → alerte)
-- [ ] Traduction automatique (MarianMT ou LLM)
-- [ ] Synthèse vocale multilingue via modèles MMS embarqués
-- [ ] Interface graphique (PySide6)
-- [ ] Synchronisation `requirements.txt` ↔ `pyproject.toml`
+- [x] Phase 1 - Dataset golden + evaluation BLEU (84 runs)
+- [x] Phase 2 - Microservices Docker (STT / LLM / TTS)
+- [x] Phase 2 - Langfuse tracing
+- [x] Phase 2 - CI GitHub Actions
+- [x] Phase 3 - Pipeline Service orchestrateur (Langchain LCEL)
+- [x] Phase 3 - Frontend Next.js
+- [ ] Phase 3 - API Gateway (auth + rate limiting)
+- [ ] Phase 4 - MLflow model registry
+- [ ] Phase 4 - Prometheus + Grafana
+- [ ] Phase 4 - Airflow batch evaluation
 
 ---
 

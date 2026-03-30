@@ -3,11 +3,13 @@ FROM python:3.11-slim
 # Dépendances système pour faster-whisper + ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    libportaudio2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copier le code source du package
+COPY pyproject.toml ./
 COPY src/ src/
 COPY scripts/run_pipeline.py scripts/run_pipeline.py
 COPY services/stt/main.py services/stt/main.py
@@ -23,7 +25,7 @@ RUN pip install --no-cache-dir \
     python-dotenv>=1.0
 
 # Installer le package local
-RUN pip install --no-cache-dir -e src/
+RUN pip install --no-cache-dir -e .
 
 ENV WHISPER_MODEL=small
 ENV PORT=8001

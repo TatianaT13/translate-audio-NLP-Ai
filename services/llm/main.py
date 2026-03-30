@@ -5,10 +5,9 @@ GET  /health    : statut + modèle actif
 """
 
 import os
-import sys
 import time
-from pathlib import Path
 
+import litellm
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +15,45 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+litellm.set_verbose = False
 
-from scripts.run_pipeline import PROMPTS, LANG_LABELS, call_llm
+PROMPTS = {
+    "v1.0": (
+        "Translate the following French text to {lang}. "
+        "Output only the translation, nothing else.\n\n{text}"
+    ),
+    "v1.1": (
+        "You are a professional translator specializing in traffic and road safety announcements. "
+        "Translate the following French traffic bulletin to {lang}. "
+        "Keep road names (A6, N7...) as-is. Output only the translation.\n\n{text}"
+    ),
+    "v1.2": (
+        "You are a professional translator. "
+        "Translate this French road traffic report to {lang}. "
+        "Preserve road identifiers (A6, N7, D roads). "
+        "Use clear, concise language suitable for a radio broadcast. "
+        "Output only the translated text.\n\n{text}"
+    ),
+}
+
+LANG_LABELS = {
+    "en": "English",
+    "uk": "Ukrainian",
+    "es": "Spanish",
+    "de": "German",
+}
+
+
+def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float]:
+    t0 = time.perf_counter()
+    response = litellm.completion(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        timeout=timeout,
+    )
+    translation = response.choices[0].message.content.strip()
+    latency_ms = (time.perf_counter() - t0) * 1000
+    return translation, latency_ms
 
 app = FastAPI(title="LLM Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

@@ -4,6 +4,28 @@
 
 services:
 
+  # ─── Pipeline Service (Orchestrateur) ───────────────────────────
+  pipeline:
+    build:
+      context: .
+      dockerfile: services/pipeline/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - STT_URL=http://stt:8001
+      - LLM_URL=http://llm:8002
+      - TTS_URL=http://tts:8003
+    depends_on:
+      - stt
+      - llm
+      - tts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ─── STT Service ────────────────────────────────────────────────
   stt:
     build:
@@ -48,8 +70,11 @@ services:
       dockerfile: services/tts/Dockerfile
     ports:
       - "8003:8003"
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MISTRAL_VOICE_ID=${MISTRAL_VOICE_ID}
+      - TTS_BACKEND=${TTS_BACKEND:-mistral}
     volumes:
-      # Modèles MMS-TTS montés depuis le dossier local (évite de les inclure dans l'image)
       - ./models:/app/models:ro
     restart: unless-stopped
     healthcheck:
