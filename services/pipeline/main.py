@@ -43,11 +43,24 @@ async def _stt_step(state: dict) -> dict:
         )
     resp.raise_for_status()
     data = resp.json()
+
+    text = data.get("text", "").strip()
+    lang_prob = data.get("language_probability", 0)
+
+    if not text:
+        raise ValueError("No speech detected in audio.")
+
+    if lang_prob < 0.4:
+        raise ValueError(
+            f"Audio unclear or not French (confidence {lang_prob:.0%}). "
+            "Please use a clear French speech recording."
+        )
+
     return {
         **state,
-        "source_text": data["text"],
+        "source_text": text,
         "language": data.get("language", "fr"),
-        "language_prob": data.get("language_probability", 0),
+        "language_prob": lang_prob,
         "latency_stt_ms": round((time.perf_counter() - t0) * 1000),
     }
 
