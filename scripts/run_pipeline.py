@@ -40,6 +40,18 @@ except ImportError:
 
 import litellm
 
+# Langfuse — initialisé après load_dotenv()
+_lf = None
+
+def _init_langfuse():
+    global _lf
+    try:
+        from langfuse import Langfuse
+        if os.getenv("LANGFUSE_PUBLIC_KEY"):
+            _lf = Langfuse()
+    except Exception:
+        pass
+
 from flash_nlp.transcription.audio_utils import convert_to_wav_16k_mono, ensure_ffmpeg_or_raise
 from flash_nlp.transcription.whisper_service import WhisperService
 
@@ -115,6 +127,7 @@ def run(
     whisper_model: str,
     _svc: WhisperService = None,
 ) -> dict:
+    _init_langfuse()
     ensure_ffmpeg_or_raise()
 
     lang_label = LANG_LABELS.get(target_lang, target_lang)
@@ -156,7 +169,7 @@ def run(
     total_ms = conv_ms + stt_ms + llm_ms
     print(f"\n  Total : {total_ms/1000:.1f}s  (conv={conv_ms:.0f}ms  stt={stt_ms:.0f}ms  llm={llm_ms:.0f}ms)")
 
-    return {
+    result = {
         "audio":            audio_path.name,
         "whisper_model":    whisper_model,
         "llm_model":        model,
@@ -171,6 +184,25 @@ def run(
         "latency_llm_ms":   round(llm_ms),
         "latency_total_ms": round(total_ms),
     }
+
+    # Langfuse — log trace complète
+    if _lf:
+        try:
+            tid = _lf.create_trace_id()
+            scores = [
+                ("latency_total_ms", round(total_ms)),
+                ("latency_stt_ms",   round(stt_ms)),
+                ("latency_llm_ms",   round(llm_ms)),
+                ("language_prob",    round(lang_prob, 4)),
+            ]
+            for name, value in scores:
+                _lf.create_score(trace_id=tid, name=name, value=float(value))
+            _lf.flush()
+            print(f"  [Langfuse] ✓ trace={tid[:8]}...")
+        except Exception as e:
+            print(f"  [Langfuse] Erreur : {e}")
+
+    return result
 
 
 # ---------------------------------------------------------------------------

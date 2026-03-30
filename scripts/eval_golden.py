@@ -34,6 +34,18 @@ except ImportError:
 
 import sacrebleu
 
+# Langfuse — initialisé après load_dotenv
+_lf = None
+
+def _init_langfuse():
+    global _lf
+    try:
+        from langfuse import Langfuse
+        if os.getenv("LANGFUSE_PUBLIC_KEY") and _lf is None:
+            _lf = Langfuse()
+    except Exception:
+        pass
+
 # Ajouter src/ et scripts/ au path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -217,6 +229,26 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
             }
             write_row(row)
             done += 1
+
+            # Langfuse — log trace complète
+            _init_langfuse()
+            if _lf:
+                try:
+                    tid = _lf.create_trace_id()
+                    scores = [
+                        ("latency_total_ms", result["latency_total_ms"]),
+                        ("latency_stt_ms",   result["latency_stt_ms"]),
+                        ("latency_llm_ms",   result["latency_llm_ms"]),
+                        ("language_prob",    result["language_prob"]),
+                    ]
+                    if bleu >= 0:
+                        scores.append(("bleu", bleu))
+                    for name, value in scores:
+                        _lf.create_score(trace_id=tid, name=name, value=float(value))
+                    _lf.flush()
+                    print(f"  [Langfuse] ✓ trace={tid[:8]}...")
+                except Exception as e:
+                    print(f"  [Langfuse] {e}")
 
             bleu_str = f"BLEU={bleu}" if bleu >= 0 else "BLEU=n/a (pas de référence)"
             print(f"  -> {bleu_str}  |  total={result['latency_total_ms']}ms  [sauvegardé]")
