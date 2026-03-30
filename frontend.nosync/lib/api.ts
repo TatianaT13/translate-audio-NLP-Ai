@@ -1,68 +1,43 @@
-const STT_URL = process.env.NEXT_PUBLIC_STT_URL || "http://localhost:8001";
-const LLM_URL = process.env.NEXT_PUBLIC_LLM_URL || "http://localhost:8002";
-const TTS_URL = process.env.NEXT_PUBLIC_TTS_URL || "http://localhost:8003";
+const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8000";
 
-export interface TranscribeResult {
-  text: string;
+export interface ProcessResult {
+  source_text: string;
   language: string;
-  language_probability: number;
-  duration: number;
-  model: string;
-}
-
-export interface TranslateResult {
+  language_prob: number;
   translation: string;
-  model: string;
-  prompt_version: string;
-  target_lang: string;
-  latency_ms: number;
+  audio_b64: string;
+  audio_content_type: string;
+  latency_stt_ms: number;
+  latency_llm_ms: number;
+  latency_tts_ms: number;
+  latency_total_ms: number;
 }
 
-export async function transcribe(
+export async function process(
   file: File | Blob,
-  model = "small",
-  language = "fr"
-): Promise<TranscribeResult> {
+  targetLang = "en",
+  llmModel = "groq/llama-3.1-8b-instant",
+  promptVersion = "v1.1",
+  whisperModel = "small"
+): Promise<ProcessResult> {
   const form = new FormData();
   form.append("file", file, "audio.mp3");
-  form.append("model", model);
-  form.append("language", language);
+  form.append("target_lang", targetLang);
+  form.append("llm_model", llmModel);
+  form.append("prompt_version", promptVersion);
+  form.append("whisper_model", whisperModel);
 
-  const res = await fetch(`${STT_URL}/transcribe`, { method: "POST", body: form });
+  const res = await fetch(`${PIPELINE_URL}/process`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `STT error ${res.status}`);
+    throw new Error(err.detail || `Pipeline error ${res.status}`);
   }
   return res.json();
 }
 
-export async function translate(
-  text: string,
-  targetLang = "en",
-  model = "groq/llama-3.1-8b-instant",
-  promptVersion = "v1.1"
-): Promise<TranslateResult> {
-  const res = await fetch(`${LLM_URL}/translate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, target_lang: targetLang, model, prompt_version: promptVersion }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `LLM error ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function synthesize(text: string, lang = "en"): Promise<Blob> {
-  const res = await fetch(`${TTS_URL}/synthesize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, lang }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `TTS error ${res.status}`);
-  }
-  return res.blob();
+export function audioFromBase64(b64: string, contentType: string): Blob {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: contentType });
 }
