@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -23,6 +24,10 @@ Base.metadata.create_all(bind=engine)
 
 DEV_MODE      = os.getenv("DEV_MODE", "false").lower() == "true"
 FRONTEND_URLS = os.getenv("FRONTEND_URLS", "http://localhost:3000").split(",")
+
+LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 
 app = FastAPI(title="Gateway — Auth Service", version="1.0.0")
 app.add_middleware(
@@ -54,6 +59,12 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Compte introuvable")
 
     return user
+
+
+def get_admin_user(current_user: models.User = Depends(get_current_user)) -> models.User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès administrateur requis")
+    return current_user
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -90,7 +101,7 @@ def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Compte désactivé")
 
-    access_token          = auth_utils.create_access_token(user.id, user.email)
+    access_token          = auth_utils.create_access_token(user.id, user.email, user.is_admin)
     raw_refresh, hash_ref = auth_utils.make_token_pair()
 
     expires = datetime.now(timezone.utc) + timedelta(days=auth_utils.REFRESH_TOKEN_EXPIRE_DAYS)
@@ -139,7 +150,7 @@ def refresh(body: schemas.RefreshRequest, db: Session = Depends(get_db)):
 
     # Rotate: revoke old, issue new
     rt.revoked = True
-    access_token          = auth_utils.create_access_token(user.id, user.email)
+    access_token          = auth_utils.create_access_token(user.id, user.email, user.is_admin)
     raw_refresh, hash_ref = auth_utils.make_token_pair()
     expires = datetime.now(timezone.utc) + timedelta(days=auth_utils.REFRESH_TOKEN_EXPIRE_DAYS)
     db.add(models.RefreshToken(user_id=user.id, token_hash=hash_ref, expires_at=expires))
@@ -154,6 +165,7 @@ def me(current_user: models.User = Depends(get_current_user)):
     return {
         "id":         current_user.id,
         "email":      current_user.email,
+        "is_admin":   current_user.is_admin,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }
 
@@ -260,3 +272,199 @@ def delete_account(
     db.delete(current_user)
     db.commit()
     return {"message": "Compte supprimé définitivement"}
+
+
+# ── Admin endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/admin/seed", status_code=status.HTTP_201_CREATED)
+def admin_seed(db: Session = Depends(get_db)):
+    """
+    DEV_MODE only — promote or create the first admin account.
+    Call once after first registration.
+    """
+    if not DEV_MODE:
+        raise HTTPException(status_code=403, detail="Disponible uniquement en DEV_MODE")
+    user = db.query(models.User).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Aucun utilisateur enregistré")
+    user.is_admin = True
+    db.commit()
+    return {"message": f"{user.email} est maintenant administrateur"}
+
+
+@app.get("/admin/stats", response_model=schemas.AdminStatsResponse)
+def admin_stats(
+    _: models.User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Statistiques globales des utilisateurs."""
+    total  = db.query(models.User).count()
+    active = db.query(models.User).filter(models.User.is_active == True).count()   # noqa: E712
+    admins = db.query(models.User).filter(models.User.is_admin  == True).count()   # noqa: E712
+    return schemas.AdminStatsResponse(total_users=total, active_users=active, admin_users=admins)
+
+
+@app.get("/admin/users", response_model=list[schemas.AdminUserResponse])
+def admin_list_users(
+    _: models.User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Liste complète des utilisateurs."""
+    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+    return [
+        schemas.AdminUserResponse(
+            id=u.id,
+            email=u.email,
+            is_active=u.is_active,
+            is_admin=u.is_admin,
+            created_at=u.created_at.isoformat() if u.created_at else None,
+        )
+        for u in users
+    ]
+
+
+@app.patch("/admin/users/{user_id}")
+def admin_update_user(
+    user_id: int,
+    body: schemas.AdminUserUpdate,
+    current_admin: models.User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Modifier is_active ou is_admin d'un utilisateur."""
+    if user_id == current_admin.id:
+        raise HTTPException(status_code=400, detail="Impossible de modifier son propre compte")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if body.is_active is not None:
+        user.is_active = body.is_active
+    if body.is_admin is not None:
+        user.is_admin = body.is_admin
+    db.commit()
+    return {"message": "Utilisateur mis à jour"}
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    current_admin: models.User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Supprimer un utilisateur (admin uniquement)."""
+    if user_id == current_admin.id:
+        raise HTTPException(status_code=400, detail="Impossible de supprimer son propre compte ici")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user_id).delete()
+    db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == user_id).delete()
+    db.delete(user)
+    db.commit()
+    return {"message": "Utilisateur supprimé"}
+
+
+@app.get("/admin/langfuse/metrics", response_model=schemas.LangfuseMetricsResponse)
+async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
+    """Métriques agrégées depuis Langfuse (scores)."""
+    if not LANGFUSE_PUBLIC_KEY or not LANGFUSE_SECRET_KEY:
+        return schemas.LangfuseMetricsResponse(
+            connected=False,
+            error="LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY non configurées",
+        )
+
+    try:
+        all_scores: list[dict] = []
+        page = 1
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            while True:
+                r = await client.get(
+                    f"{LANGFUSE_HOST}/api/public/scores",
+                    auth=(LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
+                    params={"limit": 100, "page": page},
+                )
+                if not r.is_success:
+                    return schemas.LangfuseMetricsResponse(
+                        connected=False,
+                        error=f"Langfuse HTTP {r.status_code}",
+                    )
+                data   = r.json()
+                batch  = data.get("data", [])
+                all_scores.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+
+        # ── Aggregate by metric name ──
+        by_name: dict[str, list[float]] = {}
+        for s in all_scores:
+            by_name.setdefault(s["name"], []).append(s["value"])
+
+        def avg(lst: list[float]) -> float:
+            return sum(lst) / len(lst) if lst else 0.0
+
+        # ── Model comparison from comments ──
+        # comment format: "{audio} | {whisper} | {llm} | {prompt_version}"
+        model_map: dict[str, dict] = {}
+        for s in all_scores:
+            if s["name"] != "latency_total_ms":
+                continue
+            comment = s.get("comment") or ""
+            parts   = [p.strip() for p in comment.split("|")]
+            if len(parts) < 4:
+                continue
+            whisper, llm, pv = parts[1], parts[2], parts[3]
+            key = f"{whisper}|{llm}|{pv}"
+            if key not in model_map:
+                model_map[key] = {
+                    "whisper": whisper, "llm": llm, "prompt_version": pv,
+                    "count": 0, "totals": [], "stts": [], "llms_lat": [], "bleus": [],
+                }
+            model_map[key]["count"]    += 1
+            model_map[key]["totals"].append(s["value"])
+
+        # Fill STT / LLM latency and BLEU per key
+        for s in all_scores:
+            comment = s.get("comment") or ""
+            parts   = [p.strip() for p in comment.split("|")]
+            if len(parts) < 4:
+                continue
+            key = f"{parts[1]}|{parts[2]}|{parts[3]}"
+            if key not in model_map:
+                continue
+            if s["name"] == "latency_stt_ms":
+                model_map[key]["stts"].append(s["value"])
+            elif s["name"] == "latency_llm_ms":
+                model_map[key]["llms_lat"].append(s["value"])
+            elif s["name"] == "bleu":
+                model_map[key]["bleus"].append(s["value"])
+
+        model_stats = [
+            schemas.LangfuseModelStat(
+                whisper=v["whisper"],
+                llm=v["llm"],
+                prompt_version=v["prompt_version"],
+                count=v["count"],
+                avg_total_ms=round(avg(v["totals"]), 1),
+                avg_stt_ms=round(avg(v["stts"]),   1),
+                avg_llm_ms=round(avg(v["llms_lat"]),1),
+                avg_bleu=round(avg(v["bleus"]), 3) if v["bleus"] else None,
+            )
+            for v in sorted(model_map.values(), key=lambda x: x["count"], reverse=True)
+        ]
+
+        return schemas.LangfuseMetricsResponse(
+            connected=True,
+            total_traces=len(by_name.get("latency_total_ms", [])),
+            avg_total_ms=round(avg(by_name.get("latency_total_ms", [])), 1),
+            avg_stt_ms=round(avg(by_name.get("latency_stt_ms",   [])), 1),
+            avg_llm_ms=round(avg(by_name.get("latency_llm_ms",   [])), 1),
+            avg_language_prob=round(avg(by_name.get("language_prob", [])), 3),
+            avg_bleu=round(avg(by_name.get("bleu", [])), 3),
+            bleu_scores=by_name.get("bleu", []),
+            language_probs=by_name.get("language_prob", []),
+            latencies_total=by_name.get("latency_total_ms", []),
+            model_stats=model_stats,
+        )
+
+    except Exception as exc:
+        return schemas.LangfuseMetricsResponse(connected=False, error=str(exc))

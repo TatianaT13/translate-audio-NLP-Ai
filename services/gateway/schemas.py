@@ -63,7 +63,62 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id:         int
     email:      str
+    is_admin:   bool
     created_at: str
 
     class Config:
         from_attributes = True
+
+
+class AdminUserResponse(BaseModel):
+    id:         int
+    email:      str
+    is_active:  bool
+    is_admin:   bool
+    created_at: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserUpdate(BaseModel):
+    is_active: bool | None = None
+    is_admin:  bool | None = None
+
+
+class AdminStatsResponse(BaseModel):
+    total_users:  int
+    active_users: int
+    admin_users:  int
+
+
+class LangfuseScorePoint(BaseModel):
+    name:    str
+    value:   float
+    comment: str | None = None
+
+
+class LangfuseModelStat(BaseModel):
+    whisper:         str
+    llm:             str
+    prompt_version:  str
+    count:           int
+    avg_total_ms:    float
+    avg_stt_ms:      float
+    avg_llm_ms:      float
+    avg_bleu:        float | None = None
+
+
+class LangfuseMetricsResponse(BaseModel):
+    connected:          bool
+    error:              str | None = None
+    total_traces:       int = 0
+    avg_total_ms:       float = 0
+    avg_stt_ms:         float = 0
+    avg_llm_ms:         float = 0
+    avg_language_prob:  float = 0
+    avg_bleu:           float = 0
+    bleu_scores:        list[float] = []
+    language_probs:     list[float] = []
+    latencies_total:    list[float] = []
+    model_stats:        list[LangfuseModelStat] = []

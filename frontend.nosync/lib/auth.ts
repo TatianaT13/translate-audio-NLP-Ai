@@ -3,6 +3,7 @@ const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:800
 export interface User {
   id: number;
   email: string;
+  is_admin: boolean;
   created_at: string;
 }
 
