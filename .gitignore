@@ -11,3 +11,5 @@ logs/*
 models
 outputs
 .claude/
+.cursor/
+.aider*
