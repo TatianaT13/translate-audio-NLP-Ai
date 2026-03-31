@@ -10,6 +10,7 @@ logs/*
 !.gitkeep
 models
 outputs
-.claude/
 .cursor/
 .aider*
+# editor config
+.*-config/

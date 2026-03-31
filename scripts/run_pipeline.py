@@ -99,7 +99,7 @@ def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float]:
         "groq/llama3-8b-8192"
         "groq/mixtral-8x7b-32768"
         "ollama/phi3:mini"
-        "anthropic/claude-haiku-4-5-20251001"
+        "openai/gpt-4o-mini"
     """
     t0 = time.perf_counter()
     try:
