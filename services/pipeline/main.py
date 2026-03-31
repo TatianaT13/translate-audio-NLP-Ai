@@ -22,6 +22,19 @@ STT_URL = os.getenv("STT_URL", "http://localhost:8001")
 LLM_URL = os.getenv("LLM_URL", "http://localhost:8002")
 TTS_URL = os.getenv("TTS_URL", "http://localhost:8003")
 
+# ── Langfuse (optionnel — désactivé si clés absentes) ────────────────────────
+_lf = None
+if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    try:
+        from langfuse import Langfuse
+        _lf = Langfuse(
+            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+        )
+    except Exception:
+        _lf = None
+
 app = FastAPI(title="Pipeline Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
@@ -169,6 +182,23 @@ async def process(
         raise HTTPException(status_code=500, detail=str(e))
 
     latency_total_ms = round((time.perf_counter() - t_total) * 1000)
+
+    # ── Trace Langfuse ────────────────────────────────────────────────────────
+    if _lf:
+        try:
+            comment = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
+            tid = _lf.create_trace_id()
+            for name, value in [
+                ("latency_total_ms", latency_total_ms),
+                ("latency_stt_ms",   result["latency_stt_ms"]),
+                ("latency_llm_ms",   result["latency_llm_ms"]),
+                ("latency_tts_ms",   result["latency_tts_ms"]),
+                ("language_prob",    result["language_prob"]),
+            ]:
+                _lf.create_score(trace_id=tid, name=name, value=value, comment=comment)
+            _lf.flush()
+        except Exception:
+            pass  # Ne jamais bloquer le pipeline pour Langfuse
 
     return {
         "source_text":        result["source_text"],

@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir \
     fastapi>=0.111 \
     "uvicorn[standard]>=0.29" \
     "python-jose[cryptography]>=3.3" \
-    "passlib[bcrypt]>=1.7" \
+    "bcrypt>=4.0" \
     sqlalchemy>=2.0 \
     "pydantic[email]>=2.0" \
     python-dotenv>=1.0 \

@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir \
     httpx>=0.27 \
     langchain-core>=0.2 \
     python-multipart>=0.0.9 \
-    python-dotenv>=1.0
+    python-dotenv>=1.0 \
+    langfuse>=2.0
 
 ENV STT_URL=http://stt:8001
 ENV LLM_URL=http://llm:8002

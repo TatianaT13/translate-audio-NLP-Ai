@@ -14,7 +14,7 @@ services:
     environment:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - DEV_MODE=${DEV_MODE:-true}
-      - FRONTEND_URLS=http://localhost:3000
+      - FRONTEND_URLS=http://localhost:3000,http://localhost:3001
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -38,6 +38,9 @@ services:
       - STT_URL=http://stt:8001
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
     depends_on:
       - stt
       - llm
