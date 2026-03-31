@@ -11,7 +11,8 @@ RUN pip install --no-cache-dir \
     "passlib[bcrypt]>=1.7" \
     sqlalchemy>=2.0 \
     "pydantic[email]>=2.0" \
-    python-dotenv>=1.0
+    python-dotenv>=1.0 \
+    httpx>=0.27
 
 ENV JWT_SECRET=""
 ENV DEV_MODE="false"

@@ -31,10 +31,10 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user_id: int, email: str, is_admin: bool = False) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode(
-        {"sub": str(user_id), "email": email, "exp": expire, "type": "access"},
+        {"sub": str(user_id), "email": email, "is_admin": is_admin, "exp": expire, "type": "access"},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
