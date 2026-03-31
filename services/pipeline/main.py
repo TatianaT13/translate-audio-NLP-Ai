@@ -186,8 +186,19 @@ async def process(
     # ── Trace Langfuse ────────────────────────────────────────────────────────
     if _lf:
         try:
+            import uuid as _uuid
+            tid     = str(_uuid.uuid4())
             comment = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
-            tid = _lf.create_trace_id()
+            _lf.trace(
+                id=tid,
+                name="translation",
+                metadata={
+                    "whisper_model":  whisper_model,
+                    "llm_model":      llm_model,
+                    "prompt_version": prompt_version,
+                    "target_lang":    target_lang,
+                },
+            )
             for name, value in [
                 ("latency_total_ms", latency_total_ms),
                 ("latency_stt_ms",   result["latency_stt_ms"]),
@@ -195,7 +206,7 @@ async def process(
                 ("latency_tts_ms",   result["latency_tts_ms"]),
                 ("language_prob",    result["language_prob"]),
             ]:
-                _lf.create_score(trace_id=tid, name=name, value=value, comment=comment)
+                _lf.score(trace_id=tid, name=name, value=value, comment=comment)
             _lf.flush()
         except Exception:
             pass  # Ne jamais bloquer le pipeline pour Langfuse

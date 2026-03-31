@@ -29,6 +29,11 @@ LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 
+PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
+STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
+LLM_URL      = os.getenv("LLM_URL",      "http://llm:8002")
+TTS_URL      = os.getenv("TTS_URL",      "http://tts:8003")
+
 app = FastAPI(title="Gateway — Auth Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -468,3 +473,42 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
 
     except Exception as exc:
         return schemas.LangfuseMetricsResponse(connected=False, error=str(exc))
+
+
+@app.get("/admin/services/health")
+async def admin_services_health(_: models.User = Depends(get_admin_user)):
+    """Ping tous les microservices et retourne leur statut + latence."""
+    services = [
+        {"name": "Gateway",  "url": "http://localhost:8004/health", "port": "8004", "color": "#c9a96e"},
+        {"name": "Pipeline", "url": f"{PIPELINE_URL}/health",       "port": "8000", "color": "#7ec9a0"},
+        {"name": "STT",      "url": f"{STT_URL}/health",            "port": "8001", "color": "#7eb8c9"},
+        {"name": "LLM",      "url": f"{LLM_URL}/health",            "port": "8002", "color": "#c9a96e"},
+        {"name": "TTS",      "url": f"{TTS_URL}/health",            "port": "8003", "color": "#9b7ec9"},
+    ]
+    results = []
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for svc in services:
+            import time as _time
+            t0 = _time.perf_counter()
+            try:
+                r = await client.get(svc["url"])
+                latency_ms = round((_time.perf_counter() - t0) * 1000)
+                results.append({
+                    "name":       svc["name"],
+                    "port":       svc["port"],
+                    "color":      svc["color"],
+                    "status":     "up" if r.is_success else "error",
+                    "latency_ms": latency_ms,
+                    "detail":     r.json() if r.is_success else {},
+                })
+            except Exception:
+                latency_ms = round((_time.perf_counter() - t0) * 1000)
+                results.append({
+                    "name":       svc["name"],
+                    "port":       svc["port"],
+                    "color":      svc["color"],
+                    "status":     "down",
+                    "latency_ms": latency_ms,
+                    "detail":     {},
+                })
+    return {"services": results}

@@ -6,7 +6,9 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
+  getServicesHealth,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
+  type ServiceHealth,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -345,48 +347,109 @@ function ExperimentsTab() {
   );
 }
 
-// ── Infrastructure tab (Grafana stub) ─────────────────────────────────────────
+// ── Infrastructure tab ────────────────────────────────────────────────────────
 function InfraTab() {
+  const [services, setServices] = useState<ServiceHealth[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [lastCheck, setLastCheck] = useState<Date | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getServicesHealth();
+      setServices(data.services);
+      setLastCheck(new Date());
+    } catch {
+      // gateway down or not admin
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, []);
+
+  const upCount   = services.filter(s => s.status === "up").length;
+  const downCount = services.filter(s => s.status !== "up").length;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div style={{
-        padding: "14px 18px", borderRadius: "12px", fontSize: "12px",
-        background: "rgba(201,169,110,0.06)", border: "1px solid var(--accent-dim)", color: C.accent,
-        letterSpacing: "0.05em",
-      }}>
-        Phase suivante — Prometheus + Grafana pour les métriques système
+
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "10px" }}>
+          {upCount > 0 && (
+            <span style={{
+              fontSize: "11px", padding: "3px 10px", borderRadius: "999px",
+              background: "rgba(126,201,160,0.1)", color: C.green, letterSpacing: "0.1em",
+            }}>{upCount} en ligne</span>
+          )}
+          {downCount > 0 && (
+            <span style={{
+              fontSize: "11px", padding: "3px 10px", borderRadius: "999px",
+              background: "rgba(232,112,112,0.08)", color: C.red, letterSpacing: "0.1em",
+            }}>{downCount} hors ligne</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {lastCheck && (
+            <span style={{ fontSize: "11px", color: C.muted, opacity: 0.6 }}>
+              {lastCheck.toLocaleTimeString("fr-FR")}
+            </span>
+          )}
+          <button onClick={refresh} disabled={loading} style={{
+            padding: "5px 12px", borderRadius: "8px", fontSize: "11px",
+            cursor: loading ? "wait" : "pointer",
+            background: "none", border: `1px solid ${C.border}`, color: C.muted,
+          }}>
+            {loading ? "…" : "↻ Actualiser"}
+          </button>
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        {[
-          { service: "Gateway", port: "8004", color: C.accent },
-          { service: "Pipeline", port: "8000", color: C.green },
-          { service: "STT",     port: "8001", color: C.stt },
-          { service: "LLM",     port: "8002", color: C.llm },
-          { service: "TTS",     port: "8003", color: C.tts },
-        ].map(s => (
-          <div key={s.service} style={{
-            padding: "14px 18px", borderRadius: "14px",
-            background: C.surface, border: `1px solid ${C.border}`,
-            display: "flex", alignItems: "center", gap: "12px",
-          }}>
-            <div style={{
-              width: "8px", height: "8px", borderRadius: "50%",
-              background: s.color, flexShrink: 0,
-              boxShadow: `0 0 6px ${s.color}`,
-            }} />
-            <div>
-              <p style={{ fontSize: "13px", fontWeight: 500, color: C.fg }}>{s.service}</p>
-              <p style={{ fontSize: "11px", color: C.muted }}>:{s.port}</p>
-            </div>
-            <span style={{
-              marginLeft: "auto", fontSize: "10px", padding: "2px 8px",
-              borderRadius: "999px", background: "rgba(126,201,160,0.1)",
-              color: C.green, letterSpacing: "0.1em",
-            }}>running</span>
-          </div>
-        ))}
-      </div>
+      {/* Service cards */}
+      {loading && services.length === 0 ? <Loader /> : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {services.map(s => {
+            const isUp     = s.status === "up";
+            const dotColor = isUp ? C.green : C.red;
+            return (
+              <div key={s.name} style={{
+                padding: "16px 18px", borderRadius: "14px",
+                background: C.surface,
+                border: `1px solid ${isUp ? C.border : "rgba(232,112,112,0.25)"}`,
+                display: "flex", alignItems: "center", gap: "12px",
+                transition: "border-color 0.3s",
+              }}>
+                <div style={{
+                  width: "9px", height: "9px", borderRadius: "50%", flexShrink: 0,
+                  background: dotColor,
+                  boxShadow: isUp ? `0 0 6px ${dotColor}` : "none",
+                  animation: isUp ? "pulse-dot 2s ease-in-out infinite" : "none",
+                }} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: "13px", fontWeight: 500, color: C.fg }}>{s.name}</p>
+                  <p style={{ fontSize: "11px", color: C.muted }}>:{s.port}</p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{
+                    fontSize: "10px", padding: "2px 8px", borderRadius: "999px",
+                    background: isUp ? "rgba(126,201,160,0.1)" : "rgba(232,112,112,0.08)",
+                    color: isUp ? C.green : C.red, letterSpacing: "0.1em", display: "block",
+                    marginBottom: "4px",
+                  }}>
+                    {s.status}
+                  </span>
+                  {isUp && (
+                    <span style={{ fontSize: "10px", color: C.muted, fontVariantNumeric: "tabular-nums" }}>
+                      {s.latency_ms}ms
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <ComingSoon
         title="Grafana — Métriques système"
@@ -752,6 +815,10 @@ export default function AdminPage() {
         @keyframes pulse {
           0%, 100% { opacity: 0.3; transform: scale(0.8); }
           50% { opacity: 1; transform: scale(1.2); }
+        }
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
         }
       `}</style>
     </main>

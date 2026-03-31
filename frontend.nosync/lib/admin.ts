@@ -73,3 +73,15 @@ export const deleteAdminUser = (id: number) =>
 
 export const seedAdmin = () =>
   apiFetch("/admin/seed", { method: "POST" });
+
+export interface ServiceHealth {
+  name:       string;
+  port:       string;
+  color:      string;
+  status:     "up" | "down" | "error";
+  latency_ms: number;
+  detail:     Record<string, unknown>;
+}
+
+export const getServicesHealth = () =>
+  apiFetch<{ services: ServiceHealth[] }>("/admin/services/health");
