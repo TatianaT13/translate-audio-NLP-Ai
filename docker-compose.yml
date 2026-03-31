@@ -4,6 +4,26 @@
 
 services:
 
+  # ─── Gateway Service (Auth) ─────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
+      - DEV_MODE=${DEV_MODE:-true}
+      - FRONTEND_URLS=http://localhost:3000
+    volumes:
+      - gateway_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ─── Pipeline Service (Orchestrateur) ───────────────────────────
   pipeline:
     build:
@@ -85,3 +105,4 @@ services:
 
 volumes:
   whisper_cache:
+  gateway_data:

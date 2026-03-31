@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { runPipeline, audioFromBase64 } from "@/lib/api";
 import type { ProcessResult } from "@/lib/api";
+import { getMe, logout, changePassword, deleteAccount, checkPasswordStrength } from "@/lib/auth";
+import type { User } from "@/lib/auth";
 
 type Step = "idle" | "recording" | "processing" | "done" | "error";
 
@@ -304,6 +307,203 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload }
   );
 }
 
+function ChangePasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [oldPwd, setOldPwd]   = useState("");
+  const [newPwd, setNewPwd]   = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const strength = checkPasswordStrength(newPwd);
+  const allGood  = strength.length && strength.uppercase && strength.digit;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPwd !== confirm) { setError("Les mots de passe ne correspondent pas"); return; }
+    if (!allGood) { setError("Le mot de passe ne respecte pas les critères"); return; }
+    setError(null); setLoading(true);
+    try {
+      await changePassword(oldPwd, newPwd);
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      background: "rgba(12,12,14,0.85)", backdropFilter: "blur(4px)",
+    }} onClick={onClose}>
+      <div style={{
+        width: "100%", maxWidth: "380px", margin: "24px",
+        background: "var(--surface)", border: "1px solid var(--border)",
+        borderRadius: "20px", padding: "28px", animation: "fadeUp 0.3s ease",
+      }} onClick={e => e.stopPropagation()}>
+        <h2 className="font-serif" style={{ fontSize: "20px", color: "var(--foreground)", marginBottom: "24px" }}>
+          Changer le mot de passe
+        </h2>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {[
+            { label: "Ancien mot de passe", value: oldPwd, set: setOldPwd },
+            { label: "Nouveau mot de passe", value: newPwd, set: setNewPwd },
+            { label: "Confirmer", value: confirm, set: setConfirm },
+          ].map(f => (
+            <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--muted)" }}>{f.label}</label>
+              <input type="password" value={f.value} onChange={e => f.set(e.target.value)}
+                placeholder="••••••••" required style={{
+                  padding: "11px 14px", borderRadius: "10px", fontSize: "14px",
+                  background: "var(--background)", border: "1px solid var(--border)",
+                  color: "var(--foreground)", outline: "none", width: "100%",
+                }} />
+            </div>
+          ))}
+          {newPwd.length > 0 && (
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {[{ ok: strength.length, label: "8 car." }, { ok: strength.uppercase, label: "Maj." }, { ok: strength.digit, label: "Chiffre" }].map(r => (
+                <span key={r.label} style={{ fontSize: "11px", color: r.ok ? "#7ec9a0" : "var(--muted)" }}>
+                  {r.ok ? "✓" : "○"} {r.label}
+                </span>
+              ))}
+            </div>
+          )}
+          {error && (
+            <p style={{ fontSize: "13px", color: "#e87070", padding: "10px 14px", borderRadius: "10px", background: "rgba(232,112,112,0.08)", border: "1px solid rgba(232,112,112,0.2)" }}>
+              {error}
+            </p>
+          )}
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{
+              flex: 1, padding: "11px", borderRadius: "10px", cursor: "pointer", fontSize: "13px",
+              background: "none", border: "1px solid var(--border)", color: "var(--muted)",
+            }}>Annuler</button>
+            <button type="submit" disabled={loading} style={{
+              flex: 2, padding: "11px", borderRadius: "10px", cursor: loading ? "wait" : "pointer",
+              fontSize: "13px", fontWeight: 500, border: "none",
+              background: loading ? "var(--border)" : "linear-gradient(135deg, var(--accent), var(--accent-dim))",
+              color: loading ? "var(--muted)" : "#0c0c0e",
+            }}>{loading ? "Enregistrement…" : "Enregistrer"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [open, setOpen]         = useState(false);
+  const [showPwd, setShowPwd]   = useState(false);
+  const [showDel, setShowDel]   = useState(false);
+  const [delLoading, setDelLoading] = useState(false);
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    setDelLoading(true);
+    try { await deleteAccount(); router.push("/login"); }
+    catch { setDelLoading(false); }
+  };
+
+  const handleChangeSuccess = () => {
+    setShowPwd(false);
+    router.push("/login");
+  };
+
+  return (
+    <>
+      {showPwd && <ChangePasswordModal onClose={() => setShowPwd(false)} onSuccess={handleChangeSuccess} />}
+
+      {/* Delete confirm modal */}
+      {showDel && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 100, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          background: "rgba(12,12,14,0.85)", backdropFilter: "blur(4px)",
+        }} onClick={() => setShowDel(false)}>
+          <div style={{
+            width: "100%", maxWidth: "360px", margin: "24px",
+            background: "var(--surface)", border: "1px solid rgba(232,112,112,0.3)",
+            borderRadius: "20px", padding: "28px", animation: "fadeUp 0.3s ease",
+          }} onClick={e => e.stopPropagation()}>
+            <h2 className="font-serif" style={{ fontSize: "20px", color: "var(--foreground)", marginBottom: "12px" }}>
+              Supprimer le compte
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "24px", lineHeight: 1.6 }}>
+              Cette action est irréversible. Toutes vos données seront supprimées définitivement.
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setShowDel(false)} style={{
+                flex: 1, padding: "11px", borderRadius: "10px", cursor: "pointer",
+                background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontSize: "13px",
+              }}>Annuler</button>
+              <button onClick={handleDelete} disabled={delLoading} style={{
+                flex: 2, padding: "11px", borderRadius: "10px", cursor: delLoading ? "wait" : "pointer",
+                background: "rgba(232,112,112,0.15)", border: "1px solid rgba(232,112,112,0.3)",
+                color: "#e87070", fontSize: "13px", fontWeight: 500,
+              }}>{delLoading ? "Suppression…" : "Supprimer définitivement"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ position: "relative" }}>
+        <button onClick={() => setOpen(o => !o)} style={{
+          display: "flex", alignItems: "center", gap: "8px",
+          padding: "6px 14px", borderRadius: "999px", cursor: "pointer",
+          background: open ? "rgba(201,169,110,0.1)" : "var(--surface)",
+          border: "1px solid var(--border)", color: "var(--muted)",
+          fontSize: "12px", transition: "all 0.2s",
+        }}>
+          <div style={{
+            width: "22px", height: "22px", borderRadius: "50%",
+            background: "rgba(201,169,110,0.12)", border: "1px solid var(--accent-dim)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "10px", color: "var(--accent)", fontWeight: 700,
+          }}>
+            {user.email[0].toUpperCase()}
+          </div>
+          <span style={{ maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {user.email}
+          </span>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>
+            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+
+        {open && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 50,
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "14px", padding: "6px", minWidth: "200px",
+            animation: "fadeUp 0.2s ease forwards",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }}>
+            {[
+              { label: "Changer le mot de passe", action: () => { setShowPwd(true); setOpen(false); }, color: "var(--foreground)" },
+              { label: "Se déconnecter", action: onLogout, color: "var(--foreground)" },
+              { label: "Supprimer le compte", action: () => { setShowDel(true); setOpen(false); }, color: "#e87070" },
+            ].map(item => (
+              <button key={item.label} onClick={item.action} style={{
+                display: "block", width: "100%", padding: "10px 14px",
+                borderRadius: "10px", cursor: "pointer", textAlign: "left",
+                background: "none", border: "none", color: item.color,
+                fontSize: "13px", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2000);
@@ -323,6 +523,8 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 }
 
 export default function Home() {
+  const router = useRouter();
+  const [user, setUser]             = useState<User | null>(null);
   const [step, setStep]             = useState<Step>("idle");
   const [result, setResult]         = useState<ProcessResult | null>(null);
   const [audioUrl, setAudioUrl]     = useState<string | null>(null);
@@ -337,6 +539,15 @@ export default function Home() {
   const mediaRef     = useRef<MediaRecorder | null>(null);
   const chunksRef    = useRef<Blob[]>([]);
   const audioBlobRef = useRef<Blob | null>(null);
+
+  useEffect(() => {
+    getMe().then(setUser).catch(() => router.push("/login"));
+  }, []);
+
+  const handleLogout = async () => {
+    await logout().catch(() => {});
+    router.push("/login");
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -438,6 +649,13 @@ export default function Home() {
       background: "var(--background)",
     }}>
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+
+      {/* ── User menu (top right) ── */}
+      {user && (
+        <div style={{ position: "fixed", top: "16px", right: "20px", zIndex: 40 }}>
+          <UserMenu user={user} onLogout={handleLogout} />
+        </div>
+      )}
 
       {/* ── Header ── */}
       <header style={{
