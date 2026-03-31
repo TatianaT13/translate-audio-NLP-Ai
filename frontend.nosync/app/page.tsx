@@ -58,23 +58,34 @@ function MiniWave({ color }: { color: string }) {
   );
 }
 
-function WaveTransform() {
-  const items = [...QUOTES, ...QUOTES]; // duplicate for seamless loop
+function WaveTransform({ mini = false }: { mini?: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  const items = [...QUOTES, ...QUOTES];
 
   return (
-    <div style={{
-      width: "100%", overflow: "hidden", marginBottom: S.gap24,
-      WebkitMaskImage: "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
-      maskImage:       "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
-    }}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: "100%", overflow: "hidden",
+        marginBottom: mini ? 0 : S.gap24,
+        WebkitMaskImage: "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
+        maskImage:       "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
+        opacity: mini ? 0.5 : 1,
+        transition: "opacity 0.3s",
+        cursor: "default",
+      }}
+    >
       <div style={{
         display: "inline-flex", alignItems: "center", whiteSpace: "nowrap",
-        animation: "marquee 160s linear infinite",
+        animation: `marquee ${mini ? "200s" : "160s"} linear infinite`,
+        animationPlayState: hovered ? "paused" : "running",
       }}>
         {items.map((q, i) => (
           <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
             <span style={{
-              fontSize: "19px", fontFamily: "var(--font-playfair), serif",
+              fontSize: mini ? "12px" : "19px",
+              fontFamily: "var(--font-playfair), serif",
               fontStyle: "italic", color: "var(--foreground)", opacity: 0.78,
             }}>
               &ldquo;{q.fr}&rdquo;
@@ -83,7 +94,8 @@ function WaveTransform() {
             <MiniWave color={q.color} />
 
             <span style={{
-              fontSize: "19px", fontFamily: "var(--font-playfair), serif",
+              fontSize: mini ? "12px" : "19px",
+              fontFamily: "var(--font-playfair), serif",
               fontStyle: "italic", color: q.color,
             }}>
               &ldquo;{q.text}&rdquo;
@@ -110,6 +122,188 @@ function WaveTransform() {
   );
 }
 
+function ProcessingTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const display = elapsed >= 60
+    ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
+    : `${elapsed}s`;
+  return (
+    <span style={{ fontSize: "13px", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
+      {display}
+    </span>
+  );
+}
+
+function ExpandableText({ text, color }: { text: string; color?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 320;
+  const isLong = text.length > LIMIT;
+  const displayed = expanded || !isLong ? text : text.slice(0, LIMIT) + "…";
+
+  return (
+    <div>
+      <p style={{
+        fontSize: "14px", lineHeight: 1.85, fontWeight: 300,
+        color: color ?? "var(--foreground)", whiteSpace: "pre-wrap",
+      }}>
+        {displayed}
+      </p>
+      {isLong && (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          marginTop: "10px", fontSize: "12px", cursor: "pointer",
+          background: "none", border: "none", padding: 0,
+          color: "var(--accent)", opacity: 0.7, letterSpacing: "0.05em",
+        }}>
+          {expanded ? "Voir moins" : "Voir plus"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface ResultsViewProps {
+  result: ProcessResult;
+  audioUrl: string | null;
+  langLabel: string;
+  copied: boolean;
+  onCopy: () => void;
+  onDownload: () => void;
+}
+
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload }: ResultsViewProps) {
+  const latencies = [
+    { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
+    { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
+    { label: "TTS",   ms: result.latency_tts_ms,   color: "#9b7ec9" },
+    { label: "Total", ms: result.latency_total_ms, color: "var(--muted)" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: S.gap24, animation: "fadeUp 0.5s ease forwards" }}>
+
+      {/* Ticker mini */}
+      <WaveTransform mini />
+
+      {/* Audio player */}
+      {audioUrl && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: S.gap12,
+          padding: "14px 18px", borderRadius: "16px",
+          background: "var(--surface)", border: "1px solid var(--accent-dim)",
+        }}>
+          <audio controls src={audioUrl} style={{ flex: 1, height: "34px", accentColor: "var(--accent)" }} />
+          <button onClick={onDownload} title="Télécharger" style={{
+            padding: "8px", borderRadius: "10px", cursor: "pointer",
+            background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
+            color: "var(--accent)", flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Transcription — full width */}
+      <div style={{ borderRadius: "20px", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div style={{
+          padding: "14px 22px", display: "flex", justifyContent: "space-between",
+          alignItems: "center", borderBottom: "1px solid var(--border)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: S.gap12 }}>
+            <span style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>
+              Transcription
+            </span>
+            <span style={{ fontSize: "10px", padding: "2px 10px", borderRadius: "999px", background: "rgba(201,169,110,0.07)", color: "var(--accent)" }}>
+              {result.language.toUpperCase()} {Math.round(result.language_prob * 100)}%
+            </span>
+          </div>
+          <div style={{ height: "3px", width: "52px", borderRadius: "999px", overflow: "hidden", background: "var(--border)" }}>
+            <div style={{ height: "100%", borderRadius: "999px", background: "var(--accent-dim)", width: `${Math.round(result.language_prob * 100)}%`, transition: "width 0.6s ease" }} />
+          </div>
+        </div>
+        <div style={{ padding: "20px 22px" }}>
+          <ExpandableText text={result.source_text} />
+        </div>
+      </div>
+
+      {/* Arrow divider */}
+      <div style={{ display: "flex", alignItems: "center", gap: S.gap16 }}>
+        <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, var(--accent-dim))" }} />
+        <div style={{
+          display: "flex", alignItems: "center", gap: S.gap8,
+          padding: "6px 14px", borderRadius: "999px",
+          background: "rgba(201,169,110,0.06)", border: "1px solid var(--accent-dim)",
+        }}>
+          <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.1em" }}>FR</span>
+          <svg width="22" height="10" viewBox="0 0 22 10" fill="none">
+            <path d="M1 5h20M16 1l5 4-5 4" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 700, letterSpacing: "0.15em" }}>{langLabel.toUpperCase().slice(0,2)}</span>
+        </div>
+        <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, var(--accent-dim))" }} />
+      </div>
+
+      {/* Translation — full width, accented */}
+      <div style={{ borderRadius: "20px", overflow: "hidden", background: "rgba(201,169,110,0.03)", border: "1px solid var(--accent-dim)" }}>
+        <div style={{
+          padding: "14px 22px", display: "flex", justifyContent: "space-between",
+          alignItems: "center", borderBottom: "1px solid rgba(201,169,110,0.12)",
+        }}>
+          <span style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 600 }}>
+            {langLabel}
+          </span>
+          <button onClick={onCopy} style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
+            cursor: "pointer", transition: "all 0.2s",
+            background: copied ? "rgba(201,169,110,0.18)" : "rgba(201,169,110,0.06)",
+            border: "1px solid var(--accent-dim)", color: "var(--accent)",
+          }}>
+            {copied ? (
+              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié</>
+            ) : (
+              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</>
+            )}
+          </button>
+        </div>
+        <div style={{ padding: "20px 22px" }}>
+          <ExpandableText text={result.translation} color="var(--foreground)" />
+        </div>
+      </div>
+
+      {/* Metrics bar */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        gap: "2px", padding: "12px 16px", borderRadius: "16px",
+        background: "var(--surface)", border: "1px solid var(--border)",
+        flexWrap: "wrap",
+      }}>
+        {latencies.map((m, i) => {
+          const secs = m.ms / 1000;
+          const display = secs >= 60 ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s` : `${secs.toFixed(1)}s`;
+          return (
+            <div key={m.label} style={{ display: "flex", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: m.color }}>{display}</span>
+                <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>{m.label}</span>
+              </div>
+              {i < latencies.length - 1 && (
+                <div style={{ width: "1px", height: "28px", background: "var(--border)" }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2000);
@@ -129,14 +323,15 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 }
 
 export default function Home() {
-  const [step, setStep]         = useState<Step>("idle");
-  const [result, setResult]     = useState<ProcessResult | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [error, setError]       = useState<string | null>(null);
+  const [step, setStep]             = useState<Step>("idle");
+  const [result, setResult]         = useState<ProcessResult | null>(null);
+  const [audioUrl, setAudioUrl]     = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isHoverDrop, setIsHoverDrop] = useState(false);
   const [targetLang, setTargetLang] = useState("en");
-  const [toast, setToast]       = useState<string | null>(null);
-  const [copied, setCopied]     = useState(false);
+  const [toast, setToast]           = useState<string | null>(null);
+  const [copied, setCopied]         = useState(false);
 
   const fileRef      = useRef<HTMLInputElement>(null);
   const mediaRef     = useRef<MediaRecorder | null>(null);
@@ -156,14 +351,12 @@ export default function Home() {
 
   const run = useCallback(async (file: File | Blob) => {
     setError(null); setResult(null); setAudioUrl(null); setCopied(false);
-
     const MAX_MB = 25;
     if (file.size > MAX_MB * 1024 * 1024) {
       setError(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : ${MAX_MB} Mo (~20 min d'audio).`);
       setStep("error");
       return;
     }
-
     setStep("processing");
     try {
       const res = await runPipeline(file, targetLang);
@@ -181,8 +374,20 @@ export default function Home() {
     }
   }, [targetLang]);
 
+  const runDemo = async () => {
+    try {
+      const res = await fetch("/demo.mp3");
+      if (!res.ok) throw new Error("Fichier démo introuvable");
+      const blob = await res.blob();
+      run(blob);
+    } catch {
+      setError("Fichier démo non disponible. Déposez votre propre audio.");
+      setStep("error");
+    }
+  };
+
   const onDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragging(false);
+    e.preventDefault(); setIsDragging(false); setIsHoverDrop(false);
     const f = e.dataTransfer.files[0];
     if (f) run(f);
   };
@@ -224,6 +429,8 @@ export default function Home() {
 
   const langLabel = LANGS.find(l => l.code === targetLang)?.label ?? "English";
 
+  const dropActive = isDragging || isHoverDrop;
+
   return (
     <main style={{
       minHeight: "100vh", display: "flex", flexDirection: "column",
@@ -248,10 +455,34 @@ export default function Home() {
         </div>
 
         {step === "done" ? (
-          <h1 className="font-serif" style={{ fontSize: "clamp(22px, 4vw, 30px)", color: "var(--foreground)", lineHeight: 1.2 }}>
-            Traduisez votre voix.{" "}
-            <em style={{ color: "var(--accent)" }}>Instantanément.</em>
-          </h1>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap16, flexWrap: "wrap" }}>
+            <h1 className="font-serif" style={{ fontSize: "clamp(20px, 3.5vw, 26px)", color: "var(--foreground)", lineHeight: 1.2 }}>
+              Traduisez votre voix.{" "}
+              <em style={{ color: "var(--accent)" }}>Instantanément.</em>
+            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: S.gap8 }}>
+              <span style={{ fontSize: "11px", color: "var(--muted)", opacity: 0.5, letterSpacing: "0.1em" }}>FR</span>
+              <svg width="20" height="10" viewBox="0 0 20 10" fill="none" style={{ opacity: 0.4 }}>
+                <path d="M1 5h18M14 1l5 4-5 4" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{
+                fontSize: "11px", fontWeight: 600, letterSpacing: "0.18em",
+                padding: "3px 10px", borderRadius: "999px",
+                background: "rgba(201,169,110,0.12)", color: "var(--accent)",
+              }}>{langLabel.toUpperCase()}</span>
+            </div>
+            <button onClick={reset} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "7px 16px", borderRadius: "999px", fontSize: "12px",
+              cursor: "pointer", transition: "all 0.2s",
+              background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
+            }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>
+              Recommencer
+            </button>
+          </div>
         ) : (
           <>
             <h1 className="font-serif" style={{
@@ -301,30 +532,36 @@ export default function Home() {
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
               onClick={() => fileRef.current?.click()}
+              onMouseEnter={() => setIsHoverDrop(true)}
+              onMouseLeave={() => setIsHoverDrop(false)}
               style={{
                 borderRadius: "20px", textAlign: "center", cursor: "pointer",
                 padding: "36px 24px", marginBottom: S.gap24,
-                background: isDragging ? "rgba(201,169,110,0.05)" : "var(--surface)",
-                border: `1.5px dashed ${isDragging ? "var(--accent)" : "var(--border)"}`,
+                background: dropActive ? "rgba(201,169,110,0.06)" : "var(--surface)",
+                border: `1.5px dashed ${dropActive ? "var(--accent)" : "var(--border)"}`,
+                boxShadow: dropActive ? "0 0 0 4px rgba(201,169,110,0.06)" : "none",
                 transition: "all 0.25s",
               }}
             >
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ color: "var(--muted)", margin: "0 auto 20px" }}>
+                style={{
+                  color: dropActive ? "var(--accent)" : "var(--muted)",
+                  margin: "0 auto 20px", transition: "color 0.25s",
+                }}>
                 <path d="M9 18V5l12-2v13" />
                 <circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
               </svg>
               <p style={{ fontSize: "15px", fontWeight: 400, color: "var(--foreground)", marginBottom: "6px" }}>
                 Déposez un fichier audio ici
               </p>
-              <p style={{ fontSize: "13px", color: "var(--muted)" }}>MP3, WAV, M4A, OGG</p>
+              <p style={{ fontSize: "13px", color: "var(--muted)" }}>MP3, WAV, M4A, OGG · max 25 Mo</p>
               <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }}
                 onChange={e => e.target.files?.[0] && run(e.target.files[0])} />
             </div>
 
             {/* divider */}
-            <div style={{ display: "flex", alignItems: "center", gap: S.gap16, marginBottom: S.gap32 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: S.gap16, marginBottom: S.gap24 }}>
               <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
@@ -336,16 +573,28 @@ export default function Home() {
               <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
             </div>
 
-            {/* Record button */}
-            <button onClick={startRecording} style={{
-              width: "100%", padding: "13px", borderRadius: "14px", cursor: "pointer",
-              fontSize: "14px", fontWeight: 500, letterSpacing: "0.04em",
-              background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
-              color: "#0c0c0e", border: "none", transition: "opacity 0.2s",
-            }}>
-              Enregistrer avec le microphone
-              <span style={{ marginLeft: "8px", fontSize: "12px", opacity: 0.6 }}>(ou appuyer sur Espace)</span>
-            </button>
+            {/* Mic + Demo buttons */}
+            <div style={{ display: "flex", gap: S.gap12 }}>
+              <button onClick={startRecording} style={{
+                flex: 1, padding: "13px", borderRadius: "14px", cursor: "pointer",
+                fontSize: "14px", fontWeight: 500, letterSpacing: "0.04em",
+                background: "var(--surface)",
+                color: "var(--foreground)", border: "1px solid var(--border)",
+                transition: "border-color 0.2s, color 0.2s",
+              }}>
+                Enregistrer
+                <span style={{ marginLeft: "8px", fontSize: "12px", opacity: 0.5 }}>(Espace)</span>
+              </button>
+              <button onClick={runDemo} style={{
+                padding: "13px 20px", borderRadius: "14px", cursor: "pointer",
+                fontSize: "13px", fontWeight: 500,
+                background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
+                color: "#0c0c0e", border: "none", transition: "opacity 0.2s",
+                whiteSpace: "nowrap",
+              }}>
+                Lancer la démo
+              </button>
+            </div>
           </div>
         )}
 
@@ -390,128 +639,23 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <p style={{ fontSize: "13px", color: "var(--muted)" }}>Pipeline en cours…</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap8 }}>
+              <p style={{ fontSize: "13px", color: "var(--muted)" }}>Traduction en cours…</p>
+              <ProcessingTimer />
+            </div>
           </div>
         )}
 
         {/* ── Results ── */}
         {step === "done" && result && (
-          <div style={{ display: "flex", flexDirection: "column", gap: S.gap32, animation: "fadeUp 0.5s ease forwards" }}>
-
-            {/* Audio player */}
-            {audioUrl && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: S.gap16,
-                padding: "16px 20px", borderRadius: "16px",
-                background: "var(--surface)", border: "1px solid var(--accent-dim)",
-              }}>
-                <audio controls src={audioUrl} style={{ flex: 1, height: "36px", accentColor: "var(--accent)" }} />
-                <button onClick={downloadAudio} title="Download" style={{
-                  padding: "8px", borderRadius: "10px", cursor: "pointer",
-                  background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
-                  color: "var(--accent)", flexShrink: 0, transition: "opacity 0.2s",
-                }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                </button>
-              </div>
-            )}
-
-            {/* Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: S.gap24 }}>
-
-              {/* Original */}
-              <div style={{ borderRadius: "16px", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <div style={{
-                  padding: "14px 20px", display: "flex", justifyContent: "space-between",
-                  alignItems: "center", borderBottom: "1px solid var(--border)",
-                }}>
-                  <span style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 500 }}>
-                    Transcription
-                  </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: S.gap8 }}>
-                    <div style={{ height: "4px", width: "48px", borderRadius: "999px", overflow: "hidden", background: "var(--border)" }}>
-                      <div style={{ height: "100%", borderRadius: "999px", background: "var(--accent-dim)", width: `${Math.round(result.language_prob * 100)}%` }} />
-                    </div>
-                    <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: "rgba(201,169,110,0.08)", color: "var(--accent)" }}>
-                      {result.language.toUpperCase()} {Math.round(result.language_prob * 100)}%
-                    </span>
-                  </div>
-                </div>
-                <div style={{ padding: "16px 20px", maxHeight: "160px", overflowY: "auto" }}>
-                  <p style={{ fontSize: "13px", lineHeight: 1.7, color: "var(--foreground)", fontWeight: 300 }}>
-                    {result.source_text}
-                  </p>
-                </div>
-              </div>
-
-              {/* Translation */}
-              <div style={{ borderRadius: "16px", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--accent-dim)" }}>
-                <div style={{
-                  padding: "12px 20px", display: "flex", justifyContent: "space-between",
-                  alignItems: "center", borderBottom: "1px solid rgba(201,169,110,0.15)",
-                }}>
-                  <span style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 500 }}>
-                    {langLabel}
-                  </span>
-                  <button onClick={copyTranslation} style={{
-                    display: "flex", alignItems: "center", gap: "6px",
-                    padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
-                    cursor: "pointer", transition: "all 0.2s",
-                    background: copied ? "rgba(201,169,110,0.18)" : "rgba(201,169,110,0.06)",
-                    border: "1px solid var(--accent-dim)", color: "var(--accent)",
-                  }}>
-                    {copied ? (
-                      <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié</>
-                    ) : (
-                      <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</>
-                    )}
-                  </button>
-                </div>
-                <div style={{ padding: "16px 20px", maxHeight: "160px", overflowY: "auto" }}>
-                  <p style={{ fontSize: "13px", lineHeight: 1.7, color: "var(--foreground)", fontWeight: 300 }}>
-                    {result.translation}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Metrics + New */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: S.gap12 }}>
-              <div style={{ display: "flex", gap: S.gap8, flexWrap: "wrap" }}>
-                {[
-                  { label: "STT", ms: result.latency_stt_ms, color: "#7eb8c9" },
-                  { label: "LLM", ms: result.latency_llm_ms, color: "var(--accent)" },
-                  { label: "TTS", ms: result.latency_tts_ms, color: "#9b7ec9" },
-                  { label: "Total", ms: result.latency_total_ms, color: "var(--muted)" },
-                ].map(m => {
-                  const secs = m.ms / 1000;
-                  const display = secs >= 60
-                    ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`
-                    : `${secs.toFixed(1)}s`;
-                  return (
-                    <div key={m.label} style={{
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
-                      padding: "8px 14px", borderRadius: "12px",
-                      background: "var(--surface)", border: "1px solid var(--border)",
-                    }}>
-                      <span style={{ fontSize: "12px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: m.color }}>{display}</span>
-                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>{m.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <button onClick={reset} style={{
-                padding: "10px 20px", borderRadius: "12px", fontSize: "13px",
-                cursor: "pointer", transition: "opacity 0.2s",
-                background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
-              }}>
-                Nouvelle traduction
-              </button>
-            </div>
-          </div>
+          <ResultsView
+            result={result}
+            audioUrl={audioUrl}
+            langLabel={langLabel}
+            copied={copied}
+            onCopy={copyTranslation}
+            onDownload={downloadAudio}
+          />
         )}
 
         {/* ── Error ── */}
@@ -525,7 +669,7 @@ export default function Home() {
               <span style={{ color: "#e87070", fontSize: "18px" }}>×</span>
             </div>
             <p style={{ fontSize: "14px", color: "#e87070", marginBottom: "8px" }}>Une erreur est survenue</p>
-            <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "32px", maxWidth: "42ch", margin: "0 auto 32px" }}>{error}</p>
+            <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "42ch", margin: "0 auto 32px" }}>{error}</p>
             <button onClick={reset} style={{
               padding: "10px 28px", borderRadius: "999px", fontSize: "13px",
               cursor: "pointer", background: "var(--surface)",
