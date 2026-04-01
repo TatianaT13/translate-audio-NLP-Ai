@@ -383,22 +383,25 @@ function ExperimentsTab() {
 function InfraTab() {
   const [services, setServices] = useState<ServiceHealth[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getServicesHealth();
-      setServices(data.services);
+      setServices(data.services ?? []);
       setLastCheck(new Date());
-    } catch {
-      // gateway down or not admin
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { refresh(); }, []);
+  // Petit délai pour laisser le token s'initialiser
+  useEffect(() => { setTimeout(() => refresh(), 300); }, []);
 
   const upCount   = services.filter(s => s.status === "up").length;
   const downCount = services.filter(s => s.status !== "up").length;
@@ -439,6 +442,14 @@ function InfraTab() {
       </div>
 
       {/* Service cards */}
+      {error && (
+        <div style={{
+          padding: "12px 16px", borderRadius: "10px", fontSize: "12px",
+          background: "rgba(232,112,112,0.06)", border: "1px solid rgba(232,112,112,0.2)", color: C.red,
+        }}>
+          Impossible de contacter le gateway — {error}
+        </div>
+      )}
       {loading && services.length === 0 ? <Loader /> : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           {services.map(s => {
