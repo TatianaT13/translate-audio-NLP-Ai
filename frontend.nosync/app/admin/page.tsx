@@ -764,49 +764,59 @@ export default function AdminPage() {
     }}>
       <div style={{ width: "100%", maxWidth: "900px" }}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px" }}>
-          <div>
-            <div style={{
-              display: "inline-block", fontSize: "10px", letterSpacing: "0.35em",
-              textTransform: "uppercase", marginBottom: "10px",
-              padding: "4px 12px", borderRadius: "999px",
-              background: "rgba(201,169,110,0.08)", color: C.accent,
-            }}>
-              Administration
-            </div>
-            <h1 className="font-serif" style={{ fontSize: "clamp(22px, 4vw, 32px)", color: C.fg, lineHeight: 1.2 }}>
-              Dashboard <em style={{ color: C.accent }}>MLOps</em>
-            </h1>
-          </div>
-          <button onClick={() => router.push("/")} style={{
-            padding: "7px 16px", borderRadius: "999px", fontSize: "12px",
-            cursor: "pointer", background: C.surface, border: `1px solid ${C.border}`, color: C.muted,
-          }}>
-            ← Retour
-          </button>
-        </div>
-
         {/* Tabs */}
         <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-          <Tabs.List style={{
-            display: "flex", gap: "4px", flexWrap: "wrap",
-            padding: "4px", borderRadius: "14px",
-            background: C.surface, border: `1px solid ${C.border}`,
-            marginBottom: "24px",
+
+          {/* Sticky header + tab list */}
+          <div style={{
+            position: "sticky", top: 0, zIndex: 10,
+            background: C.bg,
+            paddingTop: "32px",
+            marginTop: "-32px",
+            paddingBottom: "4px",
           }}>
-            {TAB_ITEMS.map(t => (
-              <Tabs.Trigger key={t.value} value={t.value} style={{
-                padding: "7px 16px", borderRadius: "10px", fontSize: "12px",
-                cursor: "pointer", border: "none", fontWeight: 500,
-                background: activeTab === t.value ? "rgba(201,169,110,0.12)" : "none",
-                color: activeTab === t.value ? C.accent : C.muted,
-                transition: "all 0.15s",
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+              <div>
+                <div style={{
+                  display: "inline-block", fontSize: "10px", letterSpacing: "0.35em",
+                  textTransform: "uppercase", marginBottom: "10px",
+                  padding: "4px 12px", borderRadius: "999px",
+                  background: "rgba(201,169,110,0.08)", color: C.accent,
+                }}>
+                  Administration
+                </div>
+                <h1 className="font-serif" style={{ fontSize: "clamp(22px, 4vw, 32px)", color: C.fg, lineHeight: 1.2 }}>
+                  Dashboard <em style={{ color: C.accent }}>MLOps</em>
+                </h1>
+              </div>
+              <button onClick={() => router.push("/")} style={{
+                padding: "7px 16px", borderRadius: "999px", fontSize: "12px",
+                cursor: "pointer", background: C.surface, border: `1px solid ${C.border}`, color: C.muted,
               }}>
-                {t.label}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
+                ← Retour
+              </button>
+            </div>
+
+            <Tabs.List style={{
+              display: "flex", gap: "4px", flexWrap: "wrap",
+              padding: "4px", borderRadius: "14px",
+              background: C.surface, border: `1px solid ${C.border}`,
+              marginBottom: "24px",
+            }}>
+              {TAB_ITEMS.map(t => (
+                <Tabs.Trigger key={t.value} value={t.value} style={{
+                  padding: "7px 16px", borderRadius: "10px", fontSize: "12px",
+                  cursor: "pointer", border: "none", fontWeight: 500,
+                  background: activeTab === t.value ? "rgba(201,169,110,0.12)" : "none",
+                  color: activeTab === t.value ? C.accent : C.muted,
+                  transition: "all 0.15s",
+                }}>
+                  {t.label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          </div>
 
           <Tabs.Content value="overview">
             <OverviewTab stats={stats} langfuse={langfuse} />
