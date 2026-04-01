@@ -721,39 +721,88 @@ const TYPE_ICON: Record<string, string> = {
   travaux:        "🔧",
   vehicule_panne: "🔴",
 };
+const TYPE_LABEL: Record<string, string> = {
+  accident:       "Accident",
+  fermeture:      "Fermeture",
+  bouchon:        "Bouchon",
+  animal:         "Animal",
+  intemperies:    "Intempéries",
+  ralentissement: "Ralentissement",
+  travaux:        "Travaux",
+  vehicule_panne: "Véhicule en panne",
+};
+
+function cleanHint(hint: string): string {
+  // Supprimer les "..." de début/fin et nettoyer les espaces
+  return hint.replace(/^\.{2,}\s*/, "").replace(/\s*\.{2,}$/, "").trim();
+}
+
+function cleanDirection(dir: string): string {
+  // Supprimer les mots parasites en fin ("et", "ou", "à", virgules...)
+  return dir.replace(/\s+(et|ou|à|en|,|;)$/i, "").trim();
+}
 
 function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
   const color = SEVERITY_COLOR[ev.severity] ?? C.muted;
+  const hint = cleanHint(ev.location_hint);
+  const direction = ev.direction ? cleanDirection(ev.direction) : "";
+
   return (
     <div style={{
-      padding: "12px 14px", borderRadius: "12px",
-      background: `${color}0d`,
-      border: `1px solid ${color}33`,
-      display: "flex", flexDirection: "column", gap: "6px",
+      padding: "14px 16px", borderRadius: "14px",
+      background: `${color}0a`,
+      border: `1px solid ${color}30`,
+      display: "flex", flexDirection: "column", gap: "8px",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {/* Ligne 1 : badge type + routes + heure */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
         <span style={{
-          fontSize: "10px", fontWeight: 700, letterSpacing: "0.15em",
-          padding: "2px 8px", borderRadius: "999px",
-          background: `${color}22`, color,
+          fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em",
+          padding: "3px 10px", borderRadius: "999px",
+          background: `${color}20`, color,
+          whiteSpace: "nowrap",
         }}>
-          {TYPE_ICON[ev.type] ?? "•"} {SEVERITY_LABEL[ev.severity]}
+          {TYPE_ICON[ev.type]} {TYPE_LABEL[ev.type] ?? ev.type}
         </span>
-        <span style={{ fontSize: "11px", color: C.muted }}>{ev.timestamp}</span>
         {ev.routes.length > 0 && (
-          <span style={{ fontSize: "12px", fontWeight: 600, color: C.fg, marginLeft: "auto" }}>
+          <span style={{
+            fontSize: "12px", fontWeight: 700, color: C.fg,
+            padding: "2px 8px", borderRadius: "6px",
+            background: "rgba(255,255,255,0.06)",
+          }}>
             {ev.routes.join(" · ")}
           </span>
         )}
+        <span style={{ fontSize: "11px", color: C.muted, marginLeft: "auto", whiteSpace: "nowrap" }}>
+          {ev.timestamp}
+        </span>
       </div>
-      <p style={{ fontSize: "12px", color: C.fg, lineHeight: 1.5, margin: 0 }}>
-        {ev.location_hint}
-      </p>
-      {ev.direction && (
-        <p style={{ fontSize: "11px", color: C.muted, margin: 0 }}>{ev.direction}</p>
+
+      {/* Ligne 2 : direction + délai */}
+      {(direction || ev.delay_hint) && (
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          {direction && (
+            <span style={{ fontSize: "12px", color: C.muted }}>
+              📍 {direction}
+            </span>
+          )}
+          {ev.delay_hint && (
+            <span style={{ fontSize: "12px", color, fontWeight: 600 }}>
+              ⏱ {ev.delay_hint}
+            </span>
+          )}
+        </div>
       )}
-      {ev.delay_hint && (
-        <p style={{ fontSize: "11px", color, margin: 0 }}>⏱ {ev.delay_hint}</p>
+
+      {/* Ligne 3 : extrait transcription */}
+      {hint && (
+        <p style={{
+          fontSize: "11px", color: C.muted, lineHeight: 1.6, margin: 0,
+          borderLeft: `2px solid ${color}40`, paddingLeft: "10px",
+          fontStyle: "italic",
+        }}>
+          {hint.length > 120 ? hint.slice(0, 120) + "…" : hint}
+        </p>
       )}
     </div>
   );
