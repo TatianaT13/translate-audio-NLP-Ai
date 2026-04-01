@@ -6,9 +6,10 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
-  getServicesHealth, getTrafficEvents, openTrafficStream,
+  getServicesHealth, getTrafficEvents, openTrafficStream, getExperiments,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
   type ServiceHealth, type TrafficEvent, type TrafficSnapshot,
+  type ExperimentRun, type ExperimentsResponse,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -393,35 +394,163 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
   );
 }
 
-// ── Experiments tab (MLflow stub) ─────────────────────────────────────────────
+// ── Experiments tab ───────────────────────────────────────────────────────────
+type ExpSortKey = "bleu" | "meteor" | "wer" | "latency_stt_ms" | "latency_llm_ms" | "latency_total_ms";
+
+const EXP_COLS: { key: ExpSortKey | null; label: string; color?: string }[] = [
+  { key: null,               label: "Audio" },
+  { key: null,               label: "Whisper" },
+  { key: null,               label: "LLM" },
+  { key: null,               label: "Prompt" },
+  { key: "bleu",             label: "BLEU",    color: C.tts },
+  { key: "meteor",           label: "METEOR",  color: C.green },
+  { key: "wer",              label: "WER",     color: C.red },
+  { key: "latency_stt_ms",   label: "STT ms",  color: C.stt },
+  { key: "latency_llm_ms",   label: "LLM ms",  color: C.llm },
+  { key: "latency_total_ms", label: "Total ms" },
+];
+
 function ExperimentsTab() {
+  const [data,    setData]    = useState<ExperimentsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const [filterWhisper, setFilterWhisper] = useState("all");
+  const [filterLLM,     setFilterLLM]     = useState("all");
+  const [filterPrompt,  setFilterPrompt]  = useState("all");
+
+  const [sortKey, setSortKey] = useState<ExpSortKey>("bleu");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  useEffect(() => {
+    getExperiments()
+      .then(setData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p style={{ color: C.muted, fontSize: "13px" }}>Chargement…</p>;
+  if (error)   return <p style={{ color: "#e87070", fontSize: "13px" }}>{error}</p>;
+  if (!data?.csv_exists) return (
+    <div style={{ color: C.muted, fontSize: "13px", padding: "24px", textAlign: "center" }}>
+      CSV introuvable — lance <code>python scripts/eval_golden.py</code>
+    </div>
+  );
+
+  const whispers = ["all", ...Array.from(new Set(data.runs.map(r => r.whisper_model)))];
+  const llms     = ["all", ...Array.from(new Set(data.runs.map(r => r.llm_model.replace("groq/", ""))))];
+  const prompts  = ["all", ...Array.from(new Set(data.runs.map(r => r.prompt_version)))];
+
+  const filtered = data.runs
+    .filter(r =>
+      (filterWhisper === "all" || r.whisper_model === filterWhisper) &&
+      (filterLLM     === "all" || r.llm_model.replace("groq/", "") === filterLLM) &&
+      (filterPrompt  === "all" || r.prompt_version === filterPrompt)
+    )
+    .sort((a, b) => {
+      const va = (a[sortKey] ?? -1) as number;
+      const vb = (b[sortKey] ?? -1) as number;
+      return sortAsc ? va - vb : vb - va;
+    });
+
+  const withBleu   = filtered.filter(r => r.bleu   != null);
+  const withMeteor = filtered.filter(r => r.meteor != null);
+  const withWer    = filtered.filter(r => r.wer    != null);
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null;
+  const fmt = (v: number | null, d = 2) => v != null ? v.toFixed(d) : "—";
+
+  const selectStyle: React.CSSProperties = {
+    background: C.surface, border: `1px solid ${C.border}`, borderRadius: "8px",
+    color: C.fg, fontSize: "12px", padding: "5px 10px", cursor: "pointer",
+  };
+
+  function handleSort(col: typeof EXP_COLS[0]) {
+    if (!col.key) return;
+    if (sortKey === col.key) setSortAsc(v => !v);
+    else { setSortKey(col.key); setSortAsc(false); }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div style={{
-        padding: "14px 18px", borderRadius: "12px", fontSize: "12px",
-        background: "rgba(201,169,110,0.06)", border: "1px solid var(--accent-dim)", color: C.accent,
-        letterSpacing: "0.05em",
-      }}>
-        Phase suivante du roadmap MLOps — intégration MLflow en cours
+
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        <StatCard label="Runs"        value={String(filtered.length)} sub={`sur ${data.total} total`} />
+        <StatCard label="BLEU moy."   value={fmt(avg(withBleu.map(r => r.bleu!)))}        sub="sacrebleu" color={C.tts} />
+        <StatCard label="METEOR moy." value={fmt(avg(withMeteor.map(r => r.meteor!)), 4)} sub="nltk"      color={C.green} />
+        <StatCard label="WER moy."    value={fmt(avg(withWer.map(r => r.wer!)), 4)}        sub="↓ mieux"   color={C.red} />
       </div>
-      <ComingSoon
-        title="MLflow — Model Registry"
-        description="Comparaison d'expériences, versioning des modèles, métriques d'entraînement et de déploiement. Lance MLflow avec docker compose --profile mlflow up."
-        icon={
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
-          </svg>
-        }
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        {[
-          { label: "Expériences", value: "—", desc: "MLflow requis" },
-          { label: "Runs enregistrés", value: "84", desc: "Importés via Langfuse" },
-          { label: "Modèles en registry", value: "—", desc: "MLflow requis" },
-          { label: "Meilleur BLEU", value: "—", desc: "Via Langfuse scores" },
-        ].map(c => (
-          <StatCard key={c.label} label={c.label} value={c.value} sub={c.desc} />
-        ))}
+
+      {/* Filtres */}
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: "11px", color: C.muted, letterSpacing: "0.1em" }}>FILTRER</span>
+        <select style={selectStyle} value={filterWhisper} onChange={e => setFilterWhisper(e.target.value)}>
+          {whispers.map(w => <option key={w} value={w}>{w === "all" ? "Whisper (tous)" : w}</option>)}
+        </select>
+        <select style={selectStyle} value={filterLLM} onChange={e => setFilterLLM(e.target.value)}>
+          {llms.map(l => <option key={l} value={l}>{l === "all" ? "LLM (tous)" : l}</option>)}
+        </select>
+        <select style={selectStyle} value={filterPrompt} onChange={e => setFilterPrompt(e.target.value)}>
+          {prompts.map(p => <option key={p} value={p}>{p === "all" ? "Prompt (tous)" : p}</option>)}
+        </select>
+        <span style={{ fontSize: "11px", color: C.muted, marginLeft: "auto" }}>
+          {filtered.length} résultats · tri {sortKey} {sortAsc ? "↑" : "↓"}
+        </span>
+      </div>
+
+      {/* Tableau */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              {EXP_COLS.map(col => (
+                <th
+                  key={col.label}
+                  onClick={() => handleSort(col)}
+                  style={{
+                    padding: "8px 12px", textAlign: "left", fontWeight: 600,
+                    fontSize: "11px", letterSpacing: "0.08em",
+                    color: sortKey === col.key ? (col.color ?? C.accent) : C.muted,
+                    cursor: col.key ? "pointer" : "default",
+                    whiteSpace: "nowrap", userSelect: "none",
+                  }}
+                >
+                  {col.label}
+                  {sortKey === col.key && <span style={{ marginLeft: "4px" }}>{sortAsc ? "↑" : "↓"}</span>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={r.run_id} style={{
+                borderBottom: `1px solid ${C.border}20`,
+                background: i % 2 === 0 ? "transparent" : `${C.surface}60`,
+              }}>
+                <td style={{ padding: "9px 12px", color: C.muted, maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.audio.replace(/\.mp3$/, "").replace("flash_", "").replace(/_/g, " ")}
+                </td>
+                <td style={{ padding: "9px 12px", color: C.stt }}>{r.whisper_model}</td>
+                <td style={{ padding: "9px 12px", color: C.llm }}>{r.llm_model.replace("groq/", "")}</td>
+                <td style={{ padding: "9px 12px", color: C.muted }}>{r.prompt_version}</td>
+                <td style={{ padding: "9px 12px", color: C.tts,   fontWeight: 600 }}>{fmt(r.bleu)}</td>
+                <td style={{ padding: "9px 12px", color: C.green, fontWeight: 600 }}>{fmt(r.meteor, 4)}</td>
+                <td style={{ padding: "9px 12px", color: C.red,   fontWeight: 600 }}>{fmt(r.wer, 4)}</td>
+                <td style={{ padding: "9px 12px", color: C.stt }}>{r.latency_stt_ms != null ? `${Math.round(r.latency_stt_ms)}` : "—"}</td>
+                <td style={{ padding: "9px 12px", color: C.llm }}>{r.latency_llm_ms != null ? `${Math.round(r.latency_llm_ms)}` : "—"}</td>
+                <td style={{ padding: "9px 12px", color: C.muted }}>{r.latency_total_ms != null ? `${Math.round(r.latency_total_ms)}` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Roadmap MLflow */}
+      <div style={{
+        padding: "12px 16px", borderRadius: "10px", fontSize: "11px",
+        background: "rgba(201,169,110,0.06)", border: `1px solid ${C.border}`, color: C.muted,
+      }}>
+        Phase 4 — intégration MLflow model registry prévue
       </div>
     </div>
   );

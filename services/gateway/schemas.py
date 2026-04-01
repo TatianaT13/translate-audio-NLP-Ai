@@ -111,6 +111,29 @@ class LangfuseModelStat(BaseModel):
     avg_wer:         float | None = None
 
 
+class ExperimentRun(BaseModel):
+    run_id:           str
+    audio:            str
+    zone:             str
+    whisper_model:    str
+    llm_model:        str
+    prompt_version:   str
+    target_lang:      str
+    language_prob:    float | None = None
+    latency_stt_ms:   float | None = None
+    latency_llm_ms:   float | None = None
+    latency_total_ms: float | None = None
+    bleu:             float | None = None
+    meteor:           float | None = None
+    wer:              float | None = None
+
+
+class ExperimentsResponse(BaseModel):
+    runs:       list[ExperimentRun]
+    total:      int
+    csv_exists: bool
+
+
 class LangfuseMetricsResponse(BaseModel):
     connected:          bool
     error:              str | None = None

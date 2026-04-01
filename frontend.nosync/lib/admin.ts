@@ -108,6 +108,32 @@ export type TrafficSnapshot = Record<"nord" | "sud" | "ouest", TrafficEvent[]>;
 export const getTrafficEvents = () =>
   apiFetch<TrafficSnapshot>("/admin/traffic/events");
 
+export interface ExperimentRun {
+  run_id:           string;
+  audio:            string;
+  zone:             string;
+  whisper_model:    string;
+  llm_model:        string;
+  prompt_version:   string;
+  target_lang:      string;
+  language_prob:    number | null;
+  latency_stt_ms:   number | null;
+  latency_llm_ms:   number | null;
+  latency_total_ms: number | null;
+  bleu:             number | null;
+  meteor:           number | null;
+  wer:              number | null;
+}
+
+export interface ExperimentsResponse {
+  runs:       ExperimentRun[];
+  total:      number;
+  csv_exists: boolean;
+}
+
+export const getExperiments = () =>
+  apiFetch<ExperimentsResponse>("/admin/experiments");
+
 export function openTrafficStream(onEvent: (data: TrafficSnapshot | { zone: string; events: TrafficEvent[] }) => void): EventSource {
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
   const token = getAccessToken() ?? "";
