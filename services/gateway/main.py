@@ -4,8 +4,10 @@ Auth complète : register / login / logout / refresh / me /
                 change-password / forgot-password / reset-password / delete-account
 """
 
+import csv
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -29,6 +31,8 @@ FRONTEND_URLS = os.getenv("FRONTEND_URLS", "http://localhost:3000").split(",")
 LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+
+EXPERIMENTS_CSV = Path(os.getenv("EXPERIMENTS_CSV", "/app/experiments/results.csv"))
 
 PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
 STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
@@ -525,6 +529,41 @@ async def admin_traffic_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/admin/experiments", response_model=schemas.ExperimentsResponse)
+def admin_experiments(_: models.User = Depends(get_admin_user)):
+    """Retourne tous les runs d'évaluation depuis results.csv."""
+    if not EXPERIMENTS_CSV.exists():
+        return schemas.ExperimentsResponse(runs=[], total=0, csv_exists=False)
+
+    runs: list[schemas.ExperimentRun] = []
+    with EXPERIMENTS_CSV.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row in reader:
+            def _f(k: str) -> float | None:
+                v = row.get(k, "").strip()
+                try:
+                    return float(v) if v not in ("", "-1", "n/a") else None
+                except ValueError:
+                    return None
+            runs.append(schemas.ExperimentRun(
+                run_id           = row.get("run_id", ""),
+                audio            = row.get("audio", ""),
+                zone             = row.get("zone", ""),
+                whisper_model    = row.get("whisper_model", ""),
+                llm_model        = row.get("llm_model", ""),
+                prompt_version   = row.get("prompt_version", ""),
+                target_lang      = row.get("target_lang", ""),
+                language_prob    = _f("language_prob"),
+                latency_stt_ms   = _f("latency_stt_ms"),
+                latency_llm_ms   = _f("latency_llm_ms"),
+                latency_total_ms = _f("latency_total_ms"),
+                bleu             = _f("bleu"),
+                meteor           = _f("meteor"),
+                wer              = _f("wer"),
+            ))
+    return schemas.ExperimentsResponse(runs=runs, total=len(runs), csv_exists=True)
 
 
 @app.get("/admin/services/health")
