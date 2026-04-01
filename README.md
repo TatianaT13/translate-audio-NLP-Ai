@@ -2,7 +2,7 @@
 
 Système LLMOps de traduction audio temps réel : **Audio FR → Transcription → Traduction EN/UK/ES/DE → Synthèse vocale**.
 
-Architecture microservices avec orchestration Langchain LCEL, tracing Langfuse, évaluation BLEU sur 84 runs.
+Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse, évaluation BLEU sur 84 runs.
 
 ---
 
@@ -11,11 +11,18 @@ Architecture microservices avec orchestration Langchain LCEL, tracing Langfuse, 
 ```
 Client (Next.js)
        │
-       │ POST /process (audio)
+       │ POST /auth/login  │  POST /process (audio)
        ▼
+┌─────────────────────────┐
+│  Gateway Service  :8004 │   Auth JWT + rate limiting
+│  FastAPI + SQLAlchemy   │
+└──────────┬──────────────┘
+           │ proxy / forward
+           ▼
 ┌─────────────────────────────────────────┐
 │  Pipeline Service  :8000                │
 │  Langchain LCEL orchestrateur           │
+│  + Langfuse tracing                     │
 │  STT ──► LLM ──► TTS                   │
 └──────┬──────────┬──────────┬────────────┘
        │          │          │
@@ -27,7 +34,8 @@ Client (Next.js)
 
 | Service | Port | Technologie |
 |---------|------|-------------|
-| Pipeline (orchestrateur) | 8000 | FastAPI + Langchain LCEL |
+| Gateway (auth + admin) | 8004 | FastAPI + SQLAlchemy + JWT |
+| Pipeline (orchestrateur) | 8000 | FastAPI + Langchain LCEL + Langfuse |
 | STT | 8001 | FastAPI + Faster-Whisper |
 | LLM | 8002 | FastAPI + LiteLLM + Groq |
 | TTS | 8003 | FastAPI + Mistral Voxtral |
@@ -51,6 +59,8 @@ cp .env.example .env
 # GROQ_API_KEY=gsk_...
 # MISTRAL_API_KEY=...
 # MISTRAL_VOICE_ID=...  (voice ID créé sur console.mistral.ai)
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
 ```
 
 ### Lancement avec Docker
@@ -59,7 +69,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Les 4 services démarrent :
+Les 5 services démarrent :
+- Gateway : http://localhost:8004/docs
 - Pipeline : http://localhost:8000/docs
 - STT : http://localhost:8001/docs
 - LLM : http://localhost:8002/docs
@@ -76,12 +87,57 @@ npm run dev
 
 ---
 
+## Authentification (Gateway JWT)
+
+Le service Gateway (`services/gateway/`) gère toute l'authentification :
+
+- **Register / Login** : création de compte + session cookie
+- **JWT access token** (15 min) + **refresh token** rotatif (7 jours, hashé en base)
+- **Mot de passe oublié** : flux reset par lien (DEV_MODE retourne l'URL directement)
+- **Suppression de compte** et changement de mot de passe
+- **Protection des routes** : middleware Next.js (cookie-based), redirection auto vers `/login`
+
+Pages frontend : `/login`, `/register`, `/forgot-password`, `/reset-password`
+
+---
+
+## Dashboard Admin MLOps
+
+Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
+
+Le premier utilisateur peut être promu admin via l'endpoint DEV_MODE :
+```bash
+curl -X POST http://localhost:8004/dev/promote-first-user
+```
+
+### Onglets du dashboard
+
+| Onglet | Contenu |
+|--------|---------|
+| Vue générale | Stats utilisateurs, KPIs pipeline (runs, latence moyenne) |
+| Traces & Modèles | Latences STT/LLM/TTS, histogrammes BLEU/confiance, comparaison modèles |
+| Expériences | Stub MLflow (roadmap Phase 4) |
+| Infrastructure | Health checks temps réel sur chaque microservice + stub Grafana |
+| Pipelines | DAG cards + stub Airflow (roadmap Phase 4) |
+| Utilisateurs | CRUD complet : activer, promouvoir admin, supprimer |
+
+Les métriques Langfuse (latences, BLEU, comparaison modèles) sont récupérées depuis l'API Langfuse cloud et exposées par le Gateway sur `/admin/langfuse-metrics`.
+
+---
+
 ## Structure
 
 ```
 .
 ├── services/
-│   ├── pipeline/           # Orchestrateur Langchain LCEL (port 8000)
+│   ├── gateway/            # Auth JWT + admin API (port 8004)
+│   │   ├── main.py         # Routes auth + admin + Langfuse metrics
+│   │   ├── auth.py         # JWT, bcrypt, refresh tokens
+│   │   ├── models.py       # User SQLAlchemy (is_admin, refresh_token_hash)
+│   │   ├── schemas.py      # Pydantic schemas
+│   │   ├── database.py     # SQLite/PostgreSQL engine
+│   │   └── Dockerfile
+│   ├── pipeline/           # Orchestrateur Langchain LCEL + Langfuse (port 8000)
 │   │   ├── main.py
 │   │   └── Dockerfile
 │   ├── stt/                # Speech-to-Text Whisper (port 8001)
@@ -96,6 +152,16 @@ npm run dev
 ├── src/
 │   └── flash_nlp/          # Package Python (Whisper, audio utils)
 ├── frontend/               # Interface Next.js
+│   ├── app/
+│   │   ├── page.tsx        # Page principale + UserMenu
+│   │   ├── login/          # Connexion
+│   │   ├── register/       # Inscription
+│   │   ├── forgot-password/
+│   │   ├── reset-password/
+│   │   └── admin/          # Dashboard MLOps admin (6 onglets)
+│   ├── lib/auth.ts         # Client auth (login, register, refresh...)
+│   ├── lib/admin.ts        # Client API admin + health checks
+│   └── middleware.ts       # Protection des routes
 ├── scripts/
 │   ├── run_pipeline.py     # Pipeline CLI (hors Docker)
 │   ├── eval_golden.py      # Évaluation BLEU sur dataset golden
@@ -149,21 +215,15 @@ python scripts/run_pipeline.py \
 
 ## Tracing Langfuse
 
-Toutes les exécutions sont tracées dans [Langfuse](https://cloud.langfuse.com) :
-- Latences STT / LLM / TTS
+Toutes les exécutions du pipeline sont tracées dans [Langfuse](https://cloud.langfuse.com) :
+- Latences STT / LLM / TTS par run
 - Score BLEU (quand référence disponible)
 - Version de prompt utilisée
+- Visible dans le Dashboard Admin → onglet **Traces & Modèles**
 
 ```bash
 # Importer les 84 runs historiques dans Langfuse
 python scripts/langfuse_import.py
-```
-
-Variables requises dans `.env` :
-```
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
 ---
@@ -191,6 +251,9 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 | `WHISPER_MODEL` | Modèle Whisper (`small`, `large-v3`) | Non (défaut: `small`) |
 | `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `groq/llama-3.1-8b-instant`) |
 | `PROMPT_VERSION` | Version du prompt (`v1.0`–`v1.2`) | Non (défaut: `v1.1`) |
+| `JWT_SECRET_KEY` | Clé secrète pour signer les JWT | Oui (Gateway) |
+| `DATABASE_URL` | URL base de données (défaut: SQLite) | Non |
+| `DEV_MODE` | Active les endpoints de dev (`true`/`false`) | Non |
 | `LANGFUSE_PUBLIC_KEY` | Clé publique Langfuse | Non |
 | `LANGFUSE_SECRET_KEY` | Clé secrète Langfuse | Non |
 | `LANGFUSE_HOST` | URL Langfuse | Non |
@@ -199,16 +262,17 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 
 ## Roadmap
 
-- [x] Phase 1 - Dataset golden + evaluation BLEU (84 runs)
-- [x] Phase 2 - Microservices Docker (STT / LLM / TTS)
-- [x] Phase 2 - Langfuse tracing
-- [x] Phase 2 - CI GitHub Actions
-- [x] Phase 3 - Pipeline Service orchestrateur (Langchain LCEL)
-- [x] Phase 3 - Frontend Next.js
-- [ ] Phase 3 - API Gateway (auth + rate limiting)
-- [ ] Phase 4 - MLflow model registry
-- [ ] Phase 4 - Prometheus + Grafana
-- [ ] Phase 4 - Airflow batch evaluation
+- [x] Phase 1 — Dataset golden + évaluation BLEU (84 runs)
+- [x] Phase 2 — Microservices Docker (STT / LLM / TTS)
+- [x] Phase 2 — Langfuse tracing (import historique + tracing pipeline temps réel)
+- [x] Phase 2 — CI GitHub Actions
+- [x] Phase 3 — Pipeline Service orchestrateur (Langchain LCEL)
+- [x] Phase 3 — Frontend Next.js
+- [x] Phase 3 — API Gateway (auth JWT + refresh tokens + rate limiting)
+- [x] Phase 3 — Dashboard Admin MLOps (traces, modèles, infra, utilisateurs)
+- [ ] Phase 4 — MLflow model registry
+- [ ] Phase 4 — Prometheus + Grafana
+- [ ] Phase 4 — Airflow batch evaluation
 
 ---
 
