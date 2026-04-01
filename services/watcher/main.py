@@ -18,6 +18,7 @@ import tempfile
 import time
 from collections import deque
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -171,7 +172,7 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
     if not text.strip():
         return
 
-    ts = datetime.now(timezone.utc).strftime("%H:%M")
+    ts = datetime.now(ZoneInfo(os.getenv("TZ", "Europe/Paris"))).strftime("%H:%M")
     events = extract_events(text, zone=zone, source_file="live", timestamp=ts)
 
     if not events:
