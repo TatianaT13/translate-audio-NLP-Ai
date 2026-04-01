@@ -34,6 +34,26 @@ except ImportError:
 
 import sacrebleu
 
+# METEOR (nltk)
+try:
+    import nltk
+    from nltk.translate.meteor_score import meteor_score as _meteor_score
+    try:
+        nltk.data.find("corpora/wordnet")
+    except LookupError:
+        nltk.download("wordnet", quiet=True)
+        nltk.download("omw-1.4", quiet=True)
+    _METEOR_AVAILABLE = True
+except ImportError:
+    _METEOR_AVAILABLE = False
+
+# WER (jiwer)
+try:
+    from jiwer import wer as _jiwer_wer
+    _WER_AVAILABLE = True
+except ImportError:
+    _WER_AVAILABLE = False
+
 # Langfuse — initialisé après load_dotenv
 _lf = None
 
@@ -88,7 +108,7 @@ CSV_HEADERS = [
     "source_text", "translation",
     "language_prob",
     "latency_conv_ms", "latency_stt_ms", "latency_llm_ms", "latency_total_ms",
-    "bleu",
+    "bleu", "meteor", "wer",
 ]
 
 
@@ -115,6 +135,29 @@ def compute_bleu(hypothesis: str, audio_stem: str, lang: str) -> float:
     reference = ref_path.read_text(encoding="utf-8").strip()
     result = sacrebleu.sentence_bleu(hypothesis, [reference])
     return round(result.score, 2)
+
+
+def compute_meteor(hypothesis: str, audio_stem: str, lang: str) -> float:
+    """METEOR sur la traduction (mêmes refs que BLEU)."""
+    if not _METEOR_AVAILABLE:
+        return -1.0
+    ref_path = REFS_DIR / f"{audio_stem}_{lang}.txt"
+    if not ref_path.exists():
+        return -1.0
+    reference = ref_path.read_text(encoding="utf-8").strip()
+    score = _meteor_score([reference.split()], hypothesis.split())
+    return round(score, 4)
+
+
+def compute_wer(source_text: str, audio_stem: str) -> float:
+    """WER sur la transcription STT (refs FR : data/golden/references/*_fr.txt)."""
+    if not _WER_AVAILABLE:
+        return -1.0
+    ref_path = REFS_DIR / f"{audio_stem}_fr.txt"
+    if not ref_path.exists():
+        return -1.0
+    reference = ref_path.read_text(encoding="utf-8").strip()
+    return round(_jiwer_wer(reference, source_text), 4)
 
 
 def write_row(row: dict) -> None:
@@ -207,7 +250,9 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 print(f"  ERREUR : {e}")
                 continue
 
-            bleu = compute_bleu(result["translation"], audio.stem, target_lang)
+            bleu   = compute_bleu(result["translation"], audio.stem, target_lang)
+            meteor = compute_meteor(result["translation"], audio.stem, target_lang)
+            wer    = compute_wer(result["source_text"], audio.stem)
 
             row = {
                 "run_id":           run_id,
@@ -226,6 +271,8 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 "latency_llm_ms":   result["latency_llm_ms"],
                 "latency_total_ms": result["latency_total_ms"],
                 "bleu":             bleu,
+                "meteor":           meteor,
+                "wer":              wer,
             }
             write_row(row)
             done += 1
@@ -243,6 +290,10 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                     ]
                     if bleu >= 0:
                         scores.append(("bleu", bleu))
+                    if meteor >= 0:
+                        scores.append(("meteor", meteor))
+                    if wer >= 0:
+                        scores.append(("wer", wer))
                     for name, value in scores:
                         _lf.create_score(trace_id=tid, name=name, value=float(value))
                     _lf.flush()
@@ -250,8 +301,11 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 except Exception as e:
                     print(f"  [Langfuse] {e}")
 
-            bleu_str = f"BLEU={bleu}" if bleu >= 0 else "BLEU=n/a (pas de référence)"
-            print(f"  -> {bleu_str}  |  total={result['latency_total_ms']}ms  [sauvegardé]")
+            parts = []
+            parts.append(f"BLEU={bleu}"     if bleu   >= 0 else "BLEU=n/a")
+            parts.append(f"METEOR={meteor}" if meteor >= 0 else "METEOR=n/a")
+            parts.append(f"WER={wer}"       if wer    >= 0 else "WER=n/a (crée data/golden/references/{audio.stem}_fr.txt)")
+            print(f"  -> {' | '.join(parts)}  |  total={result['latency_total_ms']}ms  [sauvegardé]")
 
     print(f"\n{'='*60}")
     print(f"Terminé : {done} runs effectués, {skipped} ignorés")
@@ -282,7 +336,15 @@ def _print_summary() -> None:
         rows_by_bleu = sorted(rows_with_bleu, key=lambda r: float(r["bleu"]), reverse=True)
         print(f"\nTop 3 meilleur BLEU :")
         for r in rows_by_bleu[:3]:
-            print(f"  {r['whisper_model']:10s} | {r['llm_model']:35s} | {r['prompt_version']} | BLEU={r['bleu']}")
+            meteor_str = f" | METEOR={r['meteor']}" if float(r.get("meteor", -1)) >= 0 else ""
+            print(f"  {r['whisper_model']:10s} | {r['llm_model']:35s} | {r['prompt_version']} | BLEU={r['bleu']}{meteor_str}")
+
+    rows_with_wer = [r for r in rows if float(r.get("wer", -1)) >= 0]
+    if rows_with_wer:
+        rows_by_wer = sorted(rows_with_wer, key=lambda r: float(r["wer"]))
+        print(f"\nTop 3 meilleur WER (STT) :")
+        for r in rows_by_wer[:3]:
+            print(f"  {r['whisper_model']:10s} | {r['llm_model']:35s} | {r['prompt_version']} | WER={r['wer']}")
 
 
 # ---------------------------------------------------------------------------
