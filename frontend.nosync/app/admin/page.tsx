@@ -770,16 +770,56 @@ const SEVERITY_LABEL: Record<string, string> = {
   medium: "ALERTE",
   low:    "INFO",
 };
-const TYPE_ICON: Record<string, string> = {
-  accident:       "⚠",
-  fermeture:      "🚫",
-  bouchon:        "🚗",
-  animal:         "🦌",
-  intemperies:    "🌨",
-  ralentissement: "🐌",
-  travaux:        "🔧",
-  vehicule_panne: "🔴",
-};
+function TrafficTypeIcon({ type, color }: { type: string; color: string }) {
+  const s: React.CSSProperties = { display: "inline-block", verticalAlign: "middle", width: 14, height: 14, flexShrink: 0 };
+  switch (type) {
+    case "accident": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    );
+    case "fermeture": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" style={s}>
+        <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+    );
+    case "bouchon": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <rect x="1" y="8" width="22" height="8" rx="2"/><path d="M5 8V6a2 2 0 012-2h10a2 2 0 012 2v2"/><line x1="12" y1="12" x2="12.01" y2="12"/>
+      </svg>
+    );
+    case "animal": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <circle cx="12" cy="12" r="2"/><path d="M6 6l2 4M18 6l-2 4M6 18l2-4M18 18l-2-4"/>
+      </svg>
+    );
+    case "intemperies": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="8" y1="20" x2="8.01" y2="20"/><line x1="12" y1="18" x2="12.01" y2="18"/><line x1="12" y1="22" x2="12.01" y2="22"/><line x1="16" y1="16" x2="16.01" y2="16"/><line x1="16" y1="20" x2="16.01" y2="20"/>
+      </svg>
+    );
+    case "ralentissement": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+    );
+    case "travaux": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+      </svg>
+    );
+    case "vehicule_panne": return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s}>
+        <rect x="1" y="8" width="22" height="8" rx="2"/><path d="M5 8V6a2 2 0 012-2h10a2 2 0 012 2v2"/><circle cx="7" cy="16" r="1"/><circle cx="17" cy="16" r="1"/>
+      </svg>
+    );
+    default: return (
+      <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" style={s}>
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    );
+  }
+}
 const TYPE_LABEL: Record<string, string> = {
   accident:       "Accident",
   fermeture:      "Fermeture",
@@ -802,9 +842,12 @@ function cleanDirection(dir: string): string {
 }
 
 function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
+  const [expanded, setExpanded] = useState(false);
   const color = SEVERITY_COLOR[ev.severity] ?? C.muted;
   const hint = cleanHint(ev.location_hint);
   const direction = ev.direction ? cleanDirection(ev.direction) : "";
+  const LIMIT = 160;
+  const isLong = hint.length > LIMIT;
 
   return (
     <div style={{
@@ -821,7 +864,8 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
           background: `${color}20`, color,
           whiteSpace: "nowrap",
         }}>
-          {TYPE_ICON[ev.type]} {TYPE_LABEL[ev.type] ?? ev.type}
+          <TrafficTypeIcon type={ev.type} color={color} />
+            {" "}{TYPE_LABEL[ev.type] ?? ev.type}
         </span>
         {ev.routes.length > 0 && (
           <span style={{
@@ -841,27 +885,48 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
       {(direction || ev.delay_hint) && (
         <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
           {direction && (
-            <span style={{ fontSize: "12px", color: C.muted }}>
-              📍 {direction}
+            <span style={{ fontSize: "12px", color: C.muted, display: "flex", alignItems: "center", gap: "4px" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13, flexShrink: 0 }}>
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+              </svg>
+              {direction}
             </span>
           )}
           {ev.delay_hint && (
-            <span style={{ fontSize: "12px", color, fontWeight: 600 }}>
-              ⏱ {ev.delay_hint}
+            <span style={{ fontSize: "12px", color, fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13, flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {ev.delay_hint}
             </span>
           )}
         </div>
       )}
 
-      {/* Ligne 3 : extrait transcription */}
+      {/* Ligne 3 : transcription complète avec expand */}
       {hint && (
-        <p style={{
-          fontSize: "11px", color: C.muted, lineHeight: 1.6, margin: 0,
+        <div style={{
           borderLeft: `2px solid ${color}40`, paddingLeft: "10px",
-          fontStyle: "italic",
         }}>
-          {hint.length > 120 ? hint.slice(0, 120) + "…" : hint}
-        </p>
+          <p style={{
+            fontSize: "11px", color: C.muted, lineHeight: 1.6, margin: 0,
+            fontStyle: "italic",
+          }}>
+            {expanded || !isLong ? hint : hint.slice(0, LIMIT) + "…"}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              style={{
+                marginTop: "4px", background: "none", border: "none",
+                cursor: "pointer", fontSize: "11px", color,
+                padding: 0, textDecoration: "underline",
+              }}
+            >
+              {expanded ? "Réduire" : "Lire la suite"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
