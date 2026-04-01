@@ -75,9 +75,6 @@ _DELAY_RE = re.compile(
     re.IGNORECASE,
 )
 
-_CONTEXT_RADIUS = 80  # caractères autour du match pour le location_hint
-
-
 # ---------------------------------------------------------------------------
 # Modèle de données
 # ---------------------------------------------------------------------------
@@ -111,16 +108,6 @@ class TrafficEvent:
 # ---------------------------------------------------------------------------
 # Extraction
 # ---------------------------------------------------------------------------
-
-def _extract_context(text: str, match_start: int, match_end: int) -> str:
-    start = max(0, match_start - _CONTEXT_RADIUS)
-    end = min(len(text), match_end + _CONTEXT_RADIUS)
-    snippet = text[start:end].replace("\n", " ").strip()
-    if start > 0:
-        snippet = "..." + snippet
-    if end < len(text):
-        snippet = snippet + "..."
-    return snippet
 
 
 def _extract_routes(text: str) -> List[str]:
@@ -164,15 +151,13 @@ def extract_events(
         if not match:
             continue
 
-        hint = _extract_context(text, match.start(), match.end())
-
         events.append(
             TrafficEvent(
                 type=event_type,
                 severity=_SEVERITY[event_type],
                 routes=routes,
                 direction=direction,
-                location_hint=hint,
+                location_hint=text.replace("\n", " ").strip(),
                 zone=zone,
                 timestamp=timestamp,
                 source_file=source_file,
