@@ -200,7 +200,25 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
 }
 
 // ── Traces & Models tab ───────────────────────────────────────────────────────
+type SortKey = "count" | "avg_stt_ms" | "avg_llm_ms" | "avg_total_ms" | "avg_bleu" | "avg_meteor" | "avg_wer";
+
+const COLUMNS: { key: SortKey | null; label: string; color?: string; asc?: boolean }[] = [
+  { key: null,           label: "Whisper",     color: C.stt },
+  { key: null,           label: "LLM" },
+  { key: null,           label: "Prompt" },
+  { key: "count",        label: "Runs",        asc: false },
+  { key: "avg_stt_ms",   label: "STT moy.",    color: C.stt,   asc: true },
+  { key: "avg_llm_ms",   label: "LLM moy.",    color: C.llm,   asc: true },
+  { key: "avg_total_ms", label: "Total moy.",  asc: true },
+  { key: "avg_bleu",     label: "BLEU ↑",      color: C.tts,   asc: false },
+  { key: "avg_meteor",   label: "METEOR ↑",    color: C.green, asc: false },
+  { key: "avg_wer",      label: "WER ↓",       color: C.red,   asc: true },
+];
+
 function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
+  const [sortKey, setSortKey]   = useState<SortKey>("count");
+  const [sortAsc, setSortAsc]   = useState(false);
+
   if (!langfuse) return <Loader />;
 
   if (!langfuse.connected) {
@@ -223,6 +241,22 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
     { label: "Total", value: langfuse.avg_total_ms },
   ];
 
+  const sortedStats = [...langfuse.model_stats].sort((a, b) => {
+    const va = (a[sortKey] ?? 0) as number;
+    const vb = (b[sortKey] ?? 0) as number;
+    return sortAsc ? va - vb : vb - va;
+  });
+
+  function handleSort(col: typeof COLUMNS[0]) {
+    if (!col.key) return;
+    if (sortKey === col.key) {
+      setSortAsc(prev => !prev);
+    } else {
+      setSortKey(col.key);
+      setSortAsc(col.asc ?? false);
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
@@ -231,16 +265,13 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px", alignItems: "end" }}>
           {latencyData.map(d => (
             <div key={d.label} style={{ textAlign: "center" }}>
-              <div style={{
-                height: "80px", display: "flex", alignItems: "flex-end", justifyContent: "center",
-              }}>
+              <div style={{ height: "80px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
                 <div style={{
                   width: "48px",
                   height: `${Math.round((d.value / Math.max(langfuse.avg_total_ms, 1)) * 80)}px`,
                   borderRadius: "6px 6px 0 0",
                   background: d.label === "STT" ? C.stt : d.label === "LLM" ? C.llm : C.muted,
-                  opacity: 0.85, minHeight: "4px",
-                  transition: "height 0.6s ease",
+                  opacity: 0.85, minHeight: "4px", transition: "height 0.6s ease",
                 }} />
               </div>
               <p style={{ fontSize: "16px", fontWeight: 600, marginTop: "8px", fontVariantNumeric: "tabular-nums",
@@ -261,19 +292,19 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
             Moy. {pct(langfuse.avg_language_prob)} · {langfuse.language_probs.length} traces
           </p>
         </Card>
-        <Card title="Distribution score BLEU">
+        <Card title="Distribution BLEU">
           {langfuse.bleu_scores.length > 0 ? (
             <>
               <Histogram values={langfuse.bleu_scores} bins={8} color={C.tts} height={60} />
               <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
-                Moy. {langfuse.avg_bleu.toFixed(3)} · {langfuse.bleu_scores.length} traces
+                Moy. {langfuse.avg_bleu.toFixed(3)} · {langfuse.bleu_scores.length} traces · ↑ mieux
               </p>
             </>
           ) : (
             <p style={{ fontSize: "12px", color: C.muted }}>Aucun score BLEU enregistré</p>
           )}
         </Card>
-        <Card title="Distribution score METEOR">
+        <Card title="Distribution METEOR">
           {(langfuse.meteor_scores ?? []).length > 0 ? (
             <>
               <Histogram values={langfuse.meteor_scores} bins={8} color={C.green} height={60} />
@@ -299,39 +330,56 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
         </Card>
       </div>
 
-      {/* Model comparison table */}
+      {/* Model comparison table with sortable columns */}
       {langfuse.model_stats.length > 0 && (
         <Card title="Comparaison des modèles">
+          <p style={{ fontSize: "11px", color: C.muted, marginBottom: "12px" }}>
+            Cliquez sur un en-tête pour trier · {sortKey} {sortAsc ? "↑" : "↓"}
+          </p>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <thead>
                 <tr>
-                  {["Whisper", "LLM", "Prompt", "Runs", "STT moy.", "LLM moy.", "Total moy.", "BLEU moy.", "METEOR moy.", "WER moy."].map(h => (
-                    <th key={h} style={{
-                      padding: "8px 12px", textAlign: "left", fontWeight: 600,
-                      letterSpacing: "0.1em", color: C.muted, fontSize: "10px",
-                      borderBottom: `1px solid ${C.border}`,
-                    }}>{h}</th>
+                  {COLUMNS.map(col => (
+                    <th key={col.label}
+                      onClick={() => handleSort(col)}
+                      style={{
+                        padding: "8px 12px", textAlign: "left", fontWeight: 600,
+                        letterSpacing: "0.08em", fontSize: "10px",
+                        borderBottom: `1px solid ${C.border}`,
+                        color: sortKey === col.key ? (col.color ?? C.accent) : C.muted,
+                        cursor: col.key ? "pointer" : "default",
+                        userSelect: "none",
+                        whiteSpace: "nowrap",
+                      }}>
+                      {col.label}
+                      {sortKey === col.key && <span style={{ marginLeft: "4px" }}>{sortAsc ? "↑" : "↓"}</span>}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {langfuse.model_stats.map((m, i) => (
-                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                {sortedStats.map((m, i) => (
+                  <tr key={i} style={{
+                    borderBottom: `1px solid ${C.border}`,
+                    background: i === 0 && sortKey === "avg_bleu" ? "rgba(155,126,201,0.04)" : "none",
+                  }}>
                     <td style={{ padding: "10px 12px", color: C.stt }}>{m.whisper}</td>
-                    <td style={{ padding: "10px 12px", color: C.llm, maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.llm}</td>
+                    <td style={{ padding: "10px 12px", color: C.llm, maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.llm.replace("groq/", "")}
+                    </td>
                     <td style={{ padding: "10px 12px", color: C.muted }}>{m.prompt_version}</td>
                     <td style={{ padding: "10px 12px", color: C.fg, fontWeight: 600 }}>{m.count}</td>
                     <td style={{ padding: "10px 12px", color: C.stt, fontVariantNumeric: "tabular-nums" }}>{ms(m.avg_stt_ms)}</td>
                     <td style={{ padding: "10px 12px", color: C.llm, fontVariantNumeric: "tabular-nums" }}>{ms(m.avg_llm_ms)}</td>
                     <td style={{ padding: "10px 12px", color: C.muted, fontVariantNumeric: "tabular-nums" }}>{ms(m.avg_total_ms)}</td>
-                    <td style={{ padding: "10px 12px", color: C.tts }}>
+                    <td style={{ padding: "10px 12px", color: C.tts, fontVariantNumeric: "tabular-nums" }}>
                       {m.avg_bleu != null ? m.avg_bleu.toFixed(3) : <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
-                    <td style={{ padding: "10px 12px", color: C.green }}>
+                    <td style={{ padding: "10px 12px", color: C.green, fontVariantNumeric: "tabular-nums" }}>
                       {m.avg_meteor != null ? m.avg_meteor.toFixed(4) : <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
-                    <td style={{ padding: "10px 12px", color: C.red }}>
+                    <td style={{ padding: "10px 12px", color: C.red, fontVariantNumeric: "tabular-nums" }}>
                       {m.avg_wer != null ? m.avg_wer.toFixed(4) : <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
                   </tr>
