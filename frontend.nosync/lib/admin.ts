@@ -91,3 +91,28 @@ export interface ServiceHealth {
 
 export const getServicesHealth = () =>
   apiFetch<{ services: ServiceHealth[] }>("/admin/services/health");
+
+export interface TrafficEvent {
+  type:          string;
+  severity:      "high" | "medium" | "low";
+  routes:        string[];
+  direction:     string;
+  location_hint: string;
+  zone:          string;
+  timestamp:     string;
+  delay_hint:    string;
+}
+
+export type TrafficSnapshot = Record<"nord" | "sud" | "ouest", TrafficEvent[]>;
+
+export const getTrafficEvents = () =>
+  apiFetch<TrafficSnapshot>("/admin/traffic/events");
+
+export function openTrafficStream(onEvent: (data: TrafficSnapshot | { zone: string; events: TrafficEvent[] }) => void): EventSource {
+  const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
+  const es = new EventSource(`${GATEWAY}/admin/traffic/stream`);
+  es.onmessage = (e) => {
+    try { onEvent(JSON.parse(e.data)); } catch {}
+  };
+  return es;
+}

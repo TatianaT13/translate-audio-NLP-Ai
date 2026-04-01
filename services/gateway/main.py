@@ -11,6 +11,7 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -33,6 +34,7 @@ PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
 STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
 LLM_URL      = os.getenv("LLM_URL",      "http://llm:8002")
 TTS_URL      = os.getenv("TTS_URL",      "http://tts:8003")
+WATCHER_URL  = os.getenv("WATCHER_URL",  "http://watcher:8005")
 
 app = FastAPI(title="Gateway — Auth Service", version="1.0.0")
 app.add_middleware(
@@ -485,6 +487,32 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
         return schemas.LangfuseMetricsResponse(connected=False, error=str(exc))
 
 
+@app.get("/admin/traffic/events")
+async def admin_traffic_events(_: models.User = Depends(get_admin_user)):
+    """Snapshot des événements trafic actuels (max 4 par zone)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{WATCHER_URL}/events")
+            return r.json()
+    except Exception as exc:
+        return {"error": str(exc), "nord": [], "sud": [], "ouest": []}
+
+
+@app.get("/admin/traffic/stream")
+async def admin_traffic_stream(_: models.User = Depends(get_admin_user)):
+    """SSE proxy vers le watcher — événements trafic en temps réel."""
+    async def generator():
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("GET", f"{WATCHER_URL}/stream") as r:
+                async for chunk in r.aiter_text():
+                    yield chunk
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/admin/services/health")
 async def admin_services_health(_: models.User = Depends(get_admin_user)):
     """Ping tous les microservices et retourne leur statut + latence."""
@@ -494,6 +522,7 @@ async def admin_services_health(_: models.User = Depends(get_admin_user)):
         {"name": "STT",      "url": f"{STT_URL}/health",            "port": "8001", "color": "#7eb8c9"},
         {"name": "LLM",      "url": f"{LLM_URL}/health",            "port": "8002", "color": "#c9a96e"},
         {"name": "TTS",      "url": f"{TTS_URL}/health",            "port": "8003", "color": "#9b7ec9"},
+        {"name": "Watcher",  "url": f"{WATCHER_URL}/health",        "port": "8005", "color": "#e87070"},
     ]
     results = []
     async with httpx.AsyncClient(timeout=3.0) as client:

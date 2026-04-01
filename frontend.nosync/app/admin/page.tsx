@@ -6,9 +6,9 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
-  getServicesHealth,
+  getServicesHealth, getTrafficEvents, openTrafficStream,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
-  type ServiceHealth,
+  type ServiceHealth, type TrafficEvent, type TrafficSnapshot,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -700,10 +700,178 @@ function Loader() {
   );
 }
 
+// ── Traffic Live tab ──────────────────────────────────────────────────────────
+const SEVERITY_COLOR: Record<string, string> = {
+  high:   "#e87070",
+  medium: "#c9a96e",
+  low:    "#7eb8c9",
+};
+const SEVERITY_LABEL: Record<string, string> = {
+  high:   "URGENT",
+  medium: "ALERTE",
+  low:    "INFO",
+};
+const TYPE_ICON: Record<string, string> = {
+  accident:       "⚠",
+  fermeture:      "🚫",
+  bouchon:        "🚗",
+  animal:         "🦌",
+  intemperies:    "🌨",
+  ralentissement: "🐌",
+  travaux:        "🔧",
+  vehicule_panne: "🔴",
+};
+
+function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
+  const color = SEVERITY_COLOR[ev.severity] ?? C.muted;
+  return (
+    <div style={{
+      padding: "12px 14px", borderRadius: "12px",
+      background: `${color}0d`,
+      border: `1px solid ${color}33`,
+      display: "flex", flexDirection: "column", gap: "6px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <span style={{
+          fontSize: "10px", fontWeight: 700, letterSpacing: "0.15em",
+          padding: "2px 8px", borderRadius: "999px",
+          background: `${color}22`, color,
+        }}>
+          {TYPE_ICON[ev.type] ?? "•"} {SEVERITY_LABEL[ev.severity]}
+        </span>
+        <span style={{ fontSize: "11px", color: C.muted }}>{ev.timestamp}</span>
+        {ev.routes.length > 0 && (
+          <span style={{ fontSize: "12px", fontWeight: 600, color: C.fg, marginLeft: "auto" }}>
+            {ev.routes.join(" · ")}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: "12px", color: C.fg, lineHeight: 1.5, margin: 0 }}>
+        {ev.location_hint}
+      </p>
+      {ev.direction && (
+        <p style={{ fontSize: "11px", color: C.muted, margin: 0 }}>{ev.direction}</p>
+      )}
+      {ev.delay_hint && (
+        <p style={{ fontSize: "11px", color, margin: 0 }}>⏱ {ev.delay_hint}</p>
+      )}
+    </div>
+  );
+}
+
+function ZoneColumn({ zone, events }: { zone: string; events: TrafficEvent[] }) {
+  const label = zone.charAt(0).toUpperCase() + zone.slice(1);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+        <span style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: C.muted }}>
+          Zone {label}
+        </span>
+        <span style={{
+          fontSize: "10px", padding: "1px 7px", borderRadius: "999px",
+          background: events.length > 0 ? "rgba(232,112,112,0.12)" : "rgba(126,201,160,0.1)",
+          color: events.length > 0 ? C.red : C.green,
+        }}>
+          {events.length} événement{events.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+      {events.length === 0 ? (
+        <div style={{
+          padding: "20px", borderRadius: "12px", textAlign: "center",
+          border: `1px dashed ${C.border}`, color: C.muted, fontSize: "12px",
+        }}>
+          Aucun incident détecté
+        </div>
+      ) : (
+        [...events].reverse().map((ev, i) => <TrafficEventCard key={i} ev={ev} />)
+      )}
+    </div>
+  );
+}
+
+function TrafficTab() {
+  const [snapshot, setSnapshot] = useState<TrafficSnapshot>({ nord: [], sud: [], ouest: [] });
+  const [connected, setConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    // Snapshot initial
+    getTrafficEvents()
+      .then(data => setSnapshot(data))
+      .catch(() => {});
+
+    // SSE temps réel
+    const es = openTrafficStream((data) => {
+      setLastUpdate(new Date());
+      if ("snapshot" in data) {
+        setSnapshot(data.snapshot as TrafficSnapshot);
+      } else if ("zone" in data && "events" in data) {
+        const { zone, events } = data as { zone: string; events: TrafficEvent[] };
+        setSnapshot(prev => ({ ...prev, [zone]: events }));
+      }
+    });
+
+    es.onopen  = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+
+    return () => es.close();
+  }, []);
+
+  const totalEvents = Object.values(snapshot).flat().length;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+      {/* Status bar */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "10px 16px", borderRadius: "12px",
+        background: C.surface, border: `1px solid ${C.border}`,
+        fontSize: "12px",
+      }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{
+            width: "8px", height: "8px", borderRadius: "50%", display: "inline-block",
+            background: connected ? C.green : C.red,
+            animation: connected ? "pulse-dot 2s infinite" : "none",
+          }} />
+          <span style={{ color: connected ? C.green : C.red }}>
+            {connected ? "Flux en direct" : "Reconnexion…"}
+          </span>
+        </span>
+        <span style={{ color: C.muted }}>·</span>
+        <span style={{ color: C.muted }}>
+          {totalEvents} incident{totalEvents !== 1 ? "s" : ""} actif{totalEvents !== 1 ? "s" : ""}
+        </span>
+        {lastUpdate && (
+          <>
+            <span style={{ color: C.muted }}>·</span>
+            <span style={{ color: C.muted }}>
+              Mis à jour {lastUpdate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          </>
+        )}
+        <span style={{ marginLeft: "auto", fontSize: "10px", color: C.muted, opacity: 0.6 }}>
+          autorouteinfo.fr · usage interne admin
+        </span>
+      </div>
+
+      {/* 3 colonnes zones */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+        <ZoneColumn zone="nord"  events={snapshot.nord  ?? []} />
+        <ZoneColumn zone="sud"   events={snapshot.sud   ?? []} />
+        <ZoneColumn zone="ouest" events={snapshot.ouest ?? []} />
+      </div>
+
+    </div>
+  );
+}
+
 // ── Tab list item ─────────────────────────────────────────────────────────────
 const TAB_ITEMS = [
   { value: "overview",     label: "Vue générale" },
   { value: "traces",       label: "Traces & Modèles" },
+  { value: "traffic",      label: "Trafic Live" },
   { value: "experiments",  label: "Expériences" },
   { value: "infra",        label: "Infrastructure" },
   { value: "pipelines",    label: "Pipelines" },
@@ -824,6 +992,10 @@ export default function AdminPage() {
 
           <Tabs.Content value="traces">
             {loadingLf ? <Loader /> : <TracesTab langfuse={langfuse} />}
+          </Tabs.Content>
+
+          <Tabs.Content value="traffic">
+            <TrafficTab />
           </Tabs.Content>
 
           <Tabs.Content value="experiments">
