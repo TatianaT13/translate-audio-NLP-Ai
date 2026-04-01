@@ -181,8 +181,8 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
             <StatCard label="LLM moy."     value={ms(langfuse.avg_llm_ms)}      color={C.llm} />
             <StatCard label="Conf. langue" value={pct(langfuse.avg_language_prob)} color={C.green} />
             <StatCard label="BLEU moy."   value={langfuse.avg_bleu   > 0 ? langfuse.avg_bleu.toFixed(3)   : "—"} color={C.tts} />
-            <StatCard label="METEOR moy." value={langfuse.avg_meteor > 0 ? langfuse.avg_meteor.toFixed(4) : "—"} color={C.green} />
-            <StatCard label="WER moy."    value={langfuse.avg_wer    > 0 ? langfuse.avg_wer.toFixed(4)    : "—"} color={C.red} sub="↓ mieux" />
+            <StatCard label="METEOR moy." value={(langfuse.avg_meteor ?? 0) > 0 ? (langfuse.avg_meteor ?? 0).toFixed(4) : "—"} color={C.green} />
+            <StatCard label="WER moy."    value={(langfuse.avg_wer    ?? 0) > 0 ? (langfuse.avg_wer    ?? 0).toFixed(4) : "—"} color={C.red} sub="↓ mieux" />
           </div>
         </section>
       )}
@@ -274,11 +274,11 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
           )}
         </Card>
         <Card title="Distribution score METEOR">
-          {langfuse.meteor_scores.length > 0 ? (
+          {(langfuse.meteor_scores ?? []).length > 0 ? (
             <>
               <Histogram values={langfuse.meteor_scores} bins={8} color={C.green} height={60} />
               <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
-                Moy. {langfuse.avg_meteor.toFixed(4)} · {langfuse.meteor_scores.length} traces · ↑ mieux
+                Moy. {(langfuse.avg_meteor ?? 0).toFixed(4)} · {langfuse.meteor_scores.length} traces · ↑ mieux
               </p>
             </>
           ) : (
@@ -286,11 +286,11 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
           )}
         </Card>
         <Card title="Distribution WER (STT)">
-          {langfuse.wer_scores.length > 0 ? (
+          {(langfuse.wer_scores ?? []).length > 0 ? (
             <>
               <Histogram values={langfuse.wer_scores} bins={8} color={C.red} height={60} />
               <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
-                Moy. {langfuse.avg_wer.toFixed(4)} · {langfuse.wer_scores.length} traces · ↓ mieux
+                Moy. {(langfuse.avg_wer ?? 0).toFixed(4)} · {langfuse.wer_scores.length} traces · ↓ mieux
               </p>
             </>
           ) : (
