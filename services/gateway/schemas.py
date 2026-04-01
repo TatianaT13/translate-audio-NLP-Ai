@@ -107,6 +107,8 @@ class LangfuseModelStat(BaseModel):
     avg_stt_ms:      float
     avg_llm_ms:      float
     avg_bleu:        float | None = None
+    avg_meteor:      float | None = None
+    avg_wer:         float | None = None
 
 
 class LangfuseMetricsResponse(BaseModel):
@@ -118,7 +120,11 @@ class LangfuseMetricsResponse(BaseModel):
     avg_llm_ms:         float = 0
     avg_language_prob:  float = 0
     avg_bleu:           float = 0
+    avg_meteor:         float = 0
+    avg_wer:            float = 0
     bleu_scores:        list[float] = []
+    meteor_scores:      list[float] = []
+    wer_scores:         list[float] = []
     language_probs:     list[float] = []
     latencies_total:    list[float] = []
     model_stats:        list[LangfuseModelStat] = []

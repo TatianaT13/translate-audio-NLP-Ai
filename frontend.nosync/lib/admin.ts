@@ -25,6 +25,8 @@ export interface LangfuseModelStat {
   avg_stt_ms:     number;
   avg_llm_ms:     number;
   avg_bleu:       number | null;
+  avg_meteor:     number | null;
+  avg_wer:        number | null;
 }
 
 export interface LangfuseMetrics {
@@ -36,7 +38,11 @@ export interface LangfuseMetrics {
   avg_llm_ms:        number;
   avg_language_prob: number;
   avg_bleu:          number;
+  avg_meteor:        number;
+  avg_wer:           number;
   bleu_scores:       number[];
+  meteor_scores:     number[];
+  wer_scores:        number[];
   language_probs:    number[];
   latencies_total:   number[];
   model_stats:       LangfuseModelStat[];

@@ -442,6 +442,10 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
                 model_map[key]["llms_lat"].append(s["value"])
             elif s["name"] == "bleu":
                 model_map[key]["bleus"].append(s["value"])
+            elif s["name"] == "meteor":
+                model_map[key].setdefault("meteors", []).append(s["value"])
+            elif s["name"] == "wer":
+                model_map[key].setdefault("wers", []).append(s["value"])
 
         model_stats = [
             schemas.LangfuseModelStat(
@@ -452,7 +456,9 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
                 avg_total_ms=round(avg(v["totals"]), 1),
                 avg_stt_ms=round(avg(v["stts"]),   1),
                 avg_llm_ms=round(avg(v["llms_lat"]),1),
-                avg_bleu=round(avg(v["bleus"]), 3) if v["bleus"] else None,
+                avg_bleu=round(avg(v["bleus"]), 3) if v.get("bleus") else None,
+                avg_meteor=round(avg(v["meteors"]), 4) if v.get("meteors") else None,
+                avg_wer=round(avg(v["wers"]), 4) if v.get("wers") else None,
             )
             for v in sorted(model_map.values(), key=lambda x: x["count"], reverse=True)
         ]
@@ -465,7 +471,11 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
             avg_llm_ms=round(avg(by_name.get("latency_llm_ms",   [])), 1),
             avg_language_prob=round(avg(by_name.get("language_prob", [])), 3),
             avg_bleu=round(avg(by_name.get("bleu", [])), 3),
+            avg_meteor=round(avg(by_name.get("meteor", [])), 4),
+            avg_wer=round(avg(by_name.get("wer", [])), 4),
             bleu_scores=by_name.get("bleu", []),
+            meteor_scores=by_name.get("meteor", []),
+            wer_scores=by_name.get("wer", []),
             language_probs=by_name.get("language_prob", []),
             latencies_total=by_name.get("latency_total_ms", []),
             model_stats=model_stats,

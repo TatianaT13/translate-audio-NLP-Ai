@@ -180,7 +180,9 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
             <StatCard label="STT moy."     value={ms(langfuse.avg_stt_ms)}      color={C.stt} />
             <StatCard label="LLM moy."     value={ms(langfuse.avg_llm_ms)}      color={C.llm} />
             <StatCard label="Conf. langue" value={pct(langfuse.avg_language_prob)} color={C.green} />
-            <StatCard label="BLEU moy."    value={langfuse.avg_bleu > 0 ? langfuse.avg_bleu.toFixed(3) : "—"} color={C.tts} />
+            <StatCard label="BLEU moy."   value={langfuse.avg_bleu   > 0 ? langfuse.avg_bleu.toFixed(3)   : "—"} color={C.tts} />
+            <StatCard label="METEOR moy." value={langfuse.avg_meteor > 0 ? langfuse.avg_meteor.toFixed(4) : "—"} color={C.green} />
+            <StatCard label="WER moy."    value={langfuse.avg_wer    > 0 ? langfuse.avg_wer.toFixed(4)    : "—"} color={C.red} sub="↓ mieux" />
           </div>
         </section>
       )}
@@ -271,6 +273,30 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
             <p style={{ fontSize: "12px", color: C.muted }}>Aucun score BLEU enregistré</p>
           )}
         </Card>
+        <Card title="Distribution score METEOR">
+          {langfuse.meteor_scores.length > 0 ? (
+            <>
+              <Histogram values={langfuse.meteor_scores} bins={8} color={C.green} height={60} />
+              <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
+                Moy. {langfuse.avg_meteor.toFixed(4)} · {langfuse.meteor_scores.length} traces · ↑ mieux
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: "12px", color: C.muted }}>Aucun score METEOR — relancez eval_golden.py</p>
+          )}
+        </Card>
+        <Card title="Distribution WER (STT)">
+          {langfuse.wer_scores.length > 0 ? (
+            <>
+              <Histogram values={langfuse.wer_scores} bins={8} color={C.red} height={60} />
+              <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
+                Moy. {langfuse.avg_wer.toFixed(4)} · {langfuse.wer_scores.length} traces · ↓ mieux
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: "12px", color: C.muted }}>Aucun score WER — créez les refs FR dans data/golden/references/</p>
+          )}
+        </Card>
       </div>
 
       {/* Model comparison table */}
@@ -280,7 +306,7 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <thead>
                 <tr>
-                  {["Whisper", "LLM", "Prompt", "Runs", "STT moy.", "LLM moy.", "Total moy.", "BLEU moy."].map(h => (
+                  {["Whisper", "LLM", "Prompt", "Runs", "STT moy.", "LLM moy.", "Total moy.", "BLEU moy.", "METEOR moy.", "WER moy."].map(h => (
                     <th key={h} style={{
                       padding: "8px 12px", textAlign: "left", fontWeight: 600,
                       letterSpacing: "0.1em", color: C.muted, fontSize: "10px",
@@ -301,6 +327,12 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
                     <td style={{ padding: "10px 12px", color: C.muted, fontVariantNumeric: "tabular-nums" }}>{ms(m.avg_total_ms)}</td>
                     <td style={{ padding: "10px 12px", color: C.tts }}>
                       {m.avg_bleu != null ? m.avg_bleu.toFixed(3) : <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: C.green }}>
+                      {m.avg_meteor != null ? m.avg_meteor.toFixed(4) : <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: C.red }}>
+                      {m.avg_wer != null ? m.avg_wer.toFixed(4) : <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
                   </tr>
                 ))}
