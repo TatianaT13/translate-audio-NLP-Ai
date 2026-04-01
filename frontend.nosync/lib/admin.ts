@@ -110,7 +110,8 @@ export const getTrafficEvents = () =>
 
 export function openTrafficStream(onEvent: (data: TrafficSnapshot | { zone: string; events: TrafficEvent[] }) => void): EventSource {
   const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
-  const es = new EventSource(`${GATEWAY}/admin/traffic/stream`);
+  const token = getAccessToken() ?? "";
+  const es = new EventSource(`${GATEWAY}/admin/traffic/stream?token=${encodeURIComponent(token)}`);
   es.onmessage = (e) => {
     try { onEvent(JSON.parse(e.data)); } catch {}
   };

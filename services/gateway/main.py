@@ -499,8 +499,22 @@ async def admin_traffic_events(_: models.User = Depends(get_admin_user)):
 
 
 @app.get("/admin/traffic/stream")
-async def admin_traffic_stream(_: models.User = Depends(get_admin_user)):
-    """SSE proxy vers le watcher — événements trafic en temps réel."""
+async def admin_traffic_stream(
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """SSE proxy vers le watcher.
+    Auth via query param ?token=<access_token> (EventSource ne supporte pas les headers).
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requis")
+    payload = auth_utils.decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token invalide")
+    user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
+    if not user or not user.is_active or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Accès administrateur requis")
+
     async def generator():
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("GET", f"{WATCHER_URL}/stream") as r:
