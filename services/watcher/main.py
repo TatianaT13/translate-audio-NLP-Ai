@@ -11,25 +11,20 @@ Polling adaptatif sur les 3 flux autorouteinfo.fr (nord / sud / ouest).
 """
 
 import asyncio
-import io
+import json
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator
-import json
 
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-
-# ── Path src/ ────────────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from flash_nlp.transcription.whisper_service import WhisperService
 from flash_nlp.analysis.event_extractor import extract_events, TrafficEvent
