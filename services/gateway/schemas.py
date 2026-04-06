@@ -126,6 +126,7 @@ class ExperimentRun(BaseModel):
     bleu:             float | None = None
     meteor:           float | None = None
     wer:              float | None = None
+    tts_wer:          float | None = None
 
 
 class ExperimentsResponse(BaseModel):
