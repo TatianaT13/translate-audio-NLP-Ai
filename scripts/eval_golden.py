@@ -23,6 +23,7 @@ import csv
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -102,13 +103,15 @@ REFS_DIR     = GOLDEN_DIR / "references"
 RESULTS_DIR  = ROOT / "outputs" / "experiments"
 RESULTS_CSV  = RESULTS_DIR / "results.csv"
 
+TTS_URL = os.getenv("TTS_URL", "http://localhost:8003")
+
 CSV_HEADERS = [
     "run_id", "timestamp", "audio", "zone",
     "whisper_model", "llm_model", "prompt_version", "target_lang",
     "source_text", "translation",
     "language_prob",
     "latency_conv_ms", "latency_stt_ms", "latency_llm_ms", "latency_total_ms",
-    "bleu", "meteor", "wer",
+    "bleu", "meteor", "wer", "tts_wer",
 ]
 
 
@@ -158,6 +161,32 @@ def compute_wer(source_text: str, audio_stem: str) -> float:
         return -1.0
     reference = ref_path.read_text(encoding="utf-8").strip()
     return round(_jiwer_wer(reference, source_text), 4)
+
+
+def compute_tts_wer(translation: str, lang: str, whisper_svc: "WhisperService") -> float:
+    """Round-trip WER : TTS → audio → Whisper → WER vs texte original."""
+    if not _WER_AVAILABLE:
+        return -1.0
+    try:
+        import httpx
+        r = httpx.post(
+            f"{TTS_URL}/synthesize",
+            json={"text": translation, "lang": lang},
+            timeout=30.0,
+        )
+        if not r.is_success:
+            return -1.0
+        audio_bytes = r.content
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_bytes)
+            tmp_path = f.name
+        try:
+            transcript, _, _ = whisper_svc.transcribe_wav(tmp_path, language=lang, beam_size=1)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+        return round(_jiwer_wer(translation.lower(), transcript.lower()), 4)
+    except Exception:
+        return -1.0
 
 
 def write_row(row: dict) -> None:
@@ -250,9 +279,10 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 print(f"  ERREUR : {e}")
                 continue
 
-            bleu   = compute_bleu(result["translation"], audio.stem, target_lang)
-            meteor = compute_meteor(result["translation"], audio.stem, target_lang)
-            wer    = compute_wer(result["source_text"], audio.stem)
+            bleu    = compute_bleu(result["translation"], audio.stem, target_lang)
+            meteor  = compute_meteor(result["translation"], audio.stem, target_lang)
+            wer     = compute_wer(result["source_text"], audio.stem)
+            tts_wer = compute_tts_wer(result["translation"], target_lang, whisper_cache[whisper_model])
 
             row = {
                 "run_id":           run_id,
@@ -273,6 +303,7 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 "bleu":             bleu,
                 "meteor":           meteor,
                 "wer":              wer,
+                "tts_wer":          tts_wer,
             }
             write_row(row)
             done += 1
@@ -294,6 +325,8 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                         scores.append(("meteor", meteor))
                     if wer >= 0:
                         scores.append(("wer", wer))
+                    if tts_wer >= 0:
+                        scores.append(("tts_wer", tts_wer))
                     for name, value in scores:
                         _lf.create_score(trace_id=tid, name=name, value=float(value))
                     _lf.flush()
@@ -302,9 +335,10 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                     print(f"  [Langfuse] {e}")
 
             parts = []
-            parts.append(f"BLEU={bleu}"     if bleu   >= 0 else "BLEU=n/a")
-            parts.append(f"METEOR={meteor}" if meteor >= 0 else "METEOR=n/a")
-            parts.append(f"WER={wer}"       if wer    >= 0 else "WER=n/a (crée data/golden/references/{audio.stem}_fr.txt)")
+            parts.append(f"BLEU={bleu}"         if bleu    >= 0 else "BLEU=n/a")
+            parts.append(f"METEOR={meteor}"     if meteor  >= 0 else "METEOR=n/a")
+            parts.append(f"WER={wer}"           if wer     >= 0 else "WER=n/a (crée data/golden/references/{audio.stem}_fr.txt)")
+            parts.append(f"TTS_WER={tts_wer}"   if tts_wer >= 0 else "TTS_WER=n/a (TTS non joignable)")
             print(f"  -> {' | '.join(parts)}  |  total={result['latency_total_ms']}ms  [sauvegardé]")
 
     print(f"\n{'='*60}")

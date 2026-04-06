@@ -562,6 +562,7 @@ def admin_experiments(_: models.User = Depends(get_admin_user)):
                 bleu             = _f("bleu"),
                 meteor           = _f("meteor"),
                 wer              = _f("wer"),
+                tts_wer          = _f("tts_wer"),
             ))
     return schemas.ExperimentsResponse(runs=runs, total=len(runs), csv_exists=True)
 

@@ -404,7 +404,8 @@ const EXP_COLS: { key: ExpSortKey | null; label: string; color?: string }[] = [
   { key: null,               label: "Prompt" },
   { key: "bleu",             label: "BLEU",    color: C.tts },
   { key: "meteor",           label: "METEOR",  color: C.green },
-  { key: "wer",              label: "WER",     color: C.red },
+  { key: "wer",              label: "WER ↓",    color: C.red },
+  { key: "tts_wer",          label: "TTS WER ↓", color: C.tts },
   { key: "latency_stt_ms",   label: "STT ms",  color: C.stt },
   { key: "latency_llm_ms",   label: "LLM ms",  color: C.llm },
   { key: "latency_total_ms", label: "Total ms" },
@@ -536,6 +537,7 @@ function ExperimentsTab() {
                 <td style={{ padding: "9px 12px", color: C.tts,   fontWeight: 600 }}>{fmt(r.bleu)}</td>
                 <td style={{ padding: "9px 12px", color: C.green, fontWeight: 600 }}>{fmt(r.meteor, 4)}</td>
                 <td style={{ padding: "9px 12px", color: C.red,   fontWeight: 600 }}>{fmt(r.wer, 4)}</td>
+                <td style={{ padding: "9px 12px", color: C.tts,   fontWeight: 600 }}>{fmt(r.tts_wer, 4)}</td>
                 <td style={{ padding: "9px 12px", color: C.stt }}>{r.latency_stt_ms != null ? `${Math.round(r.latency_stt_ms)}` : "—"}</td>
                 <td style={{ padding: "9px 12px", color: C.llm }}>{r.latency_llm_ms != null ? `${Math.round(r.latency_llm_ms)}` : "—"}</td>
                 <td style={{ padding: "9px 12px", color: C.muted }}>{r.latency_total_ms != null ? `${Math.round(r.latency_total_ms)}` : "—"}</td>

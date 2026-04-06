@@ -123,6 +123,7 @@ export interface ExperimentRun {
   bleu:             number | null;
   meteor:           number | null;
   wer:              number | null;
+  tts_wer:          number | null;
 }
 
 export interface ExperimentsResponse {
