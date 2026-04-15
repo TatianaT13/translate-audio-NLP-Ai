@@ -376,7 +376,95 @@ def admin_delete_user(
 
 @app.get("/admin/langfuse/metrics", response_model=schemas.LangfuseMetricsResponse)
 async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
-    """Métriques agrégées depuis Langfuse (scores)."""
+    """Métriques agrégées depuis results.csv (source de vérité pour l'évaluation batch).
+    Langfuse reste utilisé pour le tracing en temps réel des runs individuels.
+    """
+    # Lire depuis le CSV si disponible — agrégation propre et complète
+    if EXPERIMENTS_CSV.exists():
+        bleus, meteors, wers, tts_wers = [], [], [], []
+        stts, llms_lat, totals, langs = [], [], [], []
+        model_map: dict[str, dict] = {}
+
+        with EXPERIMENTS_CSV.open(newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter=";")
+            for row in reader:
+                def _fl(k: str) -> float | None:
+                    v = row.get(k, "").strip()
+                    if v in ("", "-1.0", "-1", "n/a"):
+                        return None
+                    try:
+                        return float(v)
+                    except ValueError:
+                        return None
+
+                bleu   = _fl("bleu")
+                meteor = _fl("meteor")
+                wer    = _fl("wer")
+                tts_wer = _fl("tts_wer")
+                stt_ms   = _fl("latency_stt_ms")
+                llm_ms   = _fl("latency_llm_ms")
+                total_ms = _fl("latency_total_ms")
+                lang_prob = _fl("language_prob")
+
+                if bleu    is not None: bleus.append(bleu)
+                if meteor  is not None: meteors.append(meteor)
+                if wer     is not None: wers.append(wer)
+                if tts_wer is not None: tts_wers.append(tts_wer)
+                if stt_ms    is not None: stts.append(stt_ms)
+                if llm_ms    is not None: llms_lat.append(llm_ms)
+                if total_ms  is not None: totals.append(total_ms)
+                if lang_prob is not None: langs.append(lang_prob)
+
+                key = f"{row['whisper_model']}|{row['llm_model']}|{row['prompt_version']}"
+                m = model_map.setdefault(key, {
+                    "whisper": row["whisper_model"], "llm": row["llm_model"],
+                    "prompt_version": row["prompt_version"],
+                    "count": 0, "totals": [], "stts": [], "llms_lat": [],
+                    "bleus": [], "meteors": [], "wers": [],
+                })
+                m["count"] += 1
+                if total_ms is not None: m["totals"].append(total_ms)
+                if stt_ms   is not None: m["stts"].append(stt_ms)
+                if llm_ms   is not None: m["llms_lat"].append(llm_ms)
+                if bleu     is not None: m["bleus"].append(bleu)
+                if meteor   is not None: m["meteors"].append(meteor)
+                if wer      is not None: m["wers"].append(wer)
+
+        def avg(lst): return sum(lst) / len(lst) if lst else 0.0
+
+        model_stats = [
+            schemas.LangfuseModelStat(
+                whisper=v["whisper"], llm=v["llm"], prompt_version=v["prompt_version"],
+                count=v["count"],
+                avg_total_ms=round(avg(v["totals"]), 1),
+                avg_stt_ms=round(avg(v["stts"]), 1),
+                avg_llm_ms=round(avg(v["llms_lat"]), 1),
+                avg_bleu=round(avg(v["bleus"]), 3) if v["bleus"] else None,
+                avg_meteor=round(avg(v["meteors"]), 4) if v["meteors"] else None,
+                avg_wer=round(avg(v["wers"]), 4) if v["wers"] else None,
+            )
+            for v in sorted(model_map.values(), key=lambda x: x["count"], reverse=True)
+        ]
+
+        return schemas.LangfuseMetricsResponse(
+            connected=True,
+            total_traces=len(totals),
+            avg_total_ms=round(avg(totals), 1),
+            avg_stt_ms=round(avg(stts), 1),
+            avg_llm_ms=round(avg(llms_lat), 1),
+            avg_language_prob=round(avg(langs), 3),
+            avg_bleu=round(avg(bleus), 3),
+            avg_meteor=round(avg(meteors), 4),
+            avg_wer=round(avg(wers), 4),
+            bleu_scores=bleus,
+            meteor_scores=meteors,
+            wer_scores=wers,
+            language_probs=langs,
+            latencies_total=totals,
+            model_stats=model_stats,
+        )
+
+    # Fallback vers Langfuse si CSV absent
     if not LANGFUSE_PUBLIC_KEY or not LANGFUSE_SECRET_KEY:
         return schemas.LangfuseMetricsResponse(
             connected=False,
