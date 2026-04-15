@@ -979,10 +979,27 @@ const LANG_FLAGS: Record<string, string> = {
   fr: "🇫🇷", en: "🇬🇧", uk: "🇺🇦", es: "🇪🇸", de: "🇩🇪",
 };
 
+// Singleton audio global — garantit une seule lecture à la fois sur toute la page
+const _currentAudio: { el: HTMLAudioElement | null; setter: ((v: boolean) => void) | null } = {
+  el: null, setter: null,
+};
+function stopCurrentAudio() {
+  if (_currentAudio.el) {
+    _currentAudio.el.pause();
+    _currentAudio.el.currentTime = 0;
+    _currentAudio.el = null;
+  }
+  if (_currentAudio.setter) {
+    _currentAudio.setter(false);
+    _currentAudio.setter = null;
+  }
+}
+
 function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
   const [expanded, setExpanded] = useState(false);
   const [lang, setLang]         = useState<string>("fr");
   const [ttsLoading, setTtsLoading] = useState(false);
+  const [playing, setPlaying]       = useState(false);
   const color = SEVERITY_COLOR[ev.severity] ?? C.muted;
   const hintFr = cleanHint(ev.location_hint);
   const direction = ev.direction ? cleanDirection(ev.direction) : "";
@@ -994,15 +1011,26 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
 
   async function playTTS() {
     if (ttsLoading || !hint) return;
+    if (playing) { stopCurrentAudio(); return; }
+
+    stopCurrentAudio();
     setTtsLoading(true);
     try {
       const blob = await synthesizeTTS(hint, lang === "fr" ? "en" : lang);
       const url  = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
+      _currentAudio.el = audio;
+      _currentAudio.setter = setPlaying;
+      setPlaying(true);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        setPlaying(false);
+        if (_currentAudio.el === audio) _currentAudio.el = null;
+      };
       await audio.play();
     } catch (e) {
       console.error(e);
+      setPlaying(false);
     } finally {
       setTtsLoading(false);
     }
@@ -1084,22 +1112,29 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
           <button
             onClick={playTTS}
             disabled={ttsLoading || !hint || lang === "fr"}
-            title={lang === "fr" ? "TTS disponible en EN/UK/ES" : "Écouter"}
+            title={lang === "fr" ? "TTS disponible en EN/UK/ES" : (playing ? "Arrêter" : "Écouter")}
             style={{
               marginLeft: "auto",
               fontSize: "12px", padding: "3px 10px", borderRadius: "6px",
-              background: ttsLoading ? C.border : `${color}15`,
+              background: playing ? `${color}35` : (ttsLoading ? C.border : `${color}15`),
               color, border: `1px solid ${color}40`,
               cursor: (ttsLoading || lang === "fr") ? "not-allowed" : "pointer",
               opacity: lang === "fr" ? 0.4 : 1,
               display: "flex", alignItems: "center", gap: "4px",
             }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
-            </svg>
-            {ttsLoading ? "…" : "Écouter"}
+            {playing ? (
+              <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 12, height: 12 }}>
+                <rect x="6" y="5" width="4" height="14" rx="1"/>
+                <rect x="14" y="5" width="4" height="14" rx="1"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+              </svg>
+            )}
+            {ttsLoading ? "…" : (playing ? "Stop" : "Écouter")}
           </button>
         </div>
       )}
