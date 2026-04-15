@@ -39,7 +39,7 @@ URLS = {
 
 WHISPER_MODEL  = os.getenv("WHISPER_MODEL", "small")
 POLL_INTERVAL  = int(os.getenv("POLL_INTERVAL_S", "15"))   # secondes entre chaque poll
-MAX_PER_ZONE   = int(os.getenv("MAX_EVENTS_PER_ZONE", "4"))
+MAX_PER_ZONE   = int(os.getenv("MAX_EVENTS_PER_ZONE", "10"))
 LLM_URL        = os.getenv("LLM_URL", "http://llm:8002")
 TRANSLATE_LANGS = os.getenv("TRANSLATE_LANGS", "en,uk,es").split(",")
 
@@ -56,9 +56,9 @@ _sse_clients: list[asyncio.Queue] = []
 
 # ETag / Last-Modified par zone pour requêtes conditionnelles
 _cond_state: dict[str, dict] = {
-    "nord":  {"etag": None, "lm": None},
-    "sud":   {"etag": None, "lm": None},
-    "ouest": {"etag": None, "lm": None},
+    "nord":  {"etag": None, "lm": None, "hash": None},
+    "sud":   {"etag": None, "lm": None, "hash": None},
+    "ouest": {"etag": None, "lm": None, "hash": None},
 }
 
 # Whisper chargé une seule fois
@@ -182,6 +182,14 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
 
     if r.status_code != 200 or len(r.content) < 10_000:
         return
+
+    # Hash du contenu pour éviter de re-transcrire un MP3 identique
+    # (fallback si le serveur ne respecte pas ETag/Last-Modified)
+    import hashlib
+    content_hash = hashlib.md5(r.content).hexdigest()
+    if content_hash == st.get("hash"):
+        return
+    st["hash"] = content_hash
 
     # Transcription en thread pour ne pas bloquer l'event loop
     loop = asyncio.get_event_loop()
