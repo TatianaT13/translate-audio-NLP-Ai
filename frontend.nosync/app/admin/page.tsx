@@ -6,7 +6,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
-  getServicesHealth, getTrafficEvents, openTrafficStream, getExperiments,
+  getServicesHealth, getTrafficEvents, openTrafficStream, getExperiments, synthesizeTTS,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
   type ServiceHealth, type TrafficEvent, type TrafficSnapshot,
   type ExperimentRun, type ExperimentsResponse,
@@ -972,13 +972,41 @@ function cleanDirection(dir: string): string {
   return dir.replace(/\s+(et|ou|à|en|,|;)$/i, "").trim();
 }
 
+const LANG_LABELS: Record<string, string> = {
+  fr: "FR", en: "EN", uk: "UK", es: "ES", de: "DE",
+};
+const LANG_FLAGS: Record<string, string> = {
+  fr: "🇫🇷", en: "🇬🇧", uk: "🇺🇦", es: "🇪🇸", de: "🇩🇪",
+};
+
 function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
   const [expanded, setExpanded] = useState(false);
+  const [lang, setLang]         = useState<string>("fr");
+  const [ttsLoading, setTtsLoading] = useState(false);
   const color = SEVERITY_COLOR[ev.severity] ?? C.muted;
-  const hint = cleanHint(ev.location_hint);
+  const hintFr = cleanHint(ev.location_hint);
   const direction = ev.direction ? cleanDirection(ev.direction) : "";
   const LIMIT = 160;
+
+  const availableLangs = ["fr", ...Object.keys(ev.translations ?? {})];
+  const hint = lang === "fr" ? hintFr : (ev.translations?.[lang] ?? "");
   const isLong = hint.length > LIMIT;
+
+  async function playTTS() {
+    if (ttsLoading || !hint) return;
+    setTtsLoading(true);
+    try {
+      const blob = await synthesizeTTS(hint, lang === "fr" ? "en" : lang);
+      const url  = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTtsLoading(false);
+    }
+  }
 
   return (
     <div style={{
@@ -1031,6 +1059,48 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
               {ev.delay_hint}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Onglets langues + bouton TTS */}
+      {availableLangs.length > 1 && (
+        <div style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
+          {availableLangs.map(l => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              style={{
+                fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em",
+                padding: "3px 8px", borderRadius: "6px",
+                background: lang === l ? `${color}25` : "transparent",
+                color:      lang === l ? color : C.muted,
+                border: `1px solid ${lang === l ? color : C.border}`,
+                cursor: "pointer",
+              }}
+            >
+              {LANG_FLAGS[l] ?? ""} {LANG_LABELS[l] ?? l.toUpperCase()}
+            </button>
+          ))}
+          <button
+            onClick={playTTS}
+            disabled={ttsLoading || !hint || lang === "fr"}
+            title={lang === "fr" ? "TTS disponible en EN/UK/ES" : "Écouter"}
+            style={{
+              marginLeft: "auto",
+              fontSize: "12px", padding: "3px 10px", borderRadius: "6px",
+              background: ttsLoading ? C.border : `${color}15`,
+              color, border: `1px solid ${color}40`,
+              cursor: (ttsLoading || lang === "fr") ? "not-allowed" : "pointer",
+              opacity: lang === "fr" ? 0.4 : 1,
+              display: "flex", alignItems: "center", gap: "4px",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+            </svg>
+            {ttsLoading ? "…" : "Écouter"}
+          </button>
         </div>
       )}
 
