@@ -97,7 +97,7 @@ TARGET_LANGS = ["en"]   # ajouter "uk" si besoin
 # ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).parent.parent
-ARCHIVE_DIR  = ROOT / "data" / "flash_audio_archive"
+ARCHIVE_DIR  = ROOT / "flash_audio_archive"
 GOLDEN_DIR   = ROOT / "data" / "golden"
 REFS_DIR     = GOLDEN_DIR / "references"
 RESULTS_DIR  = ROOT / "outputs" / "experiments"
@@ -240,6 +240,8 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
 
     # Charger Whisper une seule fois par taille de modèle
     whisper_cache: dict[str, WhisperService] = {}
+    # Cache STT : (audio_name, whisper_model) -> {text, lang, lang_prob, conv_ms, stt_ms}
+    stt_cache: dict[tuple[str, str], dict] = {}
 
     done = 0
     skipped = 0
@@ -266,18 +268,59 @@ def main(audio_arg: str | None, skip_existing: bool) -> None:
                 svc.load(whisper_model, device="cpu")
                 whisper_cache[whisper_model] = svc
 
-            try:
-                result = run_pipeline(
-                    audio_path=audio,
-                    model=llm_model,
-                    target_lang=target_lang,
-                    prompt_version=prompt_version,
-                    whisper_model=whisper_model,
-                    _svc=whisper_cache[whisper_model],
-                )
-            except Exception as e:
-                print(f"  ERREUR : {e}")
-                continue
+            # Cache STT : réutilise la transcription pour les mêmes (audio, whisper)
+            cache_key = (audio.name, whisper_model)
+            if cache_key in stt_cache:
+                c = stt_cache[cache_key]
+                source_text, lang, lang_prob = c["text"], c["lang"], c["lang_prob"]
+                conv_ms, stt_ms = c["conv_ms"], c["stt_ms"]
+                print(f"  [STT cache] {whisper_model} → skip ({stt_ms:.0f}ms)")
+
+                import time as _time
+                from scripts.run_pipeline import call_llm, PROMPTS, LANG_LABELS
+                lang_label = LANG_LABELS.get(target_lang, target_lang)
+                prompt = PROMPTS[prompt_version].format(lang=lang_label, text=source_text)
+                try:
+                    translation, llm_ms = call_llm(prompt, model=llm_model)
+                except Exception as e:
+                    print(f"  ERREUR LLM : {e}")
+                    continue
+                print(f"  [3/3] Traduction : {llm_ms:.0f}ms")
+                total_ms = conv_ms + stt_ms + llm_ms
+
+                result = {
+                    "whisper_model":    whisper_model,
+                    "llm_model":        llm_model,
+                    "prompt_version":   prompt_version,
+                    "target_lang":      target_lang,
+                    "source_text":      source_text,
+                    "language_prob":    round(lang_prob, 4),
+                    "translation":      translation,
+                    "latency_conv_ms":  round(conv_ms),
+                    "latency_stt_ms":   round(stt_ms),
+                    "latency_llm_ms":   round(llm_ms),
+                    "latency_total_ms": round(total_ms),
+                }
+            else:
+                try:
+                    result = run_pipeline(
+                        audio_path=audio,
+                        model=llm_model,
+                        target_lang=target_lang,
+                        prompt_version=prompt_version,
+                        whisper_model=whisper_model,
+                        _svc=whisper_cache[whisper_model],
+                    )
+                except Exception as e:
+                    print(f"  ERREUR : {e}")
+                    continue
+                stt_cache[cache_key] = {
+                    "text":      result["source_text"],
+                    "lang":      result.get("language", "fr"),
+                    "lang_prob": result["language_prob"],
+                    "conv_ms":   result["latency_conv_ms"],
+                    "stt_ms":    result["latency_stt_ms"],
+                }
 
             bleu    = compute_bleu(result["translation"], audio.stem, target_lang)
             meteor  = compute_meteor(result["translation"], audio.stem, target_lang)
