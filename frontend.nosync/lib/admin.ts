@@ -101,6 +101,18 @@ export interface TrafficEvent {
   zone:          string;
   timestamp:     string;
   delay_hint:    string;
+  translations?: Record<string, string>;
+}
+
+export async function synthesizeTTS(text: string, lang: string): Promise<Blob> {
+  const headers = await authHeaders();
+  const res = await fetch(`${GATEWAY_URL}/admin/tts`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ text, lang }),
+  });
+  if (!res.ok) throw new Error(`TTS erreur ${res.status}`);
+  return res.blob();
 }
 
 export type TrafficSnapshot = Record<"nord" | "sud" | "ouest", TrafficEvent[]>;

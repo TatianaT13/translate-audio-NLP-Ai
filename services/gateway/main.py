@@ -655,6 +655,28 @@ def admin_experiments(_: models.User = Depends(get_admin_user)):
     return schemas.ExperimentsResponse(runs=runs, total=len(runs), csv_exists=True)
 
 
+@app.post("/admin/tts")
+async def admin_tts(body: dict, _: models.User = Depends(get_admin_user)):
+    """Proxy TTS : frontend → gateway → service TTS, renvoie l'audio binaire."""
+    text = body.get("text", "").strip()
+    lang = body.get("lang", "en")
+    if not text:
+        raise HTTPException(status_code=400, detail="text requis")
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(f"{TTS_URL}/synthesize", json={"text": text, "lang": lang})
+            if not r.is_success:
+                raise HTTPException(status_code=r.status_code, detail=r.text[:200])
+            return StreamingResponse(
+                iter([r.content]),
+                media_type=r.headers.get("content-type", "audio/wav"),
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"TTS erreur : {exc}")
+
+
 @app.get("/admin/services/health")
 async def admin_services_health(_: models.User = Depends(get_admin_user)):
     """Ping tous les microservices et retourne leur statut + latence."""

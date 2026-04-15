@@ -40,6 +40,8 @@ URLS = {
 WHISPER_MODEL  = os.getenv("WHISPER_MODEL", "small")
 POLL_INTERVAL  = int(os.getenv("POLL_INTERVAL_S", "15"))   # secondes entre chaque poll
 MAX_PER_ZONE   = int(os.getenv("MAX_EVENTS_PER_ZONE", "4"))
+LLM_URL        = os.getenv("LLM_URL", "http://llm:8002")
+TRANSLATE_LANGS = os.getenv("TRANSLATE_LANGS", "en,uk,es").split(",")
 
 # ── État global (en RAM uniquement) ──────────────────────────────────────────
 # Ring buffer : quand le 5e arrive, le 1er tombe automatiquement
@@ -105,7 +107,7 @@ def _mp3_to_text(mp3_bytes: bytes) -> tuple[str, float]:
         Path(wav_path).unlink(missing_ok=True)
 
 
-def _event_to_dict(ev: TrafficEvent) -> dict:
+def _event_to_dict(ev: TrafficEvent, translations: dict[str, str] | None = None) -> dict:
     return {
         "type":          ev.type,
         "severity":      ev.severity,
@@ -115,7 +117,27 @@ def _event_to_dict(ev: TrafficEvent) -> dict:
         "zone":          ev.zone,
         "timestamp":     ev.timestamp,
         "delay_hint":    ev.delay_hint,
+        "translations":  translations or {},
     }
+
+
+async def _translate_batch(text: str, client: httpx.AsyncClient) -> dict[str, str]:
+    """Traduit le texte FR dans toutes les langues cibles en parallèle."""
+    async def _one(lang: str) -> tuple[str, str]:
+        try:
+            r = await client.post(
+                f"{LLM_URL}/translate",
+                json={"text": text, "target_lang": lang},
+                timeout=30.0,
+            )
+            if r.is_success:
+                return lang, r.json()["translation"]
+        except Exception as e:
+            print(f"[watcher] translate {lang} erreur: {e}", flush=True)
+        return lang, ""
+
+    results = await asyncio.gather(*[_one(l.strip()) for l in TRANSLATE_LANGS if l.strip()])
+    return {lang: tr for lang, tr in results if tr}
 
 
 def _broadcast(zone: str, events: list[dict]) -> None:
@@ -185,8 +207,13 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
         print(f"[watcher] {zone} | {len(events)} event(s) low severity ignorés", flush=True)
         return
 
+    # Traduction auto du texte complet en parallèle vers toutes les langues cibles
+    translations = await _translate_batch(text, client)
+    if translations:
+        print(f"[watcher] {zone} | traduit en {list(translations.keys())}", flush=True)
+
     for ev in filtered:
-        _events[zone].append(_event_to_dict(ev))
+        _events[zone].append(_event_to_dict(ev, translations))
         print(
             f"[watcher] {zone} | {ev.severity.upper():6s} {ev.type:20s} "
             f"{', '.join(ev.routes) or '—'}  {ev.direction}",
