@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
               <label style={{ fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--muted)" }}>
                 Email
               </label>
-              <input
+              <input suppressHydrationWarning
                 type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="vous@exemple.com" required autoFocus
                 style={inputStyle}

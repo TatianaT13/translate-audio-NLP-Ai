@@ -77,7 +77,7 @@ function ResetPasswordForm() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={labelStyle}>Nouveau mot de passe</label>
-            <input
+            <input suppressHydrationWarning
               type="password" value={password} onChange={e => setPassword(e.target.value)}
               placeholder="••••••••" required autoFocus
               style={inputStyle}
@@ -105,7 +105,7 @@ function ResetPasswordForm() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={labelStyle}>Confirmer</label>
-            <input
+            <input suppressHydrationWarning
               type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
               placeholder="••••••••" required
               style={{
