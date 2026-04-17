@@ -69,7 +69,7 @@ export default function RegisterPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={labelStyle}>Email</label>
-            <input
+            <input suppressHydrationWarning
               type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="vous@exemple.com" required autoFocus
               style={inputStyle}
@@ -78,7 +78,7 @@ export default function RegisterPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={labelStyle}>Mot de passe</label>
-            <input
+            <input suppressHydrationWarning
               type="password" value={password} onChange={e => setPassword(e.target.value)}
               placeholder="••••••••" required
               style={inputStyle}
@@ -108,7 +108,7 @@ export default function RegisterPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={labelStyle}>Confirmer le mot de passe</label>
-            <input
+            <input suppressHydrationWarning
               type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
               placeholder="••••••••" required
               style={{
