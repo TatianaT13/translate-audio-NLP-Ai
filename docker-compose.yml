@@ -38,7 +38,9 @@ services:
     environment:
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
-      - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-4}
+      - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
+    volumes:
+      - watcher_data:/app/state
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
@@ -131,3 +133,4 @@ services:
 volumes:
   whisper_cache:
   gateway_data:
+  watcher_data:

@@ -43,13 +43,37 @@ MAX_PER_ZONE   = int(os.getenv("MAX_EVENTS_PER_ZONE", "10"))
 LLM_URL        = os.getenv("LLM_URL", "http://llm:8002")
 TRANSLATE_LANGS = os.getenv("TRANSLATE_LANGS", "en,uk,es").split(",")
 
-# ── État global (en RAM uniquement) ──────────────────────────────────────────
-# Ring buffer : quand le 5e arrive, le 1er tombe automatiquement
-_events: dict[str, deque] = {
-    "nord":  deque(maxlen=MAX_PER_ZONE),
-    "sud":   deque(maxlen=MAX_PER_ZONE),
-    "ouest": deque(maxlen=MAX_PER_ZONE),
-}
+# ── État global persisté sur disque (survit aux restarts container) ─────────
+STATE_FILE = Path(os.getenv("STATE_FILE", "/app/state/events.json"))
+
+def _load_state() -> dict[str, deque]:
+    state = {
+        "nord":  deque(maxlen=MAX_PER_ZONE),
+        "sud":   deque(maxlen=MAX_PER_ZONE),
+        "ouest": deque(maxlen=MAX_PER_ZONE),
+    }
+    if STATE_FILE.exists():
+        try:
+            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            for zone in state:
+                for ev in data.get(zone, [])[-MAX_PER_ZONE:]:
+                    state[zone].append(ev)
+            print(f"[watcher] état restauré : {sum(len(d) for d in state.values())} événements", flush=True)
+        except Exception as e:
+            print(f"[watcher] état corrompu, démarre vide : {e}", flush=True)
+    return state
+
+def _save_state() -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(
+            json.dumps({z: list(d) for z, d in _events.items()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[watcher] save state erreur : {e}", flush=True)
+
+_events: dict[str, deque] = _load_state()
 
 # Clients SSE connectés
 _sse_clients: list[asyncio.Queue] = []
@@ -228,7 +252,8 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
             flush=True,
         )
 
-    # Broadcast SSE
+    # Persister sur disque puis broadcast
+    _save_state()
     _broadcast(zone, list(_events[zone]))
 
 
