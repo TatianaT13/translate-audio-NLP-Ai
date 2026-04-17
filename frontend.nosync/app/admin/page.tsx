@@ -1198,34 +1198,12 @@ function ZoneColumn({ zone, events }: { zone: string; events: TrafficEvent[] }) 
   );
 }
 
-function TrafficTab() {
-  const [snapshot, setSnapshot] = useState<TrafficSnapshot>({ nord: [], sud: [], ouest: [] });
-  const [connected, setConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
-  useEffect(() => {
-    // Snapshot initial
-    getTrafficEvents()
-      .then(data => setSnapshot(data))
-      .catch(() => {});
-
-    // SSE temps réel
-    const es = openTrafficStream((data) => {
-      setLastUpdate(new Date());
-      if ("snapshot" in data) {
-        setSnapshot(data.snapshot as TrafficSnapshot);
-      } else if ("zone" in data && "events" in data) {
-        const { zone, events } = data as { zone: string; events: TrafficEvent[] };
-        setSnapshot(prev => ({ ...prev, [zone]: events }));
-      }
-    });
-
-    es.onopen  = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-
-    return () => es.close();
-  }, []);
-
+interface TrafficTabProps {
+  snapshot:   TrafficSnapshot;
+  connected:  boolean;
+  lastUpdate: Date | null;
+}
+function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
   const totalEvents = Object.values(snapshot).flat().length;
 
   return (
@@ -1297,6 +1275,28 @@ export default function AdminPage() {
   const [langfuse, setLangfuse] = useState<LangfuseMetrics | null>(null);
   const [loadingLf, setLoadingLf] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Traffic live state — monté dans AdminPage pour survivre aux switch d'onglets
+  const [trafficSnapshot, setTrafficSnapshot] = useState<TrafficSnapshot>({ nord: [], sud: [], ouest: [] });
+  const [trafficConnected, setTrafficConnected] = useState(false);
+  const [trafficLastUpdate, setTrafficLastUpdate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    getTrafficEvents().then(setTrafficSnapshot).catch(() => {});
+    const es = openTrafficStream((data) => {
+      setTrafficLastUpdate(new Date());
+      if ("snapshot" in data) {
+        setTrafficSnapshot(data.snapshot as TrafficSnapshot);
+      } else if ("zone" in data && "events" in data) {
+        const { zone, events } = data as { zone: string; events: TrafficEvent[] };
+        setTrafficSnapshot(prev => ({ ...prev, [zone]: events }));
+      }
+    });
+    es.onopen  = () => setTrafficConnected(true);
+    es.onerror = () => setTrafficConnected(false);
+    return () => es.close();
+  }, [currentUserId]);
 
   // Auth check + load initial data
   useEffect(() => {
@@ -1404,7 +1404,11 @@ export default function AdminPage() {
           </Tabs.Content>
 
           <Tabs.Content value="traffic">
-            <TrafficTab />
+            <TrafficTab
+              snapshot={trafficSnapshot}
+              connected={trafficConnected}
+              lastUpdate={trafficLastUpdate}
+            />
           </Tabs.Content>
 
           <Tabs.Content value="experiments">
