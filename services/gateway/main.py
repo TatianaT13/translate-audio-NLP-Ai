@@ -34,6 +34,30 @@ LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 
 EXPERIMENTS_CSV = Path(os.getenv("EXPERIMENTS_CSV", "/app/experiments/results.csv"))
 
+# Cache CSV en mémoire (évite deadlock avec VS Code sur macOS + rapide)
+_csv_cache: dict = {"mtime": 0.0, "rows": []}
+
+def _read_experiments_csv() -> list[dict]:
+    """Lit le CSV avec cache basé sur mtime. Copie bytes en mémoire pour éviter
+    tout conflit de lock avec d'autres lecteurs (IDE, éditeur)."""
+    if not EXPERIMENTS_CSV.exists():
+        return []
+    try:
+        mtime = EXPERIMENTS_CSV.stat().st_mtime
+    except OSError:
+        return _csv_cache["rows"]
+    if mtime == _csv_cache["mtime"] and _csv_cache["rows"]:
+        return _csv_cache["rows"]
+    try:
+        raw = EXPERIMENTS_CSV.read_bytes()
+    except OSError:
+        return _csv_cache["rows"]
+    import io as _io
+    reader = csv.DictReader(_io.StringIO(raw.decode("utf-8", errors="replace")), delimiter=";")
+    rows = list(reader)
+    _csv_cache.update(mtime=mtime, rows=rows)
+    return rows
+
 PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
 STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
 LLM_URL      = os.getenv("LLM_URL",      "http://llm:8002")
@@ -380,14 +404,14 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
     Langfuse reste utilisé pour le tracing en temps réel des runs individuels.
     """
     # Lire depuis le CSV si disponible — agrégation propre et complète
-    if EXPERIMENTS_CSV.exists():
+    csv_rows = _read_experiments_csv()
+    if csv_rows:
         bleus, meteors, wers, tts_wers = [], [], [], []
         stts, llms_lat, totals, langs = [], [], [], []
         model_map: dict[str, dict] = {}
 
-        with EXPERIMENTS_CSV.open(newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f, delimiter=";")
-            for row in reader:
+        for row in csv_rows:
+            if True:
                 def _fl(k: str) -> float | None:
                     v = row.get(k, "").strip()
                     if v in ("", "-1.0", "-1", "n/a"):
@@ -622,36 +646,35 @@ async def admin_traffic_stream(
 @app.get("/admin/experiments", response_model=schemas.ExperimentsResponse)
 def admin_experiments(_: models.User = Depends(get_admin_user)):
     """Retourne tous les runs d'évaluation depuis results.csv."""
-    if not EXPERIMENTS_CSV.exists():
-        return schemas.ExperimentsResponse(runs=[], total=0, csv_exists=False)
+    csv_rows = _read_experiments_csv()
+    if not csv_rows:
+        return schemas.ExperimentsResponse(runs=[], total=0, csv_exists=EXPERIMENTS_CSV.exists())
 
     runs: list[schemas.ExperimentRun] = []
-    with EXPERIMENTS_CSV.open(newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f, delimiter=";")
-        for row in reader:
-            def _f(k: str) -> float | None:
-                v = row.get(k, "").strip()
-                try:
-                    return float(v) if v not in ("", "-1", "n/a") else None
-                except ValueError:
-                    return None
-            runs.append(schemas.ExperimentRun(
-                run_id           = row.get("run_id", ""),
-                audio            = row.get("audio", ""),
-                zone             = row.get("zone", ""),
-                whisper_model    = row.get("whisper_model", ""),
-                llm_model        = row.get("llm_model", ""),
-                prompt_version   = row.get("prompt_version", ""),
-                target_lang      = row.get("target_lang", ""),
-                language_prob    = _f("language_prob"),
-                latency_stt_ms   = _f("latency_stt_ms"),
-                latency_llm_ms   = _f("latency_llm_ms"),
-                latency_total_ms = _f("latency_total_ms"),
-                bleu             = _f("bleu"),
-                meteor           = _f("meteor"),
-                wer              = _f("wer"),
-                tts_wer          = _f("tts_wer"),
-            ))
+    for row in csv_rows:
+        def _f(k: str) -> float | None:
+            v = row.get(k, "").strip()
+            try:
+                return float(v) if v not in ("", "-1", "n/a") else None
+            except ValueError:
+                return None
+        runs.append(schemas.ExperimentRun(
+            run_id           = row.get("run_id", ""),
+            audio            = row.get("audio", ""),
+            zone             = row.get("zone", ""),
+            whisper_model    = row.get("whisper_model", ""),
+            llm_model        = row.get("llm_model", ""),
+            prompt_version   = row.get("prompt_version", ""),
+            target_lang      = row.get("target_lang", ""),
+            language_prob    = _f("language_prob"),
+            latency_stt_ms   = _f("latency_stt_ms"),
+            latency_llm_ms   = _f("latency_llm_ms"),
+            latency_total_ms = _f("latency_total_ms"),
+            bleu             = _f("bleu"),
+            meteor           = _f("meteor"),
+            wer              = _f("wer"),
+            tts_wer          = _f("tts_wer"),
+        ))
     return schemas.ExperimentsResponse(runs=runs, total=len(runs), csv_exists=True)
 
 

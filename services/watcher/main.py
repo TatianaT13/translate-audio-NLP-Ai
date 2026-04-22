@@ -55,10 +55,15 @@ def _load_state() -> dict[str, deque]:
     if STATE_FILE.exists():
         try:
             data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            kept, dropped = 0, 0
             for zone in state:
                 for ev in data.get(zone, [])[-MAX_PER_ZONE:]:
-                    state[zone].append(ev)
-            print(f"[watcher] état restauré : {sum(len(d) for d in state.values())} événements", flush=True)
+                    if _is_fresh(ev):
+                        state[zone].append(ev)
+                        kept += 1
+                    else:
+                        dropped += 1
+            print(f"[watcher] état restauré : {kept} gardés, {dropped} périmés (>12h)", flush=True)
         except Exception as e:
             print(f"[watcher] état corrompu, démarre vide : {e}", flush=True)
     return state
@@ -131,6 +136,8 @@ def _mp3_to_text(mp3_bytes: bytes) -> tuple[str, float]:
         Path(wav_path).unlink(missing_ok=True)
 
 
+EVENT_TTL_SECONDS = int(os.getenv("EVENT_TTL_SECONDS", "43200"))  # 12h
+
 def _event_to_dict(ev: TrafficEvent, translations: dict[str, str] | None = None) -> dict:
     return {
         "type":          ev.type,
@@ -142,7 +149,18 @@ def _event_to_dict(ev: TrafficEvent, translations: dict[str, str] | None = None)
         "timestamp":     ev.timestamp,
         "delay_hint":    ev.delay_hint,
         "translations":  translations or {},
+        "created_at":    datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _is_fresh(ev: dict) -> bool:
+    """Vrai si l'événement a moins de EVENT_TTL_SECONDS secondes."""
+    try:
+        created = datetime.fromisoformat(ev["created_at"])
+        age = (datetime.now(timezone.utc) - created).total_seconds()
+        return age < EVENT_TTL_SECONDS
+    except (KeyError, ValueError):
+        return False  # événements sans created_at (anciens) → drop
 
 
 async def _translate_batch(text: str, client: httpx.AsyncClient) -> dict[str, str]:
@@ -293,9 +311,9 @@ def health():
 
 @app.get("/events")
 def get_events():
-    """Snapshot des événements actuels (max MAX_PER_ZONE par zone)."""
+    """Snapshot des événements actuels (max MAX_PER_ZONE par zone, filtrés par TTL)."""
     return JSONResponse({
-        zone: list(buf) for zone, buf in _events.items()
+        zone: [ev for ev in buf if _is_fresh(ev)] for zone, buf in _events.items()
     })
 
 
