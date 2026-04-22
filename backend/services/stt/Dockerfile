@@ -16,7 +16,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r app && useradd -r -g app -u 1000 -m app
+RUN groupadd -r app && useradd -r -g app -u 1000 -m app && \
+    mkdir -p /home/app/.cache/huggingface && \
+    chown -R app:app /home/app/.cache
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app src/ /app/src/

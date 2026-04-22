@@ -14,7 +14,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python /opt/venv/bin/python -r pyproject.toml
 
 FROM python:3.11-slim AS runtime
-RUN groupadd -r app && useradd -r -g app -u 1000 -m app
+RUN groupadd -r app && useradd -r -g app -u 1000 -m app && \
+    mkdir -p /home/app/.cache/huggingface && \
+    chown -R app:app /home/app/.cache
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app src/ /app/src/
