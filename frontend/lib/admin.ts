@@ -54,12 +54,19 @@ async function authHeaders(): Promise<HeadersInit> {
   return token ? { "Authorization": `Bearer ${token}` } : {};
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, init?: RequestInit, _retried = false): Promise<T> {
   const headers = await authHeaders();
   const res = await fetch(`${GATEWAY_URL}${path}`, {
     ...init,
     headers: { ...headers, "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
+
+  // Token expiré → refresh + retry une fois
+  if (res.status === 401 && !_retried) {
+    const newToken = await refreshAccessToken();
+    if (newToken) return apiFetch<T>(path, init, true);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Erreur ${res.status}`);
