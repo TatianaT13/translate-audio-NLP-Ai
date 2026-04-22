@@ -1043,17 +1043,20 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
       border: `1px solid ${color}30`,
       display: "flex", flexDirection: "column", gap: "8px",
     }}>
-      {/* Ligne 1 : badge type + routes + heure */}
+      {/* Ligne 1 : badge(s) type(s) + routes + heure */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-        <span style={{
-          fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em",
-          padding: "3px 10px", borderRadius: "999px",
-          background: `${color}20`, color,
-          whiteSpace: "nowrap",
-        }}>
-          <TrafficTypeIcon type={ev.type} color={color} />
-            {" "}{TYPE_LABEL[ev.type] ?? ev.type}
-        </span>
+        {/* Affiche tous les types détectés (fusionnés sur la même portion) */}
+        {(ev.types && ev.types.length > 0 ? ev.types : [ev.type]).map((t, i) => (
+          <span key={`${t}-${i}`} style={{
+            fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em",
+            padding: "3px 10px", borderRadius: "999px",
+            background: `${color}20`, color,
+            whiteSpace: "nowrap",
+          }}>
+            <TrafficTypeIcon type={t} color={color} />
+            {" "}{TYPE_LABEL[t] ?? t}
+          </span>
+        ))}
         {ev.routes.length > 0 && (
           <span style={{
             fontSize: "12px", fontWeight: 700, color: C.fg,

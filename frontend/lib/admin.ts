@@ -93,7 +93,8 @@ export const getServicesHealth = () =>
   apiFetch<{ services: ServiceHealth[] }>("/admin/services/health");
 
 export interface TrafficEvent {
-  type:          string;
+  type:          string;          // type principal (le plus sévère)
+  types?:        string[];        // tous les types détectés sur cette portion (fusion)
   severity:      "high" | "medium" | "low";
   routes:        string[];
   direction:     string;
