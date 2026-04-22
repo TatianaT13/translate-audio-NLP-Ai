@@ -74,23 +74,22 @@ cp .env.example .env
 
 ### Lancement
 
-```bash
-# Terminal 1 — backend (6 services Docker)
-docker compose up --build
+**Une seule commande** lance tout (frontend + 6 services backend) :
 
-# Terminal 2 — frontend
-cd frontend
-npm install && npm run dev
-# → http://localhost:3000
+```bash
+docker compose up --build
 ```
 
 Services disponibles :
+- **Frontend** : http://localhost:3000
 - Gateway : http://localhost:8004/docs
 - Pipeline : http://localhost:8000/docs
 - STT : http://localhost:8001/docs
 - LLM : http://localhost:8002/docs
 - TTS : http://localhost:8003/docs
 - Watcher : http://localhost:8005/docs
+
+> Le frontend attend que le gateway et le pipeline soient `healthy` avant de démarrer (`depends_on: condition: service_healthy`).
 
 ### Créer le premier compte admin
 
@@ -212,55 +211,58 @@ python scripts/run_pipeline.py \
 
 ```
 .
-├── services/
-│   ├── gateway/            # Auth JWT + admin API (port 8004)
-│   │   ├── main.py         # Routes auth + admin + Langfuse + trafic proxy
-│   │   ├── auth.py         # JWT, bcrypt, refresh tokens
-│   │   ├── models.py       # User SQLAlchemy (is_admin, refresh_token_hash)
-│   │   ├── schemas.py      # Pydantic schemas
-│   │   ├── database.py     # SQLite/PostgreSQL engine
-│   │   └── Dockerfile
-│   ├── watcher/            # Trafic Live — polling autorouteinfo (port 8005)
-│   │   ├── main.py         # Fetch + STT + event_extractor + SSE + ring buffer
-│   │   ├── requirements.txt
-│   │   └── Dockerfile
-│   ├── pipeline/           # Orchestrateur Langchain LCEL + Langfuse (port 8000)
-│   ├── stt/                # Speech-to-Text Whisper large-v3 (port 8001)
-│   ├── llm/                # Traduction LiteLLM/Groq (port 8002)
-│   └── tts/                # Synthèse vocale Mistral Voxtral (port 8003)
-├── src/
-│   └── flash_nlp/
-│       ├── acquisition/    # Fetcher autorouteinfo (fetch_flashes.py)
-│       ├── transcription/  # WhisperService, audio_utils
-│       ├── analysis/       # event_extractor, notifier
-│       └── io/             # file_utils
-├── frontend/               # Interface Next.js
+├── frontend/                       # Next.js (conteneurisé, port 3000)
+│   ├── Dockerfile                  # Multi-stage : deps → build → runtime alpine
+│   ├── .dockerignore
 │   ├── app/
-│   │   ├── page.tsx        # Page principale + UserMenu
-│   │   ├── login/
-│   │   ├── register/
-│   │   ├── forgot-password/
-│   │   ├── reset-password/
-│   │   └── admin/          # Dashboard MLOps admin (7 onglets)
-│   ├── lib/auth.ts         # Client auth
-│   ├── lib/admin.ts        # Client API admin + SSE trafic
-│   └── middleware.ts       # Protection des routes
-├── scripts/
-│   ├── run_pipeline.py     # Pipeline CLI
-│   ├── eval_golden.py      # Évaluation BLEU/METEOR/WER sur dataset golden
-│   ├── fetch_flashes.py    # Téléchargement manuel des flashs
-│   └── langfuse_import.py  # Import des 84 runs dans Langfuse
-├── outputs/
-│   └── experiments/
-│       ├── results.csv              # 84 runs (métriques complètes)
-│       └── evaluation_report.md    # Rapport par modèle/prompt
-├── data/
-│   ├── flash_audio_archive/         # Archive MP3 trafic
-│   └── golden/
-│       └── references/              # Références traduction EN + transcription FR (WER)
-├── docker-compose.yml
-└── pyproject.toml
+│   │   ├── page.tsx                # Page principale + UserMenu
+│   │   ├── login/  register/  forgot-password/  reset-password/
+│   │   └── admin/                  # Dashboard MLOps admin
+│   ├── lib/
+│   │   ├── auth.ts                 # Client auth
+│   │   ├── api.ts                  # Client pipeline
+│   │   └── admin.ts                # Client admin API + SSE trafic
+│   └── middleware.ts               # Protection des routes
+│
+├── backend/
+│   └── services/                   # 6 microservices Python (FastAPI)
+│       ├── gateway/                # Auth JWT + admin API (port 8004)
+│       │   ├── Dockerfile          # Multi-stage uv + non-root
+│       │   ├── .dockerignore
+│       │   ├── pyproject.toml      # Deps isolées par service
+│       │   └── src/gateway/
+│       │       ├── main.py         # Routes auth + admin + Langfuse + trafic proxy
+│       │       ├── auth.py         # JWT + bcrypt + refresh tokens
+│       │       ├── models.py       # SQLAlchemy User
+│       │       ├── schemas.py      # Pydantic
+│       │       └── database.py     # SQLite/PostgreSQL
+│       ├── pipeline/               # Orchestrateur Langchain LCEL (port 8000)
+│       ├── stt/                    # Faster-Whisper (port 8001)
+│       ├── llm/                    # LiteLLM → Groq/OpenAI/Anthropic (port 8002)
+│       ├── tts/                    # Mistral Voxtral + MMS-TTS (port 8003)
+│       └── watcher/                # Trafic Live SSE (port 8005)
+│
+├── src/flash_nlp/                  # Lib partagée pour les scripts CLI
+│   ├── acquisition/  transcription/  analysis/  io/
+│
+├── scripts/                        # Scripts CLI (eval, import, batch)
+├── outputs/experiments/            # results.csv (84 runs) + rapport
+├── data/                           # Datasets golden, archives audio
+│
+├── docker-compose.yml              # 1 commande lance tout (front + back)
+└── pyproject.toml                  # Lib racine flash_nlp (scripts CLI)
 ```
+
+### Conventions backend
+
+Chaque service Python suit la même structure pro :
+
+- `pyproject.toml` : dépendances **isolées** par service (pas de monorepo `requirements.txt` partagé)
+- **Dockerfile multi-stage** :
+  - **Stage 1 (builder)** : `uv` (10× plus rapide que pip) installe les deps dans `/opt/venv`
+  - **Stage 2 (runtime)** : image minimale, **utilisateur non-root** (`USER app`, UID 1000), copie uniquement le venv + le code source
+- `HEALTHCHECK` intégré
+- `.dockerignore` strict (pas de `node_modules`, `.venv`, `__pycache__`, `.git`)
 
 ---
 
