@@ -209,7 +209,9 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
     try:
         r = await client.get(URLS[zone], headers=headers, timeout=20.0)
     except Exception as e:
-        print(f"[watcher] {zone} | fetch erreur: {e}", flush=True)
+        # autorouteinfo.fr serveur instable : timeouts/connect errors fréquents → silencieux sauf si nouveau type
+        msg = repr(e) if not str(e) else str(e)
+        print(f"[watcher] {zone} | fetch erreur ({type(e).__name__}): {msg}", flush=True)
         return
 
     # Mise à jour ETag/Last-Modified
