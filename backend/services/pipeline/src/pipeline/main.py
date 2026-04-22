@@ -46,9 +46,10 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 async def _stt_step(state: dict) -> dict:
-    """Étape 1 : transcription audio → texte via STT Service."""
+    """Étape 1 : transcription audio → texte via STT Service.
+    Timeout 600s pour couvrir le téléchargement initial du modèle (large-v3 = 3 Go)."""
     t0 = time.perf_counter()
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=600) as client:
         resp = await client.post(
             f"{STT_URL}/transcribe",
             files={"file": (state["filename"], state["audio_bytes"], "audio/mpeg")},
@@ -177,9 +178,15 @@ async def process(
     try:
         result = await pipeline_chain.ainvoke(initial_state)
     except httpx.HTTPStatusError as e:
+        import traceback
+        print(f"[pipeline] HTTPStatusError: {e.response.status_code} {e.response.text}", flush=True)
+        traceback.print_exc()
         raise HTTPException(status_code=502, detail=f"Service error: {e.response.text}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(f"[pipeline] Exception {type(e).__name__}: {e!r}", flush=True)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
     latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
