@@ -1,16 +1,37 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Virtualenvs
 .venv/
+.venv.nosync/
+.venv*
+
+# Node
+node_modules/
+.next/
+npm-debug.log*
+
+# Env / secrets
 .env
+
+# Data / outputs
 flash_audio_archive/
 data/*
 outputs/*
 logs/*
 *.log
 !.gitkeep
+
+# Old archived models
 models
-outputs
+
+# OS / IDE
+.DS_Store
 .cursor/
 .aider*
-# editor config
 .*-config/
+.claude/

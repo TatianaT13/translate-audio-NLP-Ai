@@ -1,14 +1,39 @@
-# docker-compose.yml — Phase 2 : 3 microservices STT + LLM + TTS
-# Usage local : docker compose up --build
-# Usage VPS   : docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — Stack complète (frontend + backend microservices)
+#
+# Lancement unique :
+#   docker compose up --build
+#
+# Services exposés :
+#   • Frontend      : http://localhost:3000
+#   • Gateway (API) : http://localhost:8004
+#   • Pipeline      : http://localhost:8000
+#   • STT / LLM / TTS : ports 8001 / 8002 / 8003
+#   • Watcher       : http://localhost:8005
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ─── Gateway Service (Auth) ─────────────────────────────────────
+  # ─── Frontend (Next.js standalone) ────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8004}
+      - NEXT_PUBLIC_PIPELINE_URL=${NEXT_PUBLIC_PIPELINE_URL:-http://localhost:8000}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      pipeline:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Gateway (Auth + Admin API) ────────────────────────────────────
   gateway:
     build:
-      context: .
-      dockerfile: services/gateway/Dockerfile
+      context: ./backend/services/gateway
     ports:
       - "8004:8004"
     environment:
@@ -18,41 +43,25 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      - PIPELINE_URL=http://pipeline:8000
+      - STT_URL=http://stt:8001
+      - LLM_URL=http://llm:8002
+      - TTS_URL=http://tts:8003
     volumes:
       - gateway_data:/app/data
       - ./outputs/experiments:/app/experiments:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8004/health').status==200 else 1)"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 10s
 
-  # ─── Watcher Service (Trafic Live) ─────────────────────────────
-  watcher:
-    build:
-      context: .
-      dockerfile: services/watcher/Dockerfile
-    ports:
-      - "8005:8005"
-    environment:
-      - WHISPER_MODEL=${WHISPER_MODEL:-small}
-      - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
-      - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
-    volumes:
-      - watcher_data:/app/state
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ─── Pipeline Service (Orchestrateur) ───────────────────────────
+  # ─── Pipeline (Langchain LCEL orchestrator) ────────────────────────
   pipeline:
     build:
-      context: .
-      dockerfile: services/pipeline/Dockerfile
+      context: ./backend/services/pipeline
     ports:
       - "8000:8000"
     environment:
@@ -63,40 +72,42 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
     depends_on:
-      - stt
-      - llm
-      - tts
+      stt:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+      tts:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 10s
 
-  # ─── STT Service ────────────────────────────────────────────────
+  # ─── STT (Faster-Whisper) ──────────────────────────────────────────
   stt:
     build:
-      context: .
-      dockerfile: services/stt/Dockerfile
+      context: ./backend/services/stt
     ports:
       - "8001:8001"
     environment:
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
     volumes:
-      # Cache des modèles Whisper téléchargés (évite re-téléchargement au restart)
-      - whisper_cache:/root/.cache/huggingface
+      - whisper_cache:/home/app/.cache/huggingface
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 30s
 
-  # ─── LLM Service ────────────────────────────────────────────────
+  # ─── LLM (LiteLLM → Groq / OpenAI / Anthropic) ─────────────────────
   llm:
     build:
-      context: .
-      dockerfile: services/llm/Dockerfile
+      context: ./backend/services/llm
     ports:
       - "8002:8002"
     environment:
@@ -105,16 +116,16 @@ services:
       - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health').status==200 else 1)"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 10s
 
-  # ─── TTS Service ────────────────────────────────────────────────
+  # ─── TTS (Mistral Voxtral + MMS-TTS fallback) ──────────────────────
   tts:
     build:
-      context: .
-      dockerfile: services/tts/Dockerfile
+      context: ./backend/services/tts
     ports:
       - "8003:8003"
     environment:
@@ -122,15 +133,37 @@ services:
       - MISTRAL_VOICE_ID=${MISTRAL_VOICE_ID}
       - TTS_BACKEND=${TTS_BACKEND:-mistral}
     volumes:
-      - ./models:/app/models:ro
+      - tts_models:/home/app/.cache/huggingface
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health').status==200 else 1)"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 30s
+
+  # ─── Watcher (Live traffic SSE) ────────────────────────────────────
+  watcher:
+    build:
+      context: ./backend/services/watcher
+    ports:
+      - "8005:8005"
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
+      - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
+    volumes:
+      - watcher_data:/app/state
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8005/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   whisper_cache:
+  tts_models:
   gateway_data:
   watcher_data:
