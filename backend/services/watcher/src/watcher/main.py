@@ -251,19 +251,41 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
         print(f"[watcher] {zone} | transcrit, aucun événement détecté", flush=True)
         return
 
-    # On garde TOUS les events (low/medium/high) — le filtre est côté frontend
-    # pour que l'utilisateur choisisse "Tous" vs "Urgences uniquement"
+    # Fusion : les events sur la même portion (mêmes routes + même direction)
+    # sont regroupés en UNE carte affichée, avec :
+    #  - tous les types listés (ex: ["Ralentissement", "Bouchon"])
+    #  - la sévérité MAX
+    # Garde tous les niveaux (low/medium/high) — le filtre se fait côté frontend.
+    _SEV_ORDER = {"high": 3, "medium": 2, "low": 1}
+    grouped: dict[tuple, dict] = {}
+    for ev in events:
+        key = (tuple(ev.routes), ev.direction)
+        d = _event_to_dict(ev, None)
+        if key not in grouped:
+            d["types"] = [ev.type]
+            grouped[key] = d
+        else:
+            existing = grouped[key]
+            if ev.type not in existing["types"]:
+                existing["types"].append(ev.type)
+            # Garder la sévérité max
+            if _SEV_ORDER.get(ev.severity, 0) > _SEV_ORDER.get(existing["severity"], 0):
+                existing["severity"] = ev.severity
+                existing["type"] = ev.type   # type principal = le plus sévère
 
     # Traduction auto du texte complet en parallèle vers toutes les langues cibles
     translations = await _translate_batch(text, client)
     if translations:
         print(f"[watcher] {zone} | traduit en {list(translations.keys())}", flush=True)
+        # Injecter les traductions dans chaque event groupé
+        for d in grouped.values():
+            d["translations"] = translations
 
-    for ev in events:
-        _events[zone].append(_event_to_dict(ev, translations))
+    for d in grouped.values():
+        _events[zone].append(d)
         print(
-            f"[watcher] {zone} | {ev.severity.upper():6s} {ev.type:20s} "
-            f"{', '.join(ev.routes) or '—'}  {ev.direction}",
+            f"[watcher] {zone} | {d['severity'].upper():6s} {'+'.join(d['types']):30s} "
+            f"{', '.join(d['routes']) or '—'}  {d['direction']}",
             flush=True,
         )
 
