@@ -261,7 +261,6 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
 
     for ev in events:
         _events[zone].append(_event_to_dict(ev, translations))
-    filtered = events  # alias pour le print ci-dessous
         print(
             f"[watcher] {zone} | {ev.severity.upper():6s} {ev.type:20s} "
             f"{', '.join(ev.routes) or '—'}  {ev.direction}",
