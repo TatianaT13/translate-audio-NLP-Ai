@@ -104,7 +104,7 @@ curl -X POST http://localhost:8004/admin/seed
 
 ## Authentification (Gateway JWT)
 
-Le service Gateway (`services/gateway/`) gère toute l'authentification :
+Le service Gateway (`backend/services/gateway/`) gère toute l'authentification :
 
 - **Register / Login** : création de compte + tokens JWT
 - **Access token** (15 min) + **refresh token** rotatif (7 jours, hashé en base)
@@ -124,7 +124,7 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 |--------|---------|
 | Vue générale | Stats utilisateurs, KPIs pipeline (runs, latences, BLEU/METEOR/WER moyens) |
 | Traces & Modèles | Latences STT/LLM/TTS, histogrammes BLEU/METEOR/WER/confiance, tableau comparatif modèles |
-| Trafic Live | Incidents autoroutiers temps réel par zone (Nord/Sud/Ouest) via SSE — usage interne admin |
+| Trafic Live | Incidents autoroutiers temps réel par zone (Nord/Sud/Ouest) via SSE — toggle "Tous / Urgences uniquement", usage interne admin |
 | Expériences | Stub MLflow (roadmap Phase 4) |
 | Infrastructure | Health checks temps réel sur les 6 microservices |
 | Pipelines | DAG cards + stub Airflow (roadmap Phase 4) |
@@ -134,15 +134,16 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 
 ## Watcher — Trafic Live
 
-Service dédié (`services/watcher/`) qui tourne en arrière-plan en permanence :
+Service dédié (`backend/services/watcher/`) qui tourne en arrière-plan en permanence :
 
 - Poll adaptatif toutes les **~15s** sur 3 flux autorouteinfo.fr (nord / sud / ouest)
 - Requêtes conditionnelles ETag/Last-Modified — zéro bande passante si pas de changement
-- **STT Whisper small** en mémoire — fichiers audio supprimés immédiatement après transcription
+- **STT Whisper small** en mémoire (`mem_limit: 2g`) — fichiers audio supprimés immédiatement après transcription
 - Extraction d'événements trafic par regex (`event_extractor.py`) : accident, bouchon, animal, fermeture, intempéries, travaux, véhicule en panne
-- Filtre automatique : seuls les événements `high` et `medium` sont conservés
-- **Ring buffer `deque(maxlen=4)`** par zone — pas de base de données, zéro persistance
+- **Tous les niveaux de sévérité conservés** (`high` / `medium` / `low`) — le filtre est côté UI
+- **Ring buffer `deque(maxlen=10)`** par zone — persisté sur disque (`/app/state`)
 - **SSE `/stream`** → dashboard admin mis à jour en temps réel
+- **Toggle UI** : "Tous les flashs" vs "Urgences uniquement" (filtrage `high`)
 
 > Usage strictement interne (admin uniquement). L'app publique ne redistribue pas ce contenu.
 
@@ -287,13 +288,14 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 | `MISTRAL_API_KEY` | Clé API Mistral (TTS) | Oui |
 | `MISTRAL_VOICE_ID` | ID de voix Mistral Voxtral | Oui |
 | `JWT_SECRET` | Clé secrète JWT (32+ chars) | Oui |
-| `WHISPER_MODEL` | Modèle STT service (`small`, `large-v3`) | Non (défaut: `small`) |
+| `WHISPER_MODEL` | Modèle Whisper du STT service (`small`, `medium`, `large-v3`) | Non (défaut: `small`) |
+| `WATCHER_WHISPER_MODEL` | Modèle Whisper du watcher (séparé du STT) | Non (défaut: `small` — `large-v3` cause OOM) |
 | `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `groq/llama-3.1-8b-instant`) |
 | `PROMPT_VERSION` | Version du prompt (`v1.0`–`v1.2`) | Non (défaut: `v1.1`) |
 | `DATABASE_URL` | URL base de données | Non (défaut: SQLite) |
-| `DEV_MODE` | Endpoints de développement | Non (défaut: `false`) |
+| `DEV_MODE` | Endpoints de développement (ex: `/admin/seed`, mots de passe reset retournés en clair) | Non (défaut: `false`) |
 | `POLL_INTERVAL_S` | Intervalle polling watcher (secondes) | Non (défaut: `15`) |
-| `MAX_EVENTS_PER_ZONE` | Ring buffer watcher | Non (défaut: `4`) |
+| `MAX_EVENTS_PER_ZONE` | Ring buffer watcher | Non (défaut: `10`) |
 | `LANGFUSE_PUBLIC_KEY` | Clé publique Langfuse | Non |
 | `LANGFUSE_SECRET_KEY` | Clé secrète Langfuse | Non |
 | `LANGFUSE_HOST` | URL Langfuse | Non (défaut: cloud.langfuse.com) |

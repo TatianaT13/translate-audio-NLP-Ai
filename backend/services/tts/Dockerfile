@@ -5,8 +5,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY pyproject.toml ./
+# Torch CPU-only first (évite ~2 Go de libs CUDA inutiles), puis le reste
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv /opt/venv && \
+    uv pip install --python /opt/venv/bin/python \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch && \
     uv pip install --python /opt/venv/bin/python -r pyproject.toml
 
 FROM python:3.11-slim AS runtime

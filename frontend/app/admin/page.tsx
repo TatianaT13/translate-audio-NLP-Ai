@@ -1204,14 +1204,26 @@ interface TrafficTabProps {
   lastUpdate: Date | null;
 }
 function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
-  const totalEvents = Object.values(snapshot).flat().length;
+  const [filter, setFilter] = useState<"all" | "urgent">("all");
+
+  const filterFn = (ev: TrafficEvent) =>
+    filter === "all" ? true : ev.severity === "high";
+
+  const filteredSnapshot: TrafficSnapshot = {
+    nord:  (snapshot.nord  ?? []).filter(filterFn),
+    sud:   (snapshot.sud   ?? []).filter(filterFn),
+    ouest: (snapshot.ouest ?? []).filter(filterFn),
+  };
+
+  const totalShown   = Object.values(filteredSnapshot).flat().length;
+  const totalAll     = Object.values(snapshot).flat().length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
       {/* Status bar */}
       <div style={{
-        display: "flex", alignItems: "center", gap: "12px",
+        display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
         padding: "10px 16px", borderRadius: "12px",
         background: C.surface, border: `1px solid ${C.border}`,
         fontSize: "12px",
@@ -1228,7 +1240,7 @@ function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
         </span>
         <span style={{ color: C.muted }}>·</span>
         <span style={{ color: C.muted }}>
-          {totalEvents} incident{totalEvents !== 1 ? "s" : ""} actif{totalEvents !== 1 ? "s" : ""}
+          {totalShown} sur {totalAll} évènement{totalAll !== 1 ? "s" : ""}
         </span>
         {lastUpdate && (
           <>
@@ -1238,16 +1250,35 @@ function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
             </span>
           </>
         )}
-        <span style={{ marginLeft: "auto", fontSize: "10px", color: C.muted, opacity: 0.6 }}>
-          autorouteinfo.fr · usage interne admin
-        </span>
+
+        {/* Toggle filtre */}
+        <div style={{
+          marginLeft: "auto", display: "flex", gap: "4px",
+          padding: "3px", borderRadius: "999px", background: "var(--background)",
+          border: `1px solid ${C.border}`,
+        }}>
+          {([
+            { key: "all",    label: "Tous les flashs" },
+            { key: "urgent", label: "Urgences uniquement" },
+          ] as const).map(opt => (
+            <button key={opt.key} onClick={() => setFilter(opt.key)} style={{
+              padding: "5px 12px", borderRadius: "999px", fontSize: "11px",
+              cursor: "pointer", border: "none", fontWeight: 500,
+              background: filter === opt.key ? "rgba(201,169,110,0.15)" : "transparent",
+              color: filter === opt.key ? C.accent : C.muted,
+              transition: "all 0.15s",
+            }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 3 colonnes zones */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-        <ZoneColumn zone="nord"  events={snapshot.nord  ?? []} />
-        <ZoneColumn zone="sud"   events={snapshot.sud   ?? []} />
-        <ZoneColumn zone="ouest" events={snapshot.ouest ?? []} />
+        <ZoneColumn zone="nord"  events={filteredSnapshot.nord} />
+        <ZoneColumn zone="sud"   events={filteredSnapshot.sud} />
+        <ZoneColumn zone="ouest" events={filteredSnapshot.ouest} />
       </div>
 
     </div>

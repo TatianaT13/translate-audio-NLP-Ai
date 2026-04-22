@@ -149,9 +149,12 @@ services:
     ports:
       - "8005:8005"
     environment:
-      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      # Whisper small/medium suffisant ici (flashs de ~30s, pas besoin de large-v3 → OOM)
+      - WHISPER_MODEL=${WATCHER_WHISPER_MODEL:-small}
       - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
       - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
+    mem_limit: 2g
+    mem_reservation: 1g
     volumes:
       - watcher_data:/app/state
     restart: unless-stopped

@@ -58,9 +58,17 @@ def main():
                     ("latency_llm_ms",   float(row["latency_llm_ms"])),
                     ("language_prob",    float(row["language_prob"])),
                 ]
-                bleu = float(row["bleu"])
-                if bleu >= 0:
-                    scores_data.append(("bleu", bleu))
+                # Métriques de qualité (si disponibles)
+                for metric in ("bleu", "meteor", "wer", "tts_wer"):
+                    raw = row.get(metric, "")
+                    if raw == "" or raw is None:
+                        continue
+                    try:
+                        v = float(raw)
+                        if v >= 0:
+                            scores_data.append((metric, v))
+                    except ValueError:
+                        pass
 
                 batch = [
                     # Créer la trace

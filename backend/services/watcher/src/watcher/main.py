@@ -251,19 +251,17 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
         print(f"[watcher] {zone} | transcrit, aucun événement détecté", flush=True)
         return
 
-    # Filtrer severity >= medium (pas les "low" / ralentissements banals)
-    filtered = [ev for ev in events if ev.severity in ("high", "medium")]
-    if not filtered:
-        print(f"[watcher] {zone} | {len(events)} event(s) low severity ignorés", flush=True)
-        return
+    # On garde TOUS les events (low/medium/high) — le filtre est côté frontend
+    # pour que l'utilisateur choisisse "Tous" vs "Urgences uniquement"
 
     # Traduction auto du texte complet en parallèle vers toutes les langues cibles
     translations = await _translate_batch(text, client)
     if translations:
         print(f"[watcher] {zone} | traduit en {list(translations.keys())}", flush=True)
 
-    for ev in filtered:
+    for ev in events:
         _events[zone].append(_event_to_dict(ev, translations))
+    filtered = events  # alias pour le print ci-dessous
         print(
             f"[watcher] {zone} | {ev.severity.upper():6s} {ev.type:20s} "
             f"{', '.join(ev.routes) or '—'}  {ev.direction}",
