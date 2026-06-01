@@ -598,12 +598,13 @@ export default function Home() {
 
   const runDemo = async () => {
     try {
-      const res = await fetch("/demo.mp3");
-      if (!res.ok) throw new Error("Fichier démo introuvable");
+      const res = await fetch(`/demo.mp3?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Fichier démo introuvable (HTTP ${res.status})`);
       const blob = await res.blob();
       run(blob);
-    } catch {
-      setError("Fichier démo non disponible. Déposez votre propre audio.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Fichier démo non disponible";
+      setError(`${msg}. Déposez votre propre audio.`);
       setStep("error");
     }
   };
