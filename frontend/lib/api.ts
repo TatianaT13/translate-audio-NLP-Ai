@@ -13,6 +13,10 @@ export interface ProcessResult {
   latency_llm_ms:     number;
   latency_tts_ms:     number;
   latency_total_ms:   number;
+  prompt_tokens?:     number;
+  completion_tokens?: number;
+  total_tokens?:      number;
+  cost_usd?:          number;
 }
 
 async function getAuthHeaders(): Promise<HeadersInit> {

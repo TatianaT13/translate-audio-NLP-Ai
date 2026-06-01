@@ -296,12 +296,22 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload }
                 <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: m.color }}>{display}</span>
                 <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>{m.label}</span>
               </div>
-              {i < latencies.length - 1 && (
-                <div style={{ width: "1px", height: "28px", background: "var(--border)" }} />
-              )}
+              <div style={{ width: "1px", height: "28px", background: "var(--border)" }} />
             </div>
           );
         })}
+
+        {/* Coût LLM (Langfuse pricing) */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--accent)" }}>
+            {result.cost_usd != null && result.cost_usd > 0
+              ? `$${result.cost_usd.toFixed(5)}`
+              : "—"}
+          </span>
+          <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>
+            Coût {result.total_tokens ? `· ${result.total_tokens} tok` : ""}
+          </span>
+        </div>
       </div>
     </div>
   );
