@@ -72,6 +72,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Prometheus /metrics endpoint (req/s, latency p50/p95/p99 par route, etc.)
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

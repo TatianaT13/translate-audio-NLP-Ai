@@ -36,6 +36,9 @@ TTS_BACKEND = os.getenv("TTS_BACKEND", "mistral" if MISTRAL_API_KEY else "local"
 app = FastAPI(title="TTS Service", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
+
 # Cache MMS local
 _tts_cache: dict = {}
 LANG_MODELS = {

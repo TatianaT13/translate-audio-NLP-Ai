@@ -1,0 +1,48 @@
+# Prometheus scrape config — collecte les métriques /metrics de chaque service
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    project: translate-audio-nlp
+
+scrape_configs:
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8004"]
+        labels: { service: gateway }
+
+  - job_name: pipeline
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["pipeline:8000"]
+        labels: { service: pipeline }
+
+  - job_name: stt
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["stt:8001"]
+        labels: { service: stt }
+
+  - job_name: llm
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["llm:8002"]
+        labels: { service: llm }
+
+  - job_name: tts
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["tts:8003"]
+        labels: { service: tts }
+
+  - job_name: watcher
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["watcher:8005"]
+        labels: { service: watcher }

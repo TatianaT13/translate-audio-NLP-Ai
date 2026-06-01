@@ -691,16 +691,26 @@ function InfraTab() {
         </div>
       )}
 
-      <ComingSoon
-        title="Grafana — Métriques système"
-        description="CPU, mémoire, requêtes/sec par service Docker. Dashboards Prometheus + Grafana intégrés au docker-compose."
-        icon={
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
-            <path d="m7 10 3 3 3-3 3 3"/>
-          </svg>
-        }
-      />
+      {/* Grafana embedded — live metrics from Prometheus */}
+      <Card title="Grafana — métriques live (Prometheus)">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+          <p style={{ fontSize: "11px", color: C.muted }}>
+            Requêtes/s, latence p95, taux erreurs, services up
+          </p>
+          <a href="http://localhost:3001/d/llmops-overview" target="_blank" rel="noreferrer" style={{
+            fontSize: "11px", padding: "4px 12px", borderRadius: "8px",
+            background: "rgba(201,169,110,0.08)", border: `1px solid ${C.border}`,
+            color: C.accent, textDecoration: "none",
+          }}>
+            Ouvrir Grafana ↗
+          </a>
+        </div>
+        <iframe
+          src="http://localhost:3001/d/llmops-overview?orgId=1&kiosk=tv&refresh=10s&theme=dark"
+          style={{ width: "100%", height: "600px", border: `1px solid ${C.border}`, borderRadius: "12px" }}
+          title="Grafana — LLMOps Overview"
+        />
+      </Card>
     </div>
   );
 }

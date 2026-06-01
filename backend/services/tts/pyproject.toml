@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "numpy>=1.26",
     "scipy>=1.11",
+    "prometheus-fastapi-instrumentator>=7.0",
 ]
 
 [build-system]
