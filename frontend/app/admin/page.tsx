@@ -565,13 +565,26 @@ function ExperimentsTab() {
         </table>
       </div>
 
-      {/* Roadmap MLflow */}
-      <div style={{
-        padding: "12px 16px", borderRadius: "10px", fontSize: "11px",
-        background: "rgba(201,169,110,0.06)", border: `1px solid ${C.border}`, color: C.muted,
-      }}>
-        Phase 4 — intégration MLflow model registry prévue
-      </div>
+      {/* MLflow Model Registry embedded */}
+      <Card title="MLflow — Model Registry + Experiment Tracking">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+          <p style={{ fontSize: "11px", color: C.muted }}>
+            84 runs historiques · 3 modèles enregistrés (whisper-stt, llama-translation, voxtral-tts)
+          </p>
+          <a href="http://localhost:5050" target="_blank" rel="noreferrer" style={{
+            fontSize: "11px", padding: "4px 12px", borderRadius: "8px",
+            background: "rgba(201,169,110,0.08)", border: `1px solid ${C.border}`,
+            color: C.accent, textDecoration: "none",
+          }}>
+            Ouvrir MLflow ↗
+          </a>
+        </div>
+        <iframe
+          src="http://localhost:5050/#/experiments"
+          style={{ width: "100%", height: "600px", border: `1px solid ${C.border}`, borderRadius: "12px" }}
+          title="MLflow"
+        />
+      </Card>
     </div>
   );
 }
