@@ -21,6 +21,9 @@ from stt.whisper_service import WhisperService
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
+
 _whisper_cache: dict[str, WhisperService] = {}
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
 

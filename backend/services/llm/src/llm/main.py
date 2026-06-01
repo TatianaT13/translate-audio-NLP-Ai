@@ -126,6 +126,9 @@ def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float, di
 app = FastAPI(title="LLM Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
+
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "groq/llama-3.1-8b-instant")
 DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v1.1")
 

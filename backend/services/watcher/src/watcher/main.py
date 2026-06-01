@@ -102,6 +102,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

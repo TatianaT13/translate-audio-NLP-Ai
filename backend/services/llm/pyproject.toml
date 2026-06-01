@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "python-dotenv>=1.0",
+    "prometheus-fastapi-instrumentator>=7.0",
 ]
 
 [build-system]
