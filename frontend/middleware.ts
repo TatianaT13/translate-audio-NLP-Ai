@@ -22,5 +22,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclure tous les assets statiques + extensions de fichiers du middleware d'auth
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:mp3|wav|m4a|ogg|svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
 };
