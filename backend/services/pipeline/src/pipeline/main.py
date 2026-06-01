@@ -231,6 +231,9 @@ async def process(
     t_total = time.perf_counter()
     try:
         result = await pipeline_chain.ainvoke(initial_state)
+    except HTTPException:
+        # Erreurs déjà formatées par les étapes (garde-fou, TTS guardrail, etc.)
+        raise
     except httpx.HTTPStatusError as e:
         import traceback
         print(f"[pipeline] HTTPStatusError: {e.response.status_code} {e.response.text}", flush=True)
