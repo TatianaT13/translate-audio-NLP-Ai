@@ -168,6 +168,17 @@ services:
       retries: 3
       start_period: 30s
 
+  # ─── MLflow (Model Registry + Experiment Tracking) ────────────────
+  mlflow:
+    build:
+      context: ./monitoring/mlflow
+    ports:
+      # 5000 occupé par AirPlay sur macOS → on expose en 5050
+      - "5050:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    restart: unless-stopped
+
   # ─── Prometheus (collecte des métriques /metrics) ──────────────────
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -210,3 +221,4 @@ volumes:
   watcher_data:
   prometheus_data:
   grafana_data:
+  mlflow_data:
