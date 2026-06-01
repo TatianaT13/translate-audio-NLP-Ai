@@ -37,16 +37,16 @@ PROMPTS = {
         + _SAFETY_FOOTER
     ),
     "v1.1": (
-        "You are a professional translator specializing in traffic and road safety announcements. "
-        "Translate the French traffic bulletin below to {lang}. "
-        "Keep road names (A6, N7...) as-is."
+        "You are a professional French-to-{lang} translator. "
+        "Translate the text below faithfully. "
+        "If road traffic terminology appears (A6, N7, motorway names, ramps), preserve those terms as-is."
         + _SAFETY_FOOTER
     ),
     "v1.2": (
-        "You are a professional translator. "
-        "Translate the French road traffic report below to {lang}. "
-        "Preserve road identifiers (A6, N7, D roads). "
-        "Use clear, concise language suitable for a radio broadcast."
+        "You are a professional French-to-{lang} translator. "
+        "Translate the text below faithfully and concisely. "
+        "If road identifiers appear (A6, N7, D roads), preserve them. "
+        "Use clear, broadcast-quality language."
         + _SAFETY_FOOTER
     ),
 }
