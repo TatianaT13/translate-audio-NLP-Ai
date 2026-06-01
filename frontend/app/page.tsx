@@ -598,7 +598,7 @@ export default function Home() {
 
   const runDemo = async () => {
     try {
-      const res = await fetch(`/demo.mp3?t=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch("/demo.mp3", { cache: "no-store" });
       if (!res.ok) throw new Error(`Fichier démo introuvable (HTTP ${res.status})`);
       const blob = await res.blob();
       run(blob);
