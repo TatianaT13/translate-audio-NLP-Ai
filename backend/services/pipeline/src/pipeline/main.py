@@ -150,15 +150,16 @@ async def _tts_step(state: dict) -> dict:
             json={"text": state["translation"], "lang": state["target_lang"]},
         )
 
-    # Mistral Voxtral peut renvoyer 403 "guardrail_violation" sur du contenu sensible.
-    # On préserve la traduction (déjà obtenue) et on remonte une 422 propre côté client.
-    if resp.status_code == 403 and "guardrail" in resp.text.lower():
+    # Mistral Voxtral peut renvoyer "guardrail_violation" sur du contenu sensible.
+    # Le TTS service le ré-emballe en 500 avec le body Mistral en clair → on détecte
+    # le mot-clé dans le body, quel que soit le code de retour.
+    if not resp.is_success and ("guardrail" in resp.text.lower() or "guardrail_violation" in resp.text.lower()):
         print(f"[pipeline] TTS guardrail (Mistral) — translation préservée", flush=True)
         raise HTTPException(
             status_code=422,
             detail=(
-                "Synthèse vocale refusée par le fournisseur TTS (politique de contenu). "
-                "La traduction texte est disponible ci-dessus."
+                "Synthèse vocale refusée par le fournisseur TTS (politique de contenu Mistral). "
+                "La traduction texte reste disponible — l'audio n'a pas pu être généré."
             ),
         )
 
