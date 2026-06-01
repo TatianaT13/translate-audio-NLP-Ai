@@ -98,6 +98,10 @@ async def _llm_step(state: dict) -> dict:
         **state,
         "translation": data["translation"],
         "latency_llm_ms": round((time.perf_counter() - t0) * 1000),
+        "prompt_tokens":     data.get("prompt_tokens",     0),
+        "completion_tokens": data.get("completion_tokens", 0),
+        "total_tokens":      data.get("total_tokens",      0),
+        "cost_usd":          data.get("cost_usd",          0.0),
     }
 
 
@@ -204,14 +208,20 @@ async def process(
                     "llm_model":      llm_model,
                     "prompt_version": prompt_version,
                     "target_lang":    target_lang,
+                    "prompt_tokens":     result.get("prompt_tokens", 0),
+                    "completion_tokens": result.get("completion_tokens", 0),
+                    "total_tokens":      result.get("total_tokens", 0),
+                    "cost_usd":          result.get("cost_usd", 0.0),
                 },
             )
             for name, value in [
-                ("latency_total_ms", latency_total_ms),
-                ("latency_stt_ms",   result["latency_stt_ms"]),
-                ("latency_llm_ms",   result["latency_llm_ms"]),
-                ("latency_tts_ms",   result["latency_tts_ms"]),
-                ("language_prob",    result["language_prob"]),
+                ("latency_total_ms",  latency_total_ms),
+                ("latency_stt_ms",    result["latency_stt_ms"]),
+                ("latency_llm_ms",    result["latency_llm_ms"]),
+                ("latency_tts_ms",    result["latency_tts_ms"]),
+                ("language_prob",     result["language_prob"]),
+                ("cost_usd",          result.get("cost_usd", 0.0)),
+                ("total_tokens",      result.get("total_tokens", 0)),
             ]:
                 _lf.score(trace_id=tid, name=name, value=value, comment=comment)
             _lf.flush()
@@ -229,4 +239,8 @@ async def process(
         "latency_llm_ms":     result["latency_llm_ms"],
         "latency_tts_ms":     result["latency_tts_ms"],
         "latency_total_ms":   latency_total_ms,
+        "prompt_tokens":      result.get("prompt_tokens", 0),
+        "completion_tokens":  result.get("completion_tokens", 0),
+        "total_tokens":       result.get("total_tokens", 0),
+        "cost_usd":           result.get("cost_usd", 0.0),
     }

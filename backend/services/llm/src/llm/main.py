@@ -44,7 +44,9 @@ LANG_LABELS = {
 }
 
 
-def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float]:
+def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float, dict]:
+    """Retourne (translation, latency_ms, usage_info).
+    usage_info = {prompt_tokens, completion_tokens, total_tokens, cost_usd}"""
     t0 = time.perf_counter()
     response = litellm.completion(
         model=model,
@@ -53,7 +55,24 @@ def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float]:
     )
     translation = response.choices[0].message.content.strip()
     latency_ms = (time.perf_counter() - t0) * 1000
-    return translation, latency_ms
+
+    # Extraction tokens + coût (LiteLLM pricing intégré)
+    usage = getattr(response, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+    total_tokens = getattr(usage, "total_tokens", 0) if usage else 0
+
+    try:
+        cost_usd = litellm.completion_cost(completion_response=response)
+    except Exception:
+        cost_usd = 0.0
+
+    return translation, latency_ms, {
+        "prompt_tokens":     prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens":      total_tokens,
+        "cost_usd":          round(float(cost_usd), 6),
+    }
 
 app = FastAPI(title="LLM Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -70,11 +89,15 @@ class TranslateRequest(BaseModel):
 
 
 class TranslateResponse(BaseModel):
-    translation: str
-    model: str
-    prompt_version: str
-    target_lang: str
-    latency_ms: int
+    translation:        str
+    model:              str
+    prompt_version:     str
+    target_lang:        str
+    latency_ms:         int
+    prompt_tokens:      int = 0
+    completion_tokens:  int = 0
+    total_tokens:       int = 0
+    cost_usd:           float = 0.0
 
 
 @app.get("/health")
@@ -109,7 +132,7 @@ def translate(req: TranslateRequest):
     prompt = PROMPTS[req.prompt_version].format(lang=lang_label, text=req.text)
 
     try:
-        translation, latency_ms = call_llm(prompt=prompt, model=req.model)
+        translation, latency_ms, usage_info = call_llm(prompt=prompt, model=req.model)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,4 +142,5 @@ def translate(req: TranslateRequest):
         prompt_version=req.prompt_version,
         target_lang=req.target_lang,
         latency_ms=int(latency_ms),
+        **usage_info,
     )
