@@ -44,6 +44,10 @@ _INJECTION_PATTERNS = [
     # Détournement vers d'autres tâches
     r"\b(translate|traduis)\s+to\s+\w+\s+then\s+",
     r"\boutput\s+(only|just)\s+the\s+word\s+",
+    # Méta-instructions auto-référentielles (l'audio EST l'instruction au lieu d'avoir du contenu)
+    r"^\s*(?:traduis|traduit?)[\s\-]?(moi|nous|le|la|les)?\s*[çc]?a?[\s.?!]*$",
+    r"^\s*(?:translate|interpret)\s+(this|that|me|us|it|me\s+this)?[\s.?!]*$",
+    r"^\s*(?:fais|fait)[\s\-]?(moi|nous)\s+(une|la|cette)?\s*traduction",
 ]
 
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _INJECTION_PATTERNS]
@@ -103,8 +107,14 @@ def check_output(translation: str, source_text: str) -> GuardResult:
     if not translation or len(translation.strip()) < 1:
         return GuardResult(safe=False, reason="empty_output")
 
-    # Ratio de longueur — une trad ne devrait pas faire 10× le source
-    if len(translation) > max(len(source_text) * 6, 1500):
+    # Ratio de longueur — anti-hallucination. Une trad fait ~0.8-1.5× la source ;
+    # au-delà de 4× sur les inputs courts, c'est probablement une hallucination.
+    src_len = len(source_text.strip())
+    if src_len < 50:
+        # Input court → la sortie ne devrait pas dépasser 4× ou 200 chars
+        if len(translation) > max(src_len * 4, 200):
+            return GuardResult(safe=False, reason="hallucination_short_input")
+    elif len(translation) > max(src_len * 6, 1500):
         return GuardResult(safe=False, reason="output_length_anomaly")
 
     # Détection de prompt leak ou de réponse hors-tâche
