@@ -6,6 +6,13 @@ const PUBLIC_PATHS  = ["/login", "/register", "/forgot-password", "/reset-passwo
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Laisser passer les assets statiques (tout ce qui contient un point dans le nom)
+  // ex: /demo.mp3, /favicon.ico, /logo.png
+  const lastSegment = pathname.split("/").pop() ?? "";
+  if (lastSegment.includes(".")) {
+    return NextResponse.next();
+  }
+
   // Allow public auth routes
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
@@ -22,6 +29,10 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Exclure tous les assets statiques + extensions de fichiers du middleware d'auth
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:mp3|wav|m4a|ogg|svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  // Exclure _next, favicon, et toute URL contenant un point (= asset statique)
+  // Le motif "[^.]*$" matche uniquement les chemins SANS point → seules les pages app passent par l'auth
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)", "/"],
 };
+
+// Note : on filtre dans le middleware lui-même les requêtes vers des fichiers
+// statiques (extension dans le pathname) pour éviter les 400 sur /demo.mp3
