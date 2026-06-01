@@ -104,15 +104,22 @@ def check_output(translation: str, source_text: str) -> GuardResult:
     if not translation or len(translation.strip()) < 1:
         return GuardResult(safe=False, reason="empty_output")
 
-    # Ratio de longueur — anti-hallucination. Une trad fait ~0.8-1.5× la source ;
-    # au-delà de 4× sur les inputs courts, c'est probablement une hallucination.
+    # Ratio de longueur — anti-hallucination. Une trad EN/UK/ES/DE fait ~0.8-1.5× la
+    # source FR. Au-delà, le LLM a probablement inventé du contenu (test fréquent :
+    # input court → fausse annonce trafic complète).
     src_len = len(source_text.strip())
-    if src_len < 50:
-        # Input court → la sortie ne devrait pas dépasser 4× ou 200 chars
-        if len(translation) > max(src_len * 4, 200):
-            return GuardResult(safe=False, reason="hallucination_short_input")
-    elif len(translation) > max(src_len * 6, 1500):
-        return GuardResult(safe=False, reason="output_length_anomaly")
+    out_len = len(translation.strip())
+
+    if src_len < 30:
+        # Input très court : 80 chars max (laisse de la marge pour DE qui est verbeux)
+        max_out = 80
+    elif src_len < 200:
+        max_out = src_len * 4   # ex: 100 chars FR → 400 chars max
+    else:
+        max_out = src_len * 3
+
+    if out_len > max_out:
+        return GuardResult(safe=False, reason="hallucination_length_ratio")
 
     # Détection de prompt leak ou de réponse hors-tâche
     leak_markers = [
