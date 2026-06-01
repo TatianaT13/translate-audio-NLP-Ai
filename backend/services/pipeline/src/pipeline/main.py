@@ -247,39 +247,96 @@ async def process(
 
     latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
-    # ── Trace Langfuse ────────────────────────────────────────────────────────
-    if _lf:
+    # ── Trace Langfuse (trace + generation + scores via API REST) ─────────────
+    # On utilise l'API ingestion directement pour avoir une "generation" propre
+    # avec model + usage → Langfuse remplit ses dashboards Cost / Tokens natifs.
+    if _lf and os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
         try:
             import uuid as _uuid
+            from datetime import datetime as _dt, timezone as _tz
             tid     = str(_uuid.uuid4())
+            gid     = str(_uuid.uuid4())
+            now_iso = _dt.now(_tz.utc).isoformat()
             comment = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
-            _lf.trace(
-                id=tid,
-                name="translation",
-                metadata={
-                    "whisper_model":  whisper_model,
-                    "llm_model":      llm_model,
-                    "prompt_version": prompt_version,
-                    "target_lang":    target_lang,
-                    "prompt_tokens":     result.get("prompt_tokens", 0),
-                    "completion_tokens": result.get("completion_tokens", 0),
-                    "total_tokens":      result.get("total_tokens", 0),
-                    "cost_usd":          result.get("cost_usd", 0.0),
+
+            prompt_tokens     = result.get("prompt_tokens",     0)
+            completion_tokens = result.get("completion_tokens", 0)
+            total_tokens      = result.get("total_tokens",      0)
+            cost_usd          = result.get("cost_usd",          0.0)
+
+            batch = [
+                {
+                    "id": str(_uuid.uuid4()),
+                    "type": "trace-create",
+                    "timestamp": now_iso,
+                    "body": {
+                        "id": tid,
+                        "name": "translation",
+                        "metadata": {
+                            "whisper_model":  whisper_model,
+                            "llm_model":      llm_model,
+                            "prompt_version": prompt_version,
+                            "target_lang":    target_lang,
+                            "filename":       filename,
+                        },
+                    },
                 },
-            )
-            for name, value in [
-                ("latency_total_ms",  latency_total_ms),
-                ("latency_stt_ms",    result["latency_stt_ms"]),
-                ("latency_llm_ms",    result["latency_llm_ms"]),
-                ("latency_tts_ms",    result["latency_tts_ms"]),
-                ("language_prob",     result["language_prob"]),
-                ("cost_usd",          result.get("cost_usd", 0.0)),
-                ("total_tokens",      result.get("total_tokens", 0)),
-            ]:
-                _lf.score(trace_id=tid, name=name, value=value, comment=comment)
-            _lf.flush()
-        except Exception:
-            pass  # Ne jamais bloquer le pipeline pour Langfuse
+                {
+                    "id": str(_uuid.uuid4()),
+                    "type": "generation-create",
+                    "timestamp": now_iso,
+                    "body": {
+                        "id":         gid,
+                        "traceId":    tid,
+                        "name":       "translate",
+                        "model":      llm_model,
+                        "input":      result["source_text"][:2000],
+                        "output":     result["translation"][:2000],
+                        "usage":      {
+                            "input":  prompt_tokens,
+                            "output": completion_tokens,
+                            "total":  total_tokens,
+                            "unit":   "TOKENS",
+                            "inputCost":  None,
+                            "outputCost": None,
+                            "totalCost":  cost_usd,
+                        },
+                    },
+                },
+                *[
+                    {
+                        "id": str(_uuid.uuid4()),
+                        "type": "score-create",
+                        "timestamp": now_iso,
+                        "body": {
+                            "id":       str(_uuid.uuid4()),
+                            "traceId":  tid,
+                            "name":     name,
+                            "value":    float(value),
+                            "dataType": "NUMERIC",
+                            "comment":  comment,
+                        },
+                    }
+                    for name, value in [
+                        ("latency_total_ms",  latency_total_ms),
+                        ("latency_stt_ms",    result["latency_stt_ms"]),
+                        ("latency_llm_ms",    result["latency_llm_ms"]),
+                        ("latency_tts_ms",    result["latency_tts_ms"]),
+                        ("language_prob",     result["language_prob"]),
+                        ("cost_usd",          cost_usd),
+                        ("total_tokens",      total_tokens),
+                    ]
+                ],
+            ]
+
+            async with httpx.AsyncClient(timeout=8.0) as lf_client:
+                await lf_client.post(
+                    f"{os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')}/api/public/ingestion",
+                    auth=(os.getenv("LANGFUSE_PUBLIC_KEY"), os.getenv("LANGFUSE_SECRET_KEY")),
+                    json={"batch": batch},
+                )
+        except Exception as e:
+            print(f"[pipeline] Langfuse ingestion warning: {e}", flush=True)
 
     return {
         "source_text":        result["source_text"],
