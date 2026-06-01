@@ -184,6 +184,18 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
             <StatCard label="BLEU moy."   value={langfuse.avg_bleu   > 0 ? langfuse.avg_bleu.toFixed(3)   : "—"} color={C.tts} />
             <StatCard label="METEOR moy." value={(langfuse.avg_meteor ?? 0) > 0 ? (langfuse.avg_meteor ?? 0).toFixed(4) : "—"} color={C.green} />
             <StatCard label="WER moy."    value={(langfuse.avg_wer    ?? 0) > 0 ? (langfuse.avg_wer    ?? 0).toFixed(4) : "—"} color={C.red} sub="↓ mieux" />
+            <StatCard
+              label="Coût total"
+              value={(langfuse.total_cost_usd ?? 0) > 0 ? `$${(langfuse.total_cost_usd ?? 0).toFixed(4)}` : "—"}
+              color={C.accent}
+              sub={(langfuse.total_tokens ?? 0) > 0 ? `${(langfuse.total_tokens ?? 0).toLocaleString()} tokens` : undefined}
+            />
+            <StatCard
+              label="Coût moy. / run"
+              value={(langfuse.avg_cost_usd ?? 0) > 0 ? `$${(langfuse.avg_cost_usd ?? 0).toFixed(5)}` : "—"}
+              color={C.accent}
+              sub={(langfuse.avg_tokens ?? 0) > 0 ? `${Math.round(langfuse.avg_tokens ?? 0)} tok/run` : undefined}
+            />
           </div>
         </section>
       )}
@@ -201,7 +213,7 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
 }
 
 // ── Traces & Models tab ───────────────────────────────────────────────────────
-type SortKey = "count" | "avg_stt_ms" | "avg_llm_ms" | "avg_total_ms" | "avg_bleu" | "avg_meteor" | "avg_wer";
+type SortKey = "count" | "avg_stt_ms" | "avg_llm_ms" | "avg_total_ms" | "avg_bleu" | "avg_meteor" | "avg_wer" | "avg_cost_usd";
 
 const COLUMNS: { key: SortKey | null; label: string; color?: string; asc?: boolean }[] = [
   { key: null,           label: "Whisper",     color: C.stt },
@@ -214,6 +226,7 @@ const COLUMNS: { key: SortKey | null; label: string; color?: string; asc?: boole
   { key: "avg_bleu",     label: "BLEU ↑",      color: C.tts,   asc: false },
   { key: "avg_meteor",   label: "METEOR ↑",    color: C.green, asc: false },
   { key: "avg_wer",      label: "WER ↓",       color: C.red,   asc: true },
+  { key: "avg_cost_usd", label: "Coût ↓",      color: C.accent, asc: true },
 ];
 
 function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
@@ -382,6 +395,11 @@ function TracesTab({ langfuse }: { langfuse: LangfuseMetrics | null }) {
                     </td>
                     <td style={{ padding: "10px 12px", color: C.red, fontVariantNumeric: "tabular-nums" }}>
                       {m.avg_wer != null ? m.avg_wer.toFixed(4) : <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: C.accent, fontVariantNumeric: "tabular-nums" }}>
+                      {m.avg_cost_usd != null && m.avg_cost_usd > 0
+                        ? `$${m.avg_cost_usd.toFixed(5)}`
+                        : <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
                   </tr>
                 ))}

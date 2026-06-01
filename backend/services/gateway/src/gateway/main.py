@@ -563,6 +563,10 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
                 model_map[key].setdefault("meteors", []).append(s["value"])
             elif s["name"] == "wer":
                 model_map[key].setdefault("wers", []).append(s["value"])
+            elif s["name"] == "cost_usd":
+                model_map[key].setdefault("costs", []).append(s["value"])
+            elif s["name"] == "total_tokens":
+                model_map[key].setdefault("tokens", []).append(s["value"])
 
         model_stats = [
             schemas.LangfuseModelStat(
@@ -576,9 +580,14 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
                 avg_bleu=round(avg(v["bleus"]), 3) if v.get("bleus") else None,
                 avg_meteor=round(avg(v["meteors"]), 4) if v.get("meteors") else None,
                 avg_wer=round(avg(v["wers"]), 4) if v.get("wers") else None,
+                avg_cost_usd=round(avg(v["costs"]), 6) if v.get("costs") else None,
+                avg_tokens=round(avg(v["tokens"]), 1) if v.get("tokens") else None,
             )
             for v in sorted(model_map.values(), key=lambda x: x["count"], reverse=True)
         ]
+
+        cost_list   = by_name.get("cost_usd", [])
+        tokens_list = by_name.get("total_tokens", [])
 
         return schemas.LangfuseMetricsResponse(
             connected=True,
@@ -590,11 +599,16 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
             avg_bleu=round(avg(by_name.get("bleu", [])), 3),
             avg_meteor=round(avg(by_name.get("meteor", [])), 4),
             avg_wer=round(avg(by_name.get("wer", [])), 4),
+            avg_cost_usd=round(avg(cost_list), 6),
+            total_cost_usd=round(sum(cost_list), 4),
+            avg_tokens=round(avg(tokens_list), 1),
+            total_tokens=int(sum(tokens_list)),
             bleu_scores=by_name.get("bleu", []),
             meteor_scores=by_name.get("meteor", []),
             wer_scores=by_name.get("wer", []),
             language_probs=by_name.get("language_prob", []),
             latencies_total=by_name.get("latency_total_ms", []),
+            cost_scores=cost_list,
             model_stats=model_stats,
         )
 
