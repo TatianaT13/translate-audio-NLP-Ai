@@ -41,13 +41,10 @@ _INJECTION_PATTERNS = [
     r"\bforget\s+(your|all)\s+(instructions?|previous\s+context|role)\b",
     r"\bjailbreak\b",
     r"\bDAN\s+mode\b",
-    # Détournement vers d'autres tâches
-    r"\b(translate|traduis)\s+to\s+\w+\s+then\s+",
+    # Détournement vers d'autres tâches (vrais malicious patterns, pas de simples
+    # demandes de traduction — "traduis-moi ça" est LÉGITIME, on traduit, c'est tout)
+    r"\b(translate|traduis)\s+to\s+\w+\s+then\s+(do|generate|write|output)\b",
     r"\boutput\s+(only|just)\s+the\s+word\s+",
-    # Méta-instructions auto-référentielles (l'audio EST l'instruction au lieu d'avoir du contenu)
-    r"^\s*(?:traduis|traduit?)[\s\-]?(moi|nous|le|la|les)?\s*[çc]?a?[\s.?!]*$",
-    r"^\s*(?:translate|interpret)\s+(this|that|me|us|it|me\s+this)?[\s.?!]*$",
-    r"^\s*(?:fais|fait)[\s\-]?(moi|nous)\s+(une|la|cette)?\s*traduction",
 ]
 
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _INJECTION_PATTERNS]
