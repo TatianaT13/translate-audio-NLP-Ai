@@ -16,6 +16,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.runnables import RunnableLambda
 
+from pipeline.prompt_guard import check_input, check_output, sandbox_user_text
+
 load_dotenv()
 
 STT_URL = os.getenv("STT_URL", "http://localhost:8001")
@@ -70,6 +72,23 @@ async def _stt_step(state: dict) -> dict:
             "Please use a clear French speech recording."
         )
 
+    # ── Garde-fou : pre-check anti prompt injection sur le texte transcrit ──
+    guard = check_input(text)
+    if not guard.safe:
+        # Loggué en clair pour audit + remonté en 422 lisible côté front
+        print(
+            f"[pipeline] BLOCKED input — reason={guard.reason} "
+            f"pattern={guard.matched_pattern!r} text={text[:120]!r}",
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Contenu audio suspect détecté. Cette plateforme traduit uniquement "
+                "des messages d'information routière — merci de réessayer avec un audio approprié."
+            ),
+        )
+
     return {
         **state,
         "source_text": text,
@@ -80,13 +99,15 @@ async def _stt_step(state: dict) -> dict:
 
 
 async def _llm_step(state: dict) -> dict:
-    """Étape 2 : traduction texte → texte traduit via LLM Service."""
+    """Étape 2 : traduction texte → texte traduit via LLM Service.
+    Le texte est sandboxé (échappement balises) avant envoi au LLM."""
     t0 = time.perf_counter()
+    safe_text = sandbox_user_text(state["source_text"])
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{LLM_URL}/translate",
             json={
-                "text": state["source_text"],
+                "text": safe_text,
                 "target_lang": state["target_lang"],
                 "model": state["llm_model"],
                 "prompt_version": state["prompt_version"],
@@ -94,9 +115,24 @@ async def _llm_step(state: dict) -> dict:
         )
     resp.raise_for_status()
     data = resp.json()
+    translation = data["translation"]
+
+    # ── Garde-fou : post-check sur la sortie LLM ─────────────────────────────
+    guard = check_output(translation, state["source_text"])
+    if not guard.safe:
+        print(
+            f"[pipeline] BLOCKED output — reason={guard.reason} "
+            f"marker={guard.matched_pattern!r} translation={translation[:120]!r}",
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail="Réponse du modèle incohérente avec la tâche de traduction. Veuillez réessayer.",
+        )
+
     return {
         **state,
-        "translation": data["translation"],
+        "translation": translation,
         "latency_llm_ms": round((time.perf_counter() - t0) * 1000),
         "prompt_tokens":     data.get("prompt_tokens",     0),
         "completion_tokens": data.get("completion_tokens", 0),
