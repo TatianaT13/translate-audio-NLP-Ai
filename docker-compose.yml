@@ -97,8 +97,8 @@ services:
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
     volumes:
       - whisper_cache:/home/app/.cache/huggingface
-    mem_limit: 4g
-    mem_reservation: 2g
+    mem_limit: 6g
+    mem_reservation: 3g
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
