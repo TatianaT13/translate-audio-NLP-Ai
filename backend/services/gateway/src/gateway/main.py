@@ -58,6 +58,7 @@ def _read_experiments_csv() -> list[dict]:
     return rows
 
 PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
+MLFLOW_URL   = os.getenv("MLFLOW_URL",   "http://mlflow:5000")
 STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
 LLM_URL      = os.getenv("LLM_URL",      "http://llm:8002")
 TTS_URL      = os.getenv("TTS_URL",      "http://tts:8003")
@@ -800,3 +801,69 @@ async def admin_services_health(_: models.User = Depends(get_admin_user)):
                     "detail":     {},
                 })
     return {"services": results}
+
+
+@app.get("/admin/mlflow/summary")
+async def admin_mlflow_summary(_: models.User = Depends(get_admin_user)):
+    """Récupère les expériences + modèles registry MLflow via son API REST."""
+    summary = {
+        "connected":   False,
+        "url":         "http://localhost:5050",
+        "experiments": [],
+        "models":      [],
+        "total_runs":  0,
+        "error":       None,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            # Liste des expériences
+            r = await client.post(f"{MLFLOW_URL}/api/2.0/mlflow/experiments/search",
+                                  json={"max_results": 100})
+            if not r.is_success:
+                summary["error"] = f"MLflow HTTP {r.status_code}"
+                return summary
+            experiments = r.json().get("experiments", [])
+
+            # Pour chaque expérience, compter les runs
+            total_runs = 0
+            exp_list = []
+            for exp in experiments:
+                runs_r = await client.post(
+                    f"{MLFLOW_URL}/api/2.0/mlflow/runs/search",
+                    json={"experiment_ids": [exp["experiment_id"]], "max_results": 1000},
+                )
+                runs_count = len(runs_r.json().get("runs", [])) if runs_r.is_success else 0
+                total_runs += runs_count
+                exp_list.append({
+                    "id":    exp["experiment_id"],
+                    "name":  exp["name"],
+                    "runs":  runs_count,
+                })
+
+            # Models registry
+            m = await client.get(
+                f"{MLFLOW_URL}/api/2.0/mlflow/registered-models/search",
+                params={"max_results": 100},
+            )
+            models_list = []
+            if m.is_success:
+                for rm in m.json().get("registered_models", []):
+                    tags = {t["key"]: t["value"] for t in rm.get("tags", [])}
+                    models_list.append({
+                        "name":               rm["name"],
+                        "description":        rm.get("description", ""),
+                        "production_version": tags.get("production_version", "—"),
+                        "provider":           tags.get("provider", ""),
+                        "type":               tags.get("type", ""),
+                    })
+
+            summary.update({
+                "connected":   True,
+                "experiments": exp_list,
+                "models":      models_list,
+                "total_runs":  total_runs,
+            })
+
+    except Exception as exc:
+        summary["error"] = str(exc)
+    return summary

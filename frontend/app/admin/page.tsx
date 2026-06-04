@@ -7,9 +7,10 @@ import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
   getServicesHealth, getTrafficEvents, openTrafficStream, getExperiments, synthesizeTTS,
+  getMlflowSummary,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
   type ServiceHealth, type TrafficEvent, type TrafficSnapshot,
-  type ExperimentRun, type ExperimentsResponse,
+  type ExperimentRun, type ExperimentsResponse, type MlflowSummary,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -565,27 +566,117 @@ function ExperimentsTab() {
         </table>
       </div>
 
-      {/* MLflow Model Registry embedded */}
-      <Card title="MLflow — Model Registry + Experiment Tracking">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-          <p style={{ fontSize: "11px", color: C.muted }}>
-            84 runs historiques · 3 modèles enregistrés (whisper-stt, llama-translation, voxtral-tts)
-          </p>
-          <a href="http://localhost:5050" target="_blank" rel="noreferrer" style={{
-            fontSize: "11px", padding: "4px 12px", borderRadius: "8px",
-            background: "rgba(201,169,110,0.08)", border: `1px solid ${C.border}`,
-            color: C.accent, textDecoration: "none",
-          }}>
-            Ouvrir MLflow ↗
-          </a>
-        </div>
-        <iframe
-          src="http://localhost:5050/#/experiments/1"
-          style={{ width: "100%", height: "600px", border: `1px solid ${C.border}`, borderRadius: "12px" }}
-          title="MLflow"
-        />
-      </Card>
+      {/* MLflow — données natives via API REST */}
+      <MlflowPanel />
     </div>
+  );
+}
+
+// ── MLflow Panel — affichage natif des données du model registry ──────────────
+function MlflowPanel() {
+  const [summary, setSummary] = useState<MlflowSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMlflowSummary()
+      .then(setSummary)
+      .catch(() => setSummary({ connected: false, url: "", experiments: [], models: [], total_runs: 0, error: "Connexion impossible" }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Card title="MLflow — Model Registry"><Loader /></Card>;
+
+  if (!summary?.connected) {
+    return (
+      <Card title="MLflow — Model Registry">
+        <p style={{ fontSize: "12px", color: C.red }}>
+          ✗ MLflow non joignable {summary?.error ? `(${summary.error})` : ""}
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="MLflow — Model Registry + Experiment Tracking">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+        <p style={{ fontSize: "12px", color: C.muted, margin: 0 }}>
+          <strong style={{ color: C.fg }}>{summary.total_runs}</strong> runs ·{" "}
+          <strong style={{ color: C.fg }}>{summary.experiments.length}</strong> expériences ·{" "}
+          <strong style={{ color: C.fg }}>{summary.models.length}</strong> modèles registry
+        </p>
+        <a href={summary.url + "/#/experiments/1"} target="_blank" rel="noreferrer" style={{
+          fontSize: "12px", padding: "6px 14px", borderRadius: "8px", fontWeight: 500,
+          background: "rgba(201,169,110,0.12)", border: `1px solid var(--accent-dim)`,
+          color: C.accent, textDecoration: "none",
+        }}>
+          Ouvrir MLflow UI ↗
+        </a>
+      </div>
+
+      {/* Models registry */}
+      <p style={{ fontSize: "11px", letterSpacing: "0.2em", color: C.muted, textTransform: "uppercase", marginBottom: "8px" }}>
+        Modèles en production
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+        {summary.models.map(m => (
+          <div key={m.name} style={{
+            padding: "14px 16px", borderRadius: "12px",
+            background: C.surface, border: `1px solid ${C.border}`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{
+                fontSize: "10px", padding: "2px 8px", borderRadius: "999px",
+                background: "rgba(201,169,110,0.1)", color: C.accent, letterSpacing: "0.1em",
+              }}>
+                {m.type.toUpperCase() || "MODEL"}
+              </span>
+              {m.provider && (
+                <span style={{ fontSize: "10px", color: C.muted, letterSpacing: "0.1em" }}>
+                  {m.provider}
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: C.fg, marginBottom: "4px" }}>
+              {m.name}
+            </p>
+            <p style={{ fontSize: "11px", color: C.muted, fontFamily: "monospace", marginBottom: "8px" }}>
+              {m.production_version}
+            </p>
+            {m.description && (
+              <p style={{ fontSize: "11px", color: C.muted, opacity: 0.7, lineHeight: 1.4 }}>
+                {m.description.length > 100 ? m.description.slice(0, 100) + "…" : m.description}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Experiments list */}
+      <p style={{ fontSize: "11px", letterSpacing: "0.2em", color: C.muted, textTransform: "uppercase", marginBottom: "8px" }}>
+        Expériences
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {summary.experiments.map(e => (
+          <a key={e.id} href={`${summary.url}/#/experiments/${e.id}`} target="_blank" rel="noreferrer" style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 14px", borderRadius: "10px",
+            background: C.surface, border: `1px solid ${C.border}`,
+            textDecoration: "none", color: "inherit",
+          }}>
+            <span style={{ fontSize: "13px", color: C.fg }}>{e.name}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "11px", color: C.muted }}>id={e.id}</span>
+              <span style={{
+                fontSize: "11px", padding: "2px 10px", borderRadius: "999px",
+                background: "rgba(126,201,160,0.1)", color: C.green,
+              }}>
+                {e.runs} runs
+              </span>
+            </span>
+          </a>
+        ))}
+      </div>
+    </Card>
   );
 }
 

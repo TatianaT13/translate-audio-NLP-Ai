@@ -94,6 +94,29 @@ export const deleteAdminUser = (id: number) =>
 export const seedAdmin = () =>
   apiFetch("/admin/seed", { method: "POST" });
 
+export interface MlflowExperiment {
+  id:   string;
+  name: string;
+  runs: number;
+}
+export interface MlflowModel {
+  name:               string;
+  description:        string;
+  production_version: string;
+  provider:           string;
+  type:               string;
+}
+export interface MlflowSummary {
+  connected:   boolean;
+  url:         string;
+  experiments: MlflowExperiment[];
+  models:      MlflowModel[];
+  total_runs:  number;
+  error?:      string | null;
+}
+export const getMlflowSummary = () =>
+  apiFetch<MlflowSummary>("/admin/mlflow/summary");
+
 export interface ServiceHealth {
   name:       string;
   port:       string;
