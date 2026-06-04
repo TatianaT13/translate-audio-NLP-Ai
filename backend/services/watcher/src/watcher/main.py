@@ -105,6 +105,35 @@ app.add_middleware(
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
 
+# ── Métriques business custom (au-delà du HTTP) ───────────────────────────────
+from prometheus_client import Counter
+
+WATCHER_POLLS = Counter(
+    "watcher_polls_total",
+    "Nombre de cycles de polling watcher",
+    labelnames=["zone", "status"],   # status: error, no_change, fresh, no_events, ok
+)
+WATCHER_EVENTS = Counter(
+    "watcher_events_extracted_total",
+    "Nombre d'événements trafic extraits par sévérité et type",
+    labelnames=["zone", "severity", "type"],
+)
+WATCHER_COST = Counter(
+    "watcher_translation_cost_usd_total",
+    "Coût LLM cumulé des traductions du watcher (USD)",
+    labelnames=["lang"],
+)
+WATCHER_TOKENS = Counter(
+    "watcher_translation_tokens_total",
+    "Tokens LLM cumulés des traductions du watcher",
+    labelnames=["lang"],
+)
+
+# ── Langfuse tracing (best-effort, ne bloque jamais) ─────────────────────────
+LANGFUSE_PUBLIC = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST   = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -166,9 +195,10 @@ def _is_fresh(ev: dict) -> bool:
         return False  # événements sans created_at (anciens) → drop
 
 
-async def _translate_batch(text: str, client: httpx.AsyncClient) -> dict[str, str]:
-    """Traduit le texte FR dans toutes les langues cibles en parallèle."""
-    async def _one(lang: str) -> tuple[str, str]:
+async def _translate_batch(text: str, client: httpx.AsyncClient) -> tuple[dict[str, str], dict[str, dict]]:
+    """Traduit le texte FR dans toutes les langues cibles en parallèle.
+    Retourne (translations, llm_meta) où llm_meta[lang] = {tokens, cost, model}."""
+    async def _one(lang: str) -> tuple[str, str, dict]:
         try:
             r = await client.post(
                 f"{LLM_URL}/translate",
@@ -176,13 +206,29 @@ async def _translate_batch(text: str, client: httpx.AsyncClient) -> dict[str, st
                 timeout=30.0,
             )
             if r.is_success:
-                return lang, r.json()["translation"]
+                data = r.json()
+                # Reporter coût + tokens en métriques Prometheus
+                cost   = float(data.get("cost_usd", 0) or 0)
+                tokens = int(data.get("total_tokens", 0) or 0)
+                if cost > 0:
+                    WATCHER_COST.labels(lang=lang).inc(cost)
+                if tokens > 0:
+                    WATCHER_TOKENS.labels(lang=lang).inc(tokens)
+                return lang, data["translation"], {
+                    "model":             data.get("model", ""),
+                    "prompt_tokens":     int(data.get("prompt_tokens", 0)),
+                    "completion_tokens": int(data.get("completion_tokens", 0)),
+                    "total_tokens":      tokens,
+                    "cost_usd":          cost,
+                }
         except Exception as e:
             print(f"[watcher] translate {lang} erreur: {e}", flush=True)
-        return lang, ""
+        return lang, "", {}
 
     results = await asyncio.gather(*[_one(l.strip()) for l in TRANSLATE_LANGS if l.strip()])
-    return {lang: tr for lang, tr in results if tr}
+    translations = {lang: tr for lang, tr, _ in results if tr}
+    llm_meta     = {lang: meta for lang, tr, meta in results if tr}
+    return translations, llm_meta
 
 
 def _broadcast(zone: str, events: list[dict]) -> None:
@@ -196,6 +242,143 @@ def _broadcast(zone: str, events: list[dict]) -> None:
             dead.append(q)
     for q in dead:
         _sse_clients.remove(q)
+
+
+# ── Tracing Langfuse end-to-end d'un cycle watcher ───────────────────────────
+
+async def _langfuse_trace_flash(
+    client: httpx.AsyncClient,
+    zone: str,
+    text: str,
+    lang_prob: float,
+    events: list,
+    translations: dict,
+    llm_meta: dict,
+) -> None:
+    """Envoie 1 trace Langfuse par flash polled avec spans STT + extraction + N generations."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+
+    tid = str(_uuid.uuid4())
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    # Compteurs par sévérité pour les scores
+    sev_counts = {"high": 0, "medium": 0, "low": 0}
+    for ev in events:
+        sev_counts[ev.severity] = sev_counts.get(ev.severity, 0) + 1
+    total_cost   = sum(m.get("cost_usd", 0)   for m in llm_meta.values())
+    total_tokens = sum(m.get("total_tokens", 0) for m in llm_meta.values())
+
+    batch = [
+        # Trace racine
+        {
+            "id": str(_uuid.uuid4()),
+            "type": "trace-create",
+            "timestamp": now_iso,
+            "body": {
+                "id": tid,
+                "name": "watcher_flash",
+                "input":  {"zone": zone},
+                "output": {"events_count": len(events), "translations": list(translations.keys())},
+                "metadata": {
+                    "zone":            zone,
+                    "events_total":    len(events),
+                    "events_high":     sev_counts["high"],
+                    "events_medium":   sev_counts["medium"],
+                    "events_low":      sev_counts["low"],
+                    "cost_usd_total":  round(total_cost, 6),
+                    "tokens_total":    total_tokens,
+                },
+            },
+        },
+        # Span STT
+        {
+            "id": str(_uuid.uuid4()),
+            "type": "span-create",
+            "timestamp": now_iso,
+            "body": {
+                "id":      str(_uuid.uuid4()),
+                "traceId": tid,
+                "name":    "stt",
+                "input":   {"source": "autorouteinfo.fr/" + zone},
+                "output":  {"text": text[:1000], "language_prob": lang_prob},
+            },
+        },
+        # Span event extraction
+        {
+            "id": str(_uuid.uuid4()),
+            "type": "span-create",
+            "timestamp": now_iso,
+            "body": {
+                "id":      str(_uuid.uuid4()),
+                "traceId": tid,
+                "name":    "event_extraction",
+                "input":   {"text": text[:500]},
+                "output":  {
+                    "events": [
+                        {"type": ev.type, "severity": ev.severity,
+                         "routes": ev.routes, "direction": ev.direction}
+                        for ev in events
+                    ],
+                },
+            },
+        },
+        # Generations pour chaque traduction
+        *[
+            {
+                "id": str(_uuid.uuid4()),
+                "type": "generation-create",
+                "timestamp": now_iso,
+                "body": {
+                    "id":      str(_uuid.uuid4()),
+                    "traceId": tid,
+                    "name":    f"translate_to_{lang}",
+                    "model":   meta.get("model", os.getenv("LLM_MODEL", "")),
+                    "input":   text[:1500],
+                    "output":  translations.get(lang, "")[:1500],
+                    "usage": {
+                        "input":     meta.get("prompt_tokens", 0),
+                        "output":    meta.get("completion_tokens", 0),
+                        "total":     meta.get("total_tokens", 0),
+                        "unit":      "TOKENS",
+                        "totalCost": meta.get("cost_usd", 0),
+                    },
+                },
+            }
+            for lang, meta in llm_meta.items()
+        ],
+        # Scores agrégés
+        *[
+            {
+                "id": str(_uuid.uuid4()),
+                "type": "score-create",
+                "timestamp": now_iso,
+                "body": {
+                    "id":       str(_uuid.uuid4()),
+                    "traceId":  tid,
+                    "name":     name,
+                    "value":    float(value),
+                    "dataType": "NUMERIC",
+                    "comment":  f"watcher | zone={zone}",
+                },
+            }
+            for name, value in [
+                ("events_total",   len(events)),
+                ("events_high",    sev_counts["high"]),
+                ("events_medium",  sev_counts["medium"]),
+                ("language_prob",  lang_prob),
+                ("cost_usd",       total_cost),
+                ("total_tokens",   total_tokens),
+            ]
+        ],
+    ]
+
+    await client.post(
+        f"{LANGFUSE_HOST}/api/public/ingestion",
+        auth=(LANGFUSE_PUBLIC, LANGFUSE_SECRET),
+        json={"batch": batch},
+        timeout=8.0,
+    )
 
 
 # ── Boucle de polling par zone ────────────────────────────────────────────────
@@ -215,6 +398,7 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
         # autorouteinfo.fr serveur instable : timeouts/connect errors fréquents → silencieux sauf si nouveau type
         msg = repr(e) if not str(e) else str(e)
         print(f"[watcher] {zone} | fetch erreur ({type(e).__name__}): {msg}", flush=True)
+        WATCHER_POLLS.labels(zone=zone, status="error").inc()
         return
 
     # Mise à jour ETag/Last-Modified
@@ -224,10 +408,11 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
         st["lm"] = r.headers["Last-Modified"]
 
     if r.status_code == 304:
-        # Pas de changement
+        WATCHER_POLLS.labels(zone=zone, status="no_change").inc()
         return
 
     if r.status_code != 200 or len(r.content) < 10_000:
+        WATCHER_POLLS.labels(zone=zone, status="error").inc()
         return
 
     # Hash du contenu pour éviter de re-transcrire un MP3 identique
@@ -254,7 +439,12 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
 
     if not events:
         print(f"[watcher] {zone} | transcrit, aucun événement détecté", flush=True)
+        WATCHER_POLLS.labels(zone=zone, status="no_events").inc()
         return
+
+    # Comptage Prometheus par sévérité/type
+    for ev in events:
+        WATCHER_EVENTS.labels(zone=zone, severity=ev.severity, type=ev.type).inc()
 
     # Fusion : les events sur la même portion (mêmes routes + même direction)
     # sont regroupés en UNE carte affichée, avec :
@@ -279,7 +469,7 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
                 existing["type"] = ev.type   # type principal = le plus sévère
 
     # Traduction auto du texte complet en parallèle vers toutes les langues cibles
-    translations = await _translate_batch(text, client)
+    translations, llm_meta = await _translate_batch(text, client)
     if translations:
         print(f"[watcher] {zone} | traduit en {list(translations.keys())}", flush=True)
         # Injecter les traductions dans chaque event groupé
@@ -297,6 +487,14 @@ async def _poll_zone(zone: str, client: httpx.AsyncClient) -> None:
     # Persister sur disque puis broadcast
     _save_state()
     _broadcast(zone, list(_events[zone]))
+    WATCHER_POLLS.labels(zone=zone, status="ok").inc()
+
+    # ── Trace Langfuse end-to-end pour ce cycle ────────────────────────────
+    if LANGFUSE_PUBLIC and LANGFUSE_SECRET:
+        try:
+            await _langfuse_trace_flash(client, zone, text, lang_prob, events, translations, llm_meta)
+        except Exception as e:
+            print(f"[watcher] {zone} | langfuse trace erreur: {e}", flush=True)
 
 
 async def _watcher_loop() -> None:

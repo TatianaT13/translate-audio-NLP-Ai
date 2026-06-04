@@ -91,6 +91,85 @@
         }
       ],
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] } } }
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Watcher — Live Traffic Monitoring",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Watcher polls / minute par zone",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "sum by (zone, status) (rate(watcher_polls_total[5m])) * 60",
+          "legendFormat": "{{zone}} · {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 1 } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Événements extraits / heure par sévérité",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "sum by (severity) (rate(watcher_events_extracted_total[15m])) * 3600",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 1 } }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Coût LLM total watcher (USD)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "sum(watcher_translation_cost_usd_total)", "legendFormat": "cost" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 } }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Tokens LLM total watcher",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "sum(watcher_translation_tokens_total)", "legendFormat": "tokens" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 } }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Total événements extraits",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "sum(watcher_events_extracted_total)", "legendFormat": "events" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 } }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Polls réussis / total",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "sum(watcher_polls_total{status=\"ok\"}) / sum(watcher_polls_total)", "legendFormat": "success rate" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2 } }
     }
   ]
 }
