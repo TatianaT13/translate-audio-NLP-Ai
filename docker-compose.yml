@@ -47,6 +47,7 @@ services:
       - STT_URL=http://stt:8001
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
+      - MLFLOW_URL=http://mlflow:5000
     volumes:
       - gateway_data:/app/data
       - ./outputs/experiments:/app/experiments:ro
