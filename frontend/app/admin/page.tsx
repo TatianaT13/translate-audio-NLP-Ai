@@ -580,7 +580,7 @@ function ExperimentsTab() {
           </a>
         </div>
         <iframe
-          src="http://localhost:5050/#/experiments"
+          src="http://localhost:5050/"
           style={{ width: "100%", height: "600px", border: `1px solid ${C.border}`, borderRadius: "12px" }}
           title="MLflow"
         />
