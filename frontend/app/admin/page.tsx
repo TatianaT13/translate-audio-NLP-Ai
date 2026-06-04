@@ -1244,6 +1244,16 @@ function TrafficEventCard({ ev }: { ev: TrafficEvent }) {
             {ev.routes.join(" · ")}
           </span>
         )}
+        {/* Badge "aussi en X / Y" si l'event est dédoublonné cross-zones */}
+        {(ev as TrafficEvent & { alsoIn?: string[] }).alsoIn && (ev as TrafficEvent & { alsoIn: string[] }).alsoIn.length > 0 && (
+          <span style={{
+            fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em",
+            padding: "2px 8px", borderRadius: "999px",
+            background: "rgba(126,201,160,0.12)", color: C.green, whiteSpace: "nowrap",
+          }} title="Détecté aussi dans ces autres zones">
+            + {(ev as TrafficEvent & { alsoIn: string[] }).alsoIn.join(" + ")}
+          </span>
+        )}
         <span style={{ fontSize: "11px", color: C.muted, marginLeft: "auto", whiteSpace: "nowrap" }}>
           {ev.timestamp}
         </span>
@@ -1386,15 +1396,50 @@ interface TrafficTabProps {
 }
 function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
   const [filter, setFilter] = useState<"all" | "urgent">("all");
+  const [dedup,  setDedup]  = useState(true);   // dédup cross-zone par défaut ON
 
   const filterFn = (ev: TrafficEvent) =>
     filter === "all" ? true : ev.severity === "high";
 
-  const filteredSnapshot: TrafficSnapshot = {
+  let filteredSnapshot: TrafficSnapshot = {
     nord:  (snapshot.nord  ?? []).filter(filterFn),
     sud:   (snapshot.sud   ?? []).filter(filterFn),
     ouest: (snapshot.ouest ?? []).filter(filterFn),
   };
+
+  // Dédoublonnage cross-zones : si le même event (même routes + direction + types)
+  // apparaît dans plusieurs zones, on le garde uniquement dans la 1re zone (nord > sud > ouest)
+  // et on lui ajoute un tableau zonesAlsoIn pour afficher un badge.
+  if (dedup) {
+    const seen = new Map<string, { firstZone: string; alsoIn: string[] }>();
+    const order: ("nord" | "sud" | "ouest")[] = ["nord", "sud", "ouest"];
+    // 1er passage : indexer
+    for (const zone of order) {
+      for (const ev of filteredSnapshot[zone]) {
+        const types = (ev.types && ev.types.length > 0 ? ev.types : [ev.type]).slice().sort().join("+");
+        const key = `${types}|${(ev.routes ?? []).join(",")}|${ev.direction ?? ""}`;
+        if (!seen.has(key)) {
+          seen.set(key, { firstZone: zone, alsoIn: [] });
+        } else if (!seen.get(key)!.alsoIn.includes(zone)) {
+          seen.get(key)!.alsoIn.push(zone);
+        }
+      }
+    }
+    // 2e passage : filtrer + annoter avec alsoIn
+    const newSnap: TrafficSnapshot = { nord: [], sud: [], ouest: [] };
+    for (const zone of order) {
+      for (const ev of filteredSnapshot[zone]) {
+        const types = (ev.types && ev.types.length > 0 ? ev.types : [ev.type]).slice().sort().join("+");
+        const key = `${types}|${(ev.routes ?? []).join(",")}|${ev.direction ?? ""}`;
+        const info = seen.get(key)!;
+        if (info.firstZone === zone) {
+          // 1re occurrence → on l'ajoute avec les autres zones
+          (newSnap[zone] as TrafficEvent[]).push({ ...ev, zone, alsoIn: info.alsoIn } as TrafficEvent & { alsoIn: string[] });
+        }
+      }
+    }
+    filteredSnapshot = newSnap;
+  }
 
   const totalShown   = Object.values(filteredSnapshot).flat().length;
   const totalAll     = Object.values(snapshot).flat().length;
@@ -1432,26 +1477,39 @@ function TrafficTab({ snapshot, connected, lastUpdate }: TrafficTabProps) {
           </>
         )}
 
-        {/* Toggle filtre */}
-        <div style={{
-          marginLeft: "auto", display: "flex", gap: "4px",
-          padding: "3px", borderRadius: "999px", background: "var(--background)",
-          border: `1px solid ${C.border}`,
-        }}>
-          {([
-            { key: "all",    label: "Tous les flashs" },
-            { key: "urgent", label: "Urgences uniquement" },
-          ] as const).map(opt => (
-            <button key={opt.key} onClick={() => setFilter(opt.key)} style={{
-              padding: "5px 12px", borderRadius: "999px", fontSize: "11px",
-              cursor: "pointer", border: "none", fontWeight: 500,
-              background: filter === opt.key ? "rgba(201,169,110,0.15)" : "transparent",
-              color: filter === opt.key ? C.accent : C.muted,
-              transition: "all 0.15s",
-            }}>
-              {opt.label}
-            </button>
-          ))}
+        {/* Toggles filtre + dedup */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {/* Dédoublonner cross-zones */}
+          <button onClick={() => setDedup(d => !d)} style={{
+            padding: "5px 12px", borderRadius: "999px", fontSize: "11px",
+            cursor: "pointer", border: `1px solid ${C.border}`, fontWeight: 500,
+            background: dedup ? "rgba(126,201,160,0.12)" : "transparent",
+            color: dedup ? C.green : C.muted,
+            transition: "all 0.15s",
+          }} title="Quand un même événement est diffusé dans plusieurs zones, ne l'afficher qu'une fois">
+            {dedup ? "✓" : "○"} Sans doublons cross-zones
+          </button>
+
+          <div style={{
+            display: "flex", gap: "4px",
+            padding: "3px", borderRadius: "999px", background: "var(--background)",
+            border: `1px solid ${C.border}`,
+          }}>
+            {([
+              { key: "all",    label: "Tous les flashs" },
+              { key: "urgent", label: "Urgences uniquement" },
+            ] as const).map(opt => (
+              <button key={opt.key} onClick={() => setFilter(opt.key)} style={{
+                padding: "5px 12px", borderRadius: "999px", fontSize: "11px",
+                cursor: "pointer", border: "none", fontWeight: 500,
+                background: filter === opt.key ? "rgba(201,169,110,0.15)" : "transparent",
+                color: filter === opt.key ? C.accent : C.muted,
+                transition: "all 0.15s",
+              }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

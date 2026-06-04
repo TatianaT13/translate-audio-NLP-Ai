@@ -157,6 +157,7 @@ export interface TrafficEvent {
   timestamp:     string;
   delay_hint:    string;
   translations?: Record<string, string>;
+  alsoIn?:       string[];      // zones supplémentaires où ce même event est diffusé (dédup client)
 }
 
 export async function synthesizeTTS(text: string, lang: string): Promise<Blob> {
