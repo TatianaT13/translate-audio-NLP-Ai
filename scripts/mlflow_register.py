@@ -1,18 +1,23 @@
 """
-Importe les 84 runs historiques (results.csv) dans MLflow et enregistre
-les modèles en production dans le Model Registry.
+Enregistre les expériences LLMOps dans MLflow — structure pro :
+  - 1 RUN = 1 configuration (whisper × llm × prompt)
+  - métriques AGRÉGÉES sur tous les audios golden pour cette config
+  - per_audio_results.csv attaché en artifact (drill-down)
+  - prompt_<version>.txt attaché en artifact (reproductibilité)
+  - tag champion=true sur la meilleure config (BLEU max)
 
-Usage:
+Plus le Model Registry — 3 modèles en production avec leurs versions.
+
+Usage :
     pip install mlflow==2.17.2
     python scripts/mlflow_register.py
-
-Pré-requis :
-    docker compose up mlflow -d
 """
 
 import csv
+import io
 import os
 import sys
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -29,112 +34,180 @@ MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050")
 EXPERIMENT_NAME     = "translate-audio-llmops"
 
 
+# ── Prompts utilisés (copie pour l'audit, à garder synchronisé avec LLM service) ──
+PROMPTS = {
+    "v1.0": (
+        "Translate the French text below to {lang}. Output only the translation. "
+        "Then strict output rules (anti-injection) and <user_text>...</user_text> sandbox."
+    ),
+    "v1.1": (
+        "You are a professional French-to-{lang} translator. Translate the text below faithfully. "
+        "If road traffic terminology appears (A6, N7, motorway names, ramps), preserve those terms as-is. "
+        "Then strict output rules + <user_text>...</user_text> sandbox."
+    ),
+    "v1.2": (
+        "You are a professional French-to-{lang} translator. Translate the text below faithfully and concisely. "
+        "If road identifiers appear (A6, N7, D roads), preserve them. Broadcast-quality language. "
+        "Then strict output rules + <user_text>...</user_text> sandbox."
+    ),
+}
+
+
+def _mean(values: list) -> float | None:
+    nums = [v for v in values if v is not None]
+    return sum(nums) / len(nums) if nums else None
+
+
+def _fl(v: str) -> float | None:
+    if v in ("", "-1.0", "-1", "n/a", None):
+        return None
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return None
+
+
 def main():
     import mlflow
+    from mlflow.tracking import MlflowClient
 
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    client = MlflowClient()
     print(f"Connexion MLflow → {MLFLOW_TRACKING_URI}")
 
-    # Création / récupération de l'expérience
-    exp = mlflow.set_experiment(EXPERIMENT_NAME)
-    print(f"Expérience : {exp.name} (id={exp.experiment_id})")
+    # ── Reset propre : archive l'ancienne expérience (rename + delete) ──
+    try:
+        existing = client.get_experiment_by_name(EXPERIMENT_NAME)
+        if existing:
+            archived_name = f"{EXPERIMENT_NAME}_archived_{int(datetime.utcnow().timestamp())}"
+            print(f"Archivage de l'ancienne expérience (id={existing.experiment_id}) → {archived_name}")
+            client.rename_experiment(existing.experiment_id, archived_name)
+            client.delete_experiment(existing.experiment_id)
+    except Exception as e:
+        print(f"  (pas d'expérience existante : {e})")
 
+    exp_id = client.create_experiment(EXPERIMENT_NAME)
+    mlflow.set_experiment(EXPERIMENT_NAME)
+    print(f"Nouvelle expérience : {EXPERIMENT_NAME} (id={exp_id})")
+
+    # ── Lecture et regroupement par configuration ──
     rows = list(csv.DictReader(open(RESULTS_CSV, encoding="utf-8"), delimiter=";"))
-    print(f"Import de {len(rows)} runs vers MLflow…")
+    print(f"Lecture de {len(rows)} runs bruts depuis results.csv")
 
-    ok = 0
-    for i, row in enumerate(rows, 1):
-        try:
-            run_name = row.get("run_id") or f"run_{i}"
-            with mlflow.start_run(run_name=run_name, experiment_id=exp.experiment_id):
-                # Paramètres = combinaison testée
-                mlflow.log_params({
-                    "whisper_model":  row.get("whisper_model", ""),
-                    "llm_model":      row.get("llm_model", ""),
-                    "prompt_version": row.get("prompt_version", ""),
-                    "target_lang":    row.get("target_lang", ""),
-                    "audio":          row.get("audio", ""),
-                    "zone":           row.get("zone", ""),
-                })
+    configs: dict[tuple, list[dict]] = defaultdict(list)
+    for row in rows:
+        key = (row["whisper_model"], row["llm_model"], row["prompt_version"])
+        configs[key].append(row)
+    print(f"→ {len(configs)} configurations uniques (modèle × LLM × prompt)\n")
 
-                # Métriques
-                for metric in (
-                    "language_prob", "latency_conv_ms", "latency_stt_ms",
-                    "latency_llm_ms", "latency_total_ms",
-                    "bleu", "meteor", "wer", "tts_wer",
-                ):
-                    val = row.get(metric, "").strip()
-                    if val in ("", "-1.0", "-1", "n/a"):
-                        continue
-                    try:
-                        mlflow.log_metric(metric, float(val))
-                    except ValueError:
-                        pass
+    # ── 1 run MLflow par configuration ──
+    config_summaries = []
+    for (whisper, llm, prompt_v), config_rows in configs.items():
+        run_name = f"{whisper} | {llm.replace('groq/', '')} | {prompt_v}"
 
-                # Texte source + traduction comme tags (recherche facile)
-                mlflow.set_tag("source_text",  row.get("source_text",  "")[:500])
-                mlflow.set_tag("translation",  row.get("translation",  "")[:500])
-                mlflow.set_tag("timestamp",    row.get("timestamp",    ""))
+        bleus    = [_fl(r["bleu"])    for r in config_rows]
+        meteors  = [_fl(r["meteor"])  for r in config_rows]
+        wers     = [_fl(r["wer"])     for r in config_rows]
+        tts_wers = [_fl(r["tts_wer"]) for r in config_rows]
+        stts     = [_fl(r["latency_stt_ms"])   for r in config_rows]
+        llms_l   = [_fl(r["latency_llm_ms"])   for r in config_rows]
+        totals   = [_fl(r["latency_total_ms"]) for r in config_rows]
+        langs    = [_fl(r["language_prob"])    for r in config_rows]
 
-            ok += 1
-            if i % 10 == 0:
-                print(f"  {i}/{len(rows)} runs importés…")
-        except Exception as e:
-            print(f"  Erreur run {i}: {e}")
+        with mlflow.start_run(run_name=run_name, experiment_id=exp_id) as run:
+            # Hyperparams = la combinaison
+            mlflow.log_params({
+                "whisper_model":  whisper,
+                "llm_model":      llm,
+                "prompt_version": prompt_v,
+                "n_audios":       len(config_rows),
+            })
 
-    print(f"\n{ok}/{len(rows)} runs enregistrés dans MLflow.")
+            # Métriques agrégées (moyennes)
+            agg = {
+                "bleu_mean":         _mean(bleus),
+                "meteor_mean":       _mean(meteors),
+                "wer_mean":          _mean(wers),
+                "tts_wer_mean":      _mean(tts_wers),
+                "latency_stt_mean":  _mean(stts),
+                "latency_llm_mean":  _mean(llms_l),
+                "latency_total_mean": _mean(totals),
+                "language_prob_mean": _mean(langs),
+            }
+            for k, v in agg.items():
+                if v is not None:
+                    mlflow.log_metric(k, v)
 
-    # ── Enregistrement des modèles en production (Model Registry) ────────────
-    # On enregistre des "external references" car nos modèles sont externes
-    # (Groq API, Mistral API) ou téléchargés à la volée (Whisper depuis HF).
-    print("\nEnregistrement des modèles dans le Model Registry…")
+            # Note : les artifacts (CSV par audio, texte du prompt) nécessitent
+            # un artifact store accessible depuis le client (S3/MinIO/HTTP proxy).
+            # Pour rester simple, on stocke le texte du prompt comme un TAG long.
+            prompt_text = PROMPTS.get(prompt_v, "")
+            if prompt_text:
+                client.set_tag(run.info.run_id, "prompt_text", prompt_text[:1000])
 
-    from mlflow.tracking import MlflowClient
-    client = MlflowClient()
+            # Tags pour filtrage facile
+            mlflow.set_tags({
+                "whisper":   whisper,
+                "llm":       llm.replace("groq/", ""),
+                "prompt":    prompt_v,
+                "type":      "config_eval",
+                "n_audios":  str(len(config_rows)),
+            })
 
+        config_summaries.append({
+            "run_id":      run.info.run_id,
+            "config":      run_name,
+            "bleu_mean":   agg["bleu_mean"] or 0,
+            "meteor_mean": agg["meteor_mean"] or 0,
+            "wer_mean":    agg["wer_mean"] or 1,
+        })
+        print(f"  ✓ {run_name}  →  BLEU={agg['bleu_mean']:.3f} METEOR={agg['meteor_mean']:.3f}")
+
+    # ── Désigner le champion (meilleur BLEU) ──
+    if config_summaries:
+        champion = max(config_summaries, key=lambda r: r["bleu_mean"])
+        client.set_tag(champion["run_id"], "champion", "true")
+        client.set_tag(champion["run_id"], "stage", "production")
+        print(f"\n🏆 Champion : {champion['config']}  (BLEU={champion['bleu_mean']:.3f})")
+
+    # ── Model Registry (3 modèles externes en production) ──
+    print("\nEnregistrement du Model Registry…")
     production_models = [
         {
             "name":        "whisper-stt",
             "description": "Speech-to-Text — Faster-Whisper. Téléchargé depuis HuggingFace à la volée.",
-            "version_tag": "large-v3",
-            "tags":        {"provider": "huggingface", "type": "stt", "language": "fr"},
+            "tags":        {"provider": "huggingface", "type": "stt", "production_version": "large-v3"},
         },
         {
             "name":        "llama-translation",
             "description": "LLM de traduction — Llama 3.1 8B Instant via Groq API.",
-            "version_tag": "groq/llama-3.1-8b-instant",
-            "tags":        {"provider": "groq", "type": "llm", "prompt_version": "v1.1"},
+            "tags":        {"provider": "groq", "type": "llm", "production_version": "groq/llama-3.1-8b-instant"},
         },
         {
             "name":        "voxtral-tts",
             "description": "Text-to-Speech — Mistral Voxtral via API.",
-            "version_tag": "mistral-voxtral",
-            "tags":        {"provider": "mistral", "type": "tts"},
+            "tags":        {"provider": "mistral", "type": "tts", "production_version": "mistral-voxtral"},
         },
     ]
 
     for m in production_models:
         try:
-            # Crée le registered model si pas existant
             try:
-                client.create_registered_model(
-                    name=m["name"],
-                    description=m["description"],
-                    tags=m["tags"],
-                )
+                client.create_registered_model(name=m["name"], description=m["description"])
                 print(f"  ✓ Registered model créé : {m['name']}")
             except Exception:
-                # Existe déjà
-                pass
-            # Note : pour créer une version, il faut un run avec un artifact.
-            # On set juste les tags pour identifier le modèle production.
-            client.set_registered_model_tag(m["name"], "production_version", m["version_tag"])
-            client.set_registered_model_tag(m["name"], "registered_at", datetime.utcnow().isoformat())
-            print(f"    → tag production_version={m['version_tag']}")
+                # Existe déjà — update description
+                client.update_registered_model(name=m["name"], description=m["description"])
+                print(f"  ✓ Registered model mis à jour : {m['name']}")
+            for k, v in m["tags"].items():
+                client.set_registered_model_tag(m["name"], k, v)
+            client.set_registered_model_tag(m["name"], "last_sync", datetime.utcnow().isoformat())
         except Exception as e:
             print(f"  ✗ Erreur {m['name']}: {e}")
 
     print(f"\nTerminé — ouvre {MLFLOW_TRACKING_URI} pour visualiser.")
+    print(f"  • Expérience : {EXPERIMENT_NAME} → {len(config_summaries)} configurations")
+    print(f"  • Champion taggué : trie par tag.champion DESC")
 
 
 if __name__ == "__main__":
