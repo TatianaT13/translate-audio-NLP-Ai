@@ -101,11 +101,11 @@ services:
     mem_reservation: 3g
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health', timeout=20).status==200 else 1)"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 25s
+      retries: 5
+      start_period: 60s
 
   # ─── LLM (LiteLLM → Groq / OpenAI / Anthropic) ─────────────────────
   llm:
