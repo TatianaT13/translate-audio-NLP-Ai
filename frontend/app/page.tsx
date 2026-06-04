@@ -16,6 +16,25 @@ const LANGS = [
   { code: "de", label: "Allemand" },
 ];
 
+// Options sélectionnables — alimentent le panel "Configuration avancée"
+const WHISPER_MODELS = [
+  { value: "small",    label: "Whisper small (rapide)" },
+  { value: "medium",   label: "Whisper medium (équilibré)" },
+  { value: "large-v3", label: "Whisper large-v3 (qualité max)" },
+];
+
+const LLM_MODELS = [
+  { value: "groq/llama-3.1-8b-instant",    label: "Llama 3.1 8B Instant (Groq) — défaut" },
+  { value: "groq/llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Groq) — qualité" },
+  { value: "groq/mixtral-8x7b-32768",       label: "Mixtral 8x7B (Groq)" },
+];
+
+const PROMPT_VERSIONS = [
+  { value: "v1.0", label: "v1.0 — basique" },
+  { value: "v1.1", label: "v1.1 — pro traffic (défaut)" },
+  { value: "v1.2", label: "v1.2 — broadcast quality" },
+];
+
 const S = {
   gap4:  "4px",
   gap8:  "8px",
@@ -542,7 +561,25 @@ export default function Home() {
   const [error, setError]           = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isHoverDrop, setIsHoverDrop] = useState(false);
-  const [targetLang, setTargetLang] = useState("en");
+  const [targetLang,    setTargetLang]    = useState("en");
+  const [whisperModel,  setWhisperModel]  = useState("large-v3");
+  const [llmModel,      setLlmModel]      = useState("groq/llama-3.1-8b-instant");
+  const [promptVersion, setPromptVersion] = useState("v1.1");
+  const [showAdvanced,  setShowAdvanced]  = useState(false);
+
+  // Persister les choix avancés dans localStorage
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("translate_config") || "{}");
+      if (saved.whisperModel)  setWhisperModel(saved.whisperModel);
+      if (saved.llmModel)      setLlmModel(saved.llmModel);
+      if (saved.promptVersion) setPromptVersion(saved.promptVersion);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("translate_config", JSON.stringify({ whisperModel, llmModel, promptVersion }));
+  }, [whisperModel, llmModel, promptVersion]);
   const [toast, setToast]           = useState<string | null>(null);
   const [copied, setCopied]         = useState(false);
 
@@ -581,7 +618,7 @@ export default function Home() {
     }
     setStep("processing");
     try {
-      const res = await runPipeline(file, targetLang);
+      const res = await runPipeline(file, targetLang, llmModel, promptVersion, whisperModel);
       setResult(res);
       if (res.audio_b64) {
         const blob = audioFromBase64(res.audio_b64, res.audio_content_type);
@@ -594,7 +631,7 @@ export default function Home() {
       setError(e instanceof Error ? e.message : String(e));
       setStep("error");
     }
-  }, [targetLang]);
+  }, [targetLang, llmModel, promptVersion, whisperModel]);
 
   const runDemo = async () => {
     try {
@@ -740,7 +777,7 @@ export default function Home() {
           <div style={{ animation: "fadeUp 0.5s ease forwards" }}>
 
             {/* Language selector */}
-            <div style={{ display: "flex", gap: S.gap8, justifyContent: "center", flexWrap: "wrap", marginBottom: S.gap24 }}>
+            <div style={{ display: "flex", gap: S.gap8, justifyContent: "center", flexWrap: "wrap", marginBottom: S.gap16 }}>
               {LANGS.map(l => (
                 <button key={l.code} onClick={() => setTargetLang(l.code)} style={{
                   padding: "7px 18px", borderRadius: "999px", fontSize: "13px",
@@ -752,6 +789,52 @@ export default function Home() {
                   {l.label}
                 </button>
               ))}
+            </div>
+
+            {/* Configuration avancée — collapsible */}
+            <div style={{ marginBottom: S.gap24, textAlign: "center" }}>
+              <button onClick={() => setShowAdvanced(s => !s)} style={{
+                fontSize: "11px", color: "var(--muted)", background: "none",
+                border: "none", cursor: "pointer", padding: "4px 8px",
+                letterSpacing: "0.1em", textTransform: "uppercase",
+              }}>
+                {showAdvanced ? "▾" : "▸"} Configuration avancée
+              </button>
+
+              {showAdvanced && (
+                <div style={{
+                  marginTop: S.gap12, padding: "16px 18px", borderRadius: "14px",
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: S.gap12,
+                  textAlign: "left",
+                  animation: "fadeUp 0.25s ease",
+                }}>
+                  {[
+                    { label: "Modèle STT",    value: whisperModel,  setter: setWhisperModel,  options: WHISPER_MODELS },
+                    { label: "Modèle LLM",    value: llmModel,      setter: setLlmModel,      options: LLM_MODELS },
+                    { label: "Version prompt", value: promptVersion, setter: setPromptVersion, options: PROMPT_VERSIONS },
+                  ].map(field => (
+                    <div key={field.label} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                        {field.label}
+                      </label>
+                      <select
+                        value={field.value}
+                        onChange={e => field.setter(e.target.value)}
+                        style={{
+                          padding: "8px 10px", fontSize: "12px",
+                          borderRadius: "8px", border: "1px solid var(--border)",
+                          background: "var(--background)", color: "var(--foreground)",
+                          outline: "none", cursor: "pointer",
+                        }}>
+                        {field.options.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <WaveTransform />
