@@ -40,13 +40,16 @@ Client (Next.js)
 
 | Service | Port | Technologie |
 |---------|------|-------------|
-| Gateway (auth + admin) | 8004 | FastAPI + SQLAlchemy + JWT |
+| Frontend | 3000 | Next.js 15 (standalone, conteneurisé, non-root) |
 | Pipeline (orchestrateur) | 8000 | FastAPI + Langchain LCEL + Langfuse |
 | STT | 8001 | FastAPI + Faster-Whisper large-v3 |
 | LLM | 8002 | FastAPI + LiteLLM + Groq |
 | TTS | 8003 | FastAPI + Mistral Voxtral |
-| Watcher (trafic live) | 8005 | FastAPI + Whisper small + SSE |
-| Frontend | 3000 | Next.js |
+| Gateway (auth + admin) | 8004 | FastAPI + SQLAlchemy + JWT (15min) + refresh (7j) |
+| Watcher (trafic live SSE) | 8005 | FastAPI + Whisper + extraction events |
+| **Prometheus** | 9090 | Scrape `/metrics` toutes les 15s, rétention 30j |
+| **Grafana** | 3001 | Dashboard "LLMOps Overview" préconfiguré |
+| **MLflow** | 5050 | Model Registry + Experiment Tracking |
 
 ---
 
@@ -74,20 +77,23 @@ cp .env.example .env
 
 ### Lancement
 
-**Une seule commande** lance tout (frontend + 6 services backend) :
+**Une seule commande** lance tout (frontend + 6 services backend + Prometheus + Grafana + MLflow) :
 
 ```bash
 docker compose up --build
 ```
 
-Services disponibles :
+**Apps & APIs** :
 - **Frontend** : http://localhost:3000
-- Gateway : http://localhost:8004/docs
-- Pipeline : http://localhost:8000/docs
-- STT : http://localhost:8001/docs
-- LLM : http://localhost:8002/docs
-- TTS : http://localhost:8003/docs
-- Watcher : http://localhost:8005/docs
+- Dashboard admin MLOps : http://localhost:3000/admin
+- Gateway API : http://localhost:8004/docs
+- Pipeline API : http://localhost:8000/docs
+- STT / LLM / TTS / Watcher : http://localhost:8001-8005/docs
+
+**Observabilité & Registres** :
+- **Grafana** (monitoring système) : http://localhost:3001
+- **Prometheus** (métriques brutes) : http://localhost:9090
+- **MLflow** (model registry + 36 expériences) : http://localhost:5050
 
 > Le frontend attend que le gateway et le pipeline soient `healthy` avant de démarrer (`depends_on: condition: service_healthy`).
 
@@ -122,12 +128,12 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 
 | Onglet | Contenu |
 |--------|---------|
-| Vue générale | Stats utilisateurs, KPIs pipeline (runs, latences, BLEU/METEOR/WER moyens) |
-| Traces & Modèles | Latences STT/LLM/TTS, histogrammes BLEU/METEOR/WER/confiance, tableau comparatif modèles |
+| Vue générale | Stats utilisateurs, KPIs pipeline (runs, latences, BLEU/METEOR/WER, **coût total $, coût/run, tokens**) |
+| Traces & Modèles | Latences STT/LLM/TTS, histogrammes BLEU/METEOR/WER/confiance, tableau comparatif modèles avec colonne **Coût** triable |
 | Trafic Live | Incidents autoroutiers temps réel par zone (Nord/Sud/Ouest) via SSE — toggle "Tous / Urgences uniquement", usage interne admin |
-| Expériences | Stub MLflow (roadmap Phase 4) |
-| Infrastructure | Health checks temps réel sur les 6 microservices |
-| Pipelines | DAG cards + stub Airflow (roadmap Phase 4) |
+| **Expériences** | **MLflow embedded** (iframe) — 36 runs + 3 modèles registry |
+| **Infrastructure** | Health checks temps réel des 6 microservices + **Grafana embedded** (req/s, p95, erreurs) |
+| Pipelines | DAG cards + stub Airflow (roadmap restante) |
 | Utilisateurs | CRUD complet : activer, promouvoir admin, supprimer |
 
 ---
@@ -178,18 +184,34 @@ python scripts/eval_golden.py --audio data/flash_audio_archive/2026-01-23/nord/f
 
 ---
 
-## Tracing Langfuse
+## Observabilité & Registres
 
-Toutes les exécutions du pipeline sont tracées dans [Langfuse](https://cloud.langfuse.com) :
-- Latences STT / LLM / TTS par run
-- Scores BLEU, METEOR, WER (quand références disponibles)
-- Version de prompt utilisée
-- Visible dans le Dashboard Admin → onglet **Traces & Modèles**
-
+### Langfuse (tracing métier LLM)
+- Chaque traduction crée 1 `trace` + 1 `generation` (avec model + usage tokens + cost)
+- Scores : latences (STT/LLM/TTS), confiance langue, **coût $**, total tokens, BLEU, METEOR, WER
+- Dashboards natifs Langfuse remplis automatiquement (Cost, Tokens)
 ```bash
-# Importer les 84 runs historiques dans Langfuse
-python scripts/langfuse_import.py
+python scripts/langfuse_import.py    # Importer les 84 runs historiques
 ```
+
+### MLflow (model registry + experiment tracking)
+- **3 modèles enregistrés** : `whisper-stt` · `llama-translation` · `voxtral-tts`
+- **36 runs** importés depuis `results.csv` (params, métriques, tags)
+- UI : http://localhost:5050 (ou onglet Expériences du dashboard admin)
+```bash
+python scripts/mlflow_register.py   # (Re-)importer les runs + register models
+```
+
+### Prometheus + Grafana (monitoring système)
+- Prometheus scrape `/metrics` toutes les 15s sur les 6 services (instrumenté via `prometheus-fastapi-instrumentator`)
+- Grafana : dashboard "LLMOps Overview" préconfiguré
+  - Requêtes/s par service · Latence p95 · Taux erreur 5xx · Services up
+- Provisioning : `monitoring/grafana/provisioning/` (datasource + dashboard JSON)
+
+### Sécurité — anti-prompt-injection (3 couches)
+- **Pre-check** ([prompt_guard.py](backend/services/pipeline/src/pipeline/prompt_guard.py)) : regex sur la transcription (FR + EN) → 422 si tentative
+- **Sandbox prompt** : texte utilisateur encadré dans `<user_text>…</user_text>` avec règles strictes
+- **Post-check** : détection prompt leak (`"I am an AI"`, `"system prompt"`) + anti-hallucination (ratio output/input)
 
 ---
 
@@ -314,9 +336,16 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 - [x] Phase 3 — API Gateway (auth JWT + refresh tokens)
 - [x] Phase 3 — Dashboard Admin MLOps (7 onglets)
 - [x] Phase 3+ — Watcher trafic temps réel (SSE + ring buffer, admin uniquement)
-- [ ] Phase 4 — Prometheus + Grafana (monitoring système)
-- [ ] Phase 4 — MLflow model registry
-- [ ] Phase 4 — Airflow batch evaluation
+- [x] Phase 3+ — Garde-fou prompt injection 3 couches (OWASP LLM01)
+- [x] Phase 3+ — Suivi des coûts LLM (Langfuse generations + dashboard $/run/total)
+- [x] Phase 4 — **Prometheus + Grafana** (monitoring système, dashboard préconfigué)
+- [x] Phase 4 — **MLflow** model registry (3 modèles) + experiment tracking (36 runs)
+- [x] Architecture pro — backend/services/<svc>/ avec multi-stage uv + non-root + healthchecks
+- [x] Frontend conteneurisé Next.js standalone (1 commande lance tout)
+- [ ] Phase 4 — Airflow batch evaluation (ou cron alternatif)
+- [ ] Phase 4 — Evidently drift detection
+- [ ] Phase 2 — MinIO (storage S3-like pour audio)
+- [ ] Phase 3 — Rate limiting Gateway
 - [ ] Déploiement — VPS + nginx + SSL (traduction-audio.fr)
 
 ---
