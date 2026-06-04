@@ -53,7 +53,9 @@ Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose
 async def _stt_step(state: dict) -> dict:
     """Étape 1 : transcription audio → texte via STT Service.
     Timeout 600s pour couvrir le téléchargement initial du modèle (large-v3 = 3 Go)."""
+    from datetime import datetime, timezone
     t0 = time.perf_counter()
+    stt_start_iso = datetime.now(timezone.utc).isoformat()
     async with httpx.AsyncClient(timeout=600) as client:
         resp = await client.post(
             f"{STT_URL}/transcribe",
@@ -98,13 +100,17 @@ async def _stt_step(state: dict) -> dict:
         "language": data.get("language", "fr"),
         "language_prob": lang_prob,
         "latency_stt_ms": round((time.perf_counter() - t0) * 1000),
+        "stt_start_iso":  stt_start_iso,
+        "stt_end_iso":    datetime.now(timezone.utc).isoformat(),
     }
 
 
 async def _llm_step(state: dict) -> dict:
     """Étape 2 : traduction texte → texte traduit via LLM Service.
     Le texte est sandboxé (échappement balises) avant envoi au LLM."""
+    from datetime import datetime, timezone
     t0 = time.perf_counter()
+    llm_start_iso = datetime.now(timezone.utc).isoformat()
     safe_text = sandbox_user_text(state["source_text"])
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -141,12 +147,17 @@ async def _llm_step(state: dict) -> dict:
         "completion_tokens": data.get("completion_tokens", 0),
         "total_tokens":      data.get("total_tokens",      0),
         "cost_usd":          data.get("cost_usd",          0.0),
+        "llm_start_iso":     llm_start_iso,
+        "llm_end_iso":       datetime.now(timezone.utc).isoformat(),
+        "safe_input_text":   safe_text,
     }
 
 
 async def _tts_step(state: dict) -> dict:
     """Étape 3 : synthèse vocale texte traduit → audio via TTS Service."""
+    from datetime import datetime, timezone
     t0 = time.perf_counter()
+    tts_start_iso = datetime.now(timezone.utc).isoformat()
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{TTS_URL}/synthesize",
@@ -175,6 +186,9 @@ async def _tts_step(state: dict) -> dict:
         "audio_b64": audio_b64,
         "audio_content_type": content_type,
         "latency_tts_ms": round((time.perf_counter() - t0) * 1000),
+        "audio_out_size_kb": round(len(audio_bytes) / 1024, 1),
+        "tts_start_iso":   tts_start_iso,
+        "tts_end_iso":     datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -250,15 +264,17 @@ async def process(
 
     latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
-    # ── Trace Langfuse (trace + generation + scores via API REST) ─────────────
-    # On utilise l'API ingestion directement pour avoir une "generation" propre
-    # avec model + usage → Langfuse remplit ses dashboards Cost / Tokens natifs.
+    # ── Tracing Langfuse end-to-end (trace + 3 observations + scores) ─────────
+    # Stratégie : 1 trace racine + spans STT/TTS + 1 generation LLM (avec usage)
+    # → Langfuse affiche la vue WATERFALL des 3 étapes avec leurs durées.
     if _lf and os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
         try:
             import uuid as _uuid
             from datetime import datetime as _dt, timezone as _tz
             tid     = str(_uuid.uuid4())
+            stt_id  = str(_uuid.uuid4())
             gid     = str(_uuid.uuid4())
+            tts_id  = str(_uuid.uuid4())
             now_iso = _dt.now(_tz.utc).isoformat()
             comment = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
 
@@ -267,7 +283,10 @@ async def process(
             total_tokens      = result.get("total_tokens",      0)
             cost_usd          = result.get("cost_usd",          0.0)
 
+            audio_in_size_kb = round(len(initial_state["audio_bytes"]) / 1024, 1)
+
             batch = [
+                # 1. Trace racine — regroupe toute la pipeline
                 {
                     "id": str(_uuid.uuid4()),
                     "type": "trace-create",
@@ -275,15 +294,46 @@ async def process(
                     "body": {
                         "id": tid,
                         "name": "translation",
+                        "input":  {"audio_kb": audio_in_size_kb, "target_lang": target_lang},
+                        "output": {"translation": result["translation"][:500]},
                         "metadata": {
                             "whisper_model":  whisper_model,
                             "llm_model":      llm_model,
                             "prompt_version": prompt_version,
                             "target_lang":    target_lang,
                             "filename":       filename,
+                            "total_latency_ms": latency_total_ms,
+                            "cost_usd":         cost_usd,
                         },
                     },
                 },
+
+                # 2. Span STT — Faster-Whisper transcription
+                {
+                    "id": str(_uuid.uuid4()),
+                    "type": "span-create",
+                    "timestamp": now_iso,
+                    "body": {
+                        "id":        stt_id,
+                        "traceId":   tid,
+                        "name":      "stt",
+                        "startTime": result.get("stt_start_iso", now_iso),
+                        "endTime":   result.get("stt_end_iso",   now_iso),
+                        "input":  {
+                            "filename":      filename,
+                            "audio_size_kb": audio_in_size_kb,
+                            "whisper_model": whisper_model,
+                        },
+                        "output": {
+                            "text":          result["source_text"][:1000],
+                            "language":      result["language"],
+                            "language_prob": result["language_prob"],
+                        },
+                        "metadata": {"latency_ms": result["latency_stt_ms"]},
+                    },
+                },
+
+                # 3. Generation LLM — Llama via Groq (avec usage tokens + cost)
                 {
                     "id": str(_uuid.uuid4()),
                     "type": "generation-create",
@@ -291,19 +341,43 @@ async def process(
                     "body": {
                         "id":         gid,
                         "traceId":    tid,
-                        "name":       "translate",
+                        "name":       "llm_translate",
+                        "startTime":  result.get("llm_start_iso", now_iso),
+                        "endTime":    result.get("llm_end_iso",   now_iso),
                         "model":      llm_model,
-                        "input":      result["source_text"][:2000],
+                        "modelParameters": {"prompt_version": prompt_version, "target_lang": target_lang},
+                        "input":      result.get("safe_input_text", result["source_text"])[:2000],
                         "output":     result["translation"][:2000],
                         "usage":      {
                             "input":  prompt_tokens,
                             "output": completion_tokens,
                             "total":  total_tokens,
                             "unit":   "TOKENS",
-                            "inputCost":  None,
-                            "outputCost": None,
                             "totalCost":  cost_usd,
                         },
+                    },
+                },
+
+                # 4. Span TTS — Mistral Voxtral synthesis
+                {
+                    "id": str(_uuid.uuid4()),
+                    "type": "span-create",
+                    "timestamp": now_iso,
+                    "body": {
+                        "id":        tts_id,
+                        "traceId":   tid,
+                        "name":      "tts",
+                        "startTime": result.get("tts_start_iso", now_iso),
+                        "endTime":   result.get("tts_end_iso",   now_iso),
+                        "input":  {
+                            "text":   result["translation"][:1000],
+                            "lang":   target_lang,
+                        },
+                        "output": {
+                            "audio_size_kb": result.get("audio_out_size_kb"),
+                            "content_type":  result["audio_content_type"],
+                        },
+                        "metadata": {"latency_ms": result["latency_tts_ms"]},
                     },
                 },
                 *[
