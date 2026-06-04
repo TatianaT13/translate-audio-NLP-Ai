@@ -2,7 +2,7 @@
 
 Système LLMOps de traduction audio temps réel : **Audio FR → Transcription → Traduction EN/UK/ES/DE → Synthèse vocale**.
 
-Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse end-to-end, MLflow Model Registry + 12 configurations comparées, monitoring Prometheus+Grafana, garde-fou prompt injection 3 couches, monitoring trafic autoroutier temps réel.
+Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse end-to-end, MLflow Model Registry + 12 configurations comparées, **Airflow batch (2 DAGs : nightly eval + weekly drift)**, monitoring Prometheus+Grafana, garde-fou prompt injection 3 couches, monitoring trafic autoroutier temps réel.
 
 ---
 
@@ -50,6 +50,8 @@ Client (Next.js)
 | **Prometheus** | 9090 | Scrape `/metrics` toutes les 15s, rétention 30j |
 | **Grafana** | 3001 | Dashboard "LLMOps Overview" préconfiguré |
 | **MLflow** | 5050 | Model Registry + Experiment Tracking |
+| **Airflow** | 8080 | Orchestration batch (DAGs nightly eval + weekly drift) |
+| **Postgres (Airflow)** | — | Metadata DB d'Airflow |
 
 ---
 
@@ -94,6 +96,7 @@ docker compose up --build
 - **Grafana** (monitoring système) : http://localhost:3001
 - **Prometheus** (métriques brutes) : http://localhost:9090
 - **MLflow** (model registry + 12 expériences agrégées) : http://localhost:5050
+- **Airflow** (2 DAGs : nightly eval + weekly drift) : http://localhost:8080 (admin / admin)
 
 > Le frontend attend que le gateway et le pipeline soient `healthy` avant de démarrer (`depends_on: condition: service_healthy`).
 
@@ -133,7 +136,7 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 | Trafic Live | Incidents autoroutiers temps réel par zone (Nord/Sud/Ouest) via SSE — toggle "Tous / Urgences uniquement", usage interne admin |
 | **Expériences** | **MLflow natif via API REST** — 12 configurations + champion + 3 modèles registry (cartes intégrées au design) |
 | **Infrastructure** | Health checks temps réel des 6 microservices + **Grafana embedded** (req/s, p95, erreurs) |
-| Pipelines | DAG cards + stub Airflow (roadmap restante) |
+| **Pipelines** | **Airflow natif via API REST** — liste des DAGs réels avec état, schedule, tags, dernier run |
 | Utilisateurs | CRUD complet : activer, promouvoir admin, supprimer |
 
 ---
@@ -209,11 +212,22 @@ python scripts/langfuse_import.py    # Importer les 84 runs historiques
 python scripts/mlflow_register.py   # (Re-)importer les configs + register models
 ```
 
-### Prometheus + Grafana (monitoring système)
+### Prometheus + Grafana (monitoring système + business)
 - Prometheus scrape `/metrics` toutes les 15s sur les 6 services (instrumenté via `prometheus-fastapi-instrumentator`)
-- Grafana : dashboard "LLMOps Overview" préconfiguré
-  - Requêtes/s par service · Latence p95 · Taux erreur 5xx · Services up
+- Grafana : dashboard "LLMOps Overview" préconfiguré (2 rows)
+  - **Microservices** : req/s · latence p95 · taux erreur 5xx · services up · req/min · % erreurs
+  - **Watcher Live** : polls/min par zone · events extraits/h par sévérité · coût LLM total · tokens total
+- Métriques business custom watcher : `watcher_polls_total`, `watcher_events_extracted_total`,
+  `watcher_translation_cost_usd_total`, `watcher_translation_tokens_total`
 - Provisioning : `monitoring/grafana/provisioning/` (datasource + dashboard JSON)
+
+### Airflow (orchestration batch)
+- Stack : `airflow-postgres` + `airflow-init` + `airflow-webserver` + `airflow-scheduler` (LocalExecutor)
+- UI : http://localhost:8080 (admin / admin)
+- **2 DAGs** dans [airflow/dags/](airflow/dags/) :
+  - `nightly_golden_eval` — `0 2 * * *` (2h tous les jours) : ping pipeline → relance les 7 audios golden → agrège succès/échecs/latences/coût → alerte si trop d'échecs
+  - `weekly_drift_check` — `0 3 * * 0` (dimanche 3h) : interroge Langfuse semaine N vs N-1 → alerte si dégradation > 10% sur latence/coût/BLEU
+- Endpoint gateway `/admin/airflow/summary` → onglet **Pipelines** du dashboard affiche les DAGs natifs (état réel)
 
 ### Sécurité — anti-prompt-injection (3 couches)
 - **Pre-check** ([prompt_guard.py](backend/services/pipeline/src/pipeline/prompt_guard.py)) : regex sur la transcription (FR + EN) → 422 si tentative
@@ -345,12 +359,13 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 - [x] Phase 3+ — Watcher trafic temps réel (SSE + ring buffer, admin uniquement)
 - [x] Phase 3+ — Garde-fou prompt injection 3 couches (OWASP LLM01)
 - [x] Phase 3+ — Suivi des coûts LLM (Langfuse generations + dashboard $/run/total)
-- [x] Phase 4 — **Prometheus + Grafana** (monitoring système, dashboard préconfigué)
-- [x] Phase 4 — **MLflow** model registry (3 modèles) + experiment tracking (36 runs)
+- [x] Phase 4 — **Prometheus + Grafana** (monitoring système + business watcher)
+- [x] Phase 4 — **MLflow** model registry (3 modèles) + experiment tracking (12 configurations + champion)
+- [x] Phase 4 — **Airflow** batch evaluation (2 DAGs : nightly_golden_eval + weekly_drift_check)
+- [x] Phase 4 — **Watcher tracing E2E** (Langfuse traces + Prometheus custom metrics)
 - [x] Architecture pro — backend/services/<svc>/ avec multi-stage uv + non-root + healthchecks
 - [x] Frontend conteneurisé Next.js standalone (1 commande lance tout)
-- [ ] Phase 4 — Airflow batch evaluation (ou cron alternatif)
-- [ ] Phase 4 — Evidently drift detection
+- [ ] Phase 4 — Evidently drift detection (alternative à `weekly_drift_check`)
 - [ ] Phase 2 — MinIO (storage S3-like pour audio)
 - [ ] Phase 3 — Rate limiting Gateway
 - [ ] Déploiement — VPS + nginx + SSL (traduction-audio.fr)
