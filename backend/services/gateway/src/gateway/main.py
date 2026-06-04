@@ -59,6 +59,9 @@ def _read_experiments_csv() -> list[dict]:
 
 PIPELINE_URL = os.getenv("PIPELINE_URL", "http://pipeline:8000")
 MLFLOW_URL   = os.getenv("MLFLOW_URL",   "http://mlflow:5000")
+AIRFLOW_URL  = os.getenv("AIRFLOW_URL",  "http://airflow-webserver:8080")
+AIRFLOW_USER = os.getenv("AIRFLOW_USER", "admin")
+AIRFLOW_PWD  = os.getenv("AIRFLOW_PASSWORD", "admin")
 STT_URL      = os.getenv("STT_URL",      "http://stt:8001")
 LLM_URL      = os.getenv("LLM_URL",      "http://llm:8002")
 TTS_URL      = os.getenv("TTS_URL",      "http://tts:8003")
@@ -864,6 +867,57 @@ async def admin_mlflow_summary(_: models.User = Depends(get_admin_user)):
                 "total_runs":  total_runs,
             })
 
+    except Exception as exc:
+        summary["error"] = str(exc)
+    return summary
+
+
+@app.get("/admin/airflow/summary")
+async def admin_airflow_summary(_: models.User = Depends(get_admin_user)):
+    """Récupère la liste des DAGs Airflow + leur dernier statut."""
+    summary = {
+        "connected": False,
+        "url":       "http://localhost:8080",
+        "dags":      [],
+        "error":     None,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=6.0, auth=(AIRFLOW_USER, AIRFLOW_PWD)) as client:
+            # Liste tous les DAGs
+            r = await client.get(f"{AIRFLOW_URL}/api/v1/dags")
+            if not r.is_success:
+                summary["error"] = f"Airflow HTTP {r.status_code}"
+                return summary
+            dags = r.json().get("dags", [])
+
+            # Pour chaque DAG, prend le dernier run
+            dag_list = []
+            for d in dags:
+                dag_id = d["dag_id"]
+                runs_r = await client.get(
+                    f"{AIRFLOW_URL}/api/v1/dags/{dag_id}/dagRuns",
+                    params={"limit": 1, "order_by": "-start_date"},
+                )
+                last_run = None
+                if runs_r.is_success:
+                    runs = runs_r.json().get("dag_runs", [])
+                    if runs:
+                        last_run = {
+                            "state":      runs[0].get("state"),
+                            "start_date": runs[0].get("start_date"),
+                            "end_date":   runs[0].get("end_date"),
+                        }
+                dag_list.append({
+                    "dag_id":        dag_id,
+                    "description":   d.get("description") or "",
+                    "schedule":      d.get("schedule_interval", {}).get("value")
+                                     if isinstance(d.get("schedule_interval"), dict)
+                                     else d.get("schedule_interval"),
+                    "is_paused":     d.get("is_paused", False),
+                    "tags":          [t["name"] for t in d.get("tags", [])],
+                    "last_run":      last_run,
+                })
+            summary.update({"connected": True, "dags": dag_list})
     except Exception as exc:
         summary["error"] = str(exc)
     return summary
