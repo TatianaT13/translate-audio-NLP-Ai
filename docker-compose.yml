@@ -215,6 +215,82 @@ services:
       - prometheus
     restart: unless-stopped
 
+  # ─── Airflow stack (batch orchestration) ──────────────────────────
+  # 4 conteneurs : postgres (metadata) + init (one-shot) + webserver + scheduler
+  # LocalExecutor → pas de Celery/Redis. Suffisant pour le volume (qq DAGs/jour).
+  airflow-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB:       airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  airflow-init:
+    image: apache/airflow:2.10.3
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR:                LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:    postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+      AIRFLOW__CORE__LOAD_EXAMPLES:           'false'
+      AIRFLOW__API__AUTH_BACKENDS:            'airflow.api.auth.backend.basic_auth'
+      _AIRFLOW_DB_MIGRATE:        'true'
+      _AIRFLOW_WWW_USER_CREATE:   'true'
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+    user: "50000:0"
+    entrypoint: /bin/bash
+    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@local || true"
+
+  airflow-webserver:
+    image: apache/airflow:2.10.3
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR:                LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:    postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES:           'false'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG:      'true'
+      AIRFLOW__API__AUTH_BACKENDS:            'airflow.api.auth.backend.basic_auth'
+      PIPELINE_URL:                           http://pipeline:8000
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data:ro
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    user: "50000:0"
+    command: webserver
+    restart: unless-stopped
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.3
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data:ro
+      - airflow_logs:/opt/airflow/logs
+    user: "50000:0"
+    command: scheduler
+    restart: unless-stopped
+
 volumes:
   whisper_cache:
   tts_models:
@@ -223,3 +299,5 @@ volumes:
   prometheus_data:
   grafana_data:
   mlflow_data:
+  airflow_postgres_data:
+  airflow_logs:

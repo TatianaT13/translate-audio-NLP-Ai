@@ -117,6 +117,23 @@ export interface MlflowSummary {
 export const getMlflowSummary = () =>
   apiFetch<MlflowSummary>("/admin/mlflow/summary");
 
+export interface AirflowDag {
+  dag_id:      string;
+  description: string;
+  schedule:    string | null;
+  is_paused:   boolean;
+  tags:        string[];
+  last_run:    { state: string; start_date: string; end_date: string | null } | null;
+}
+export interface AirflowSummary {
+  connected: boolean;
+  url:       string;
+  dags:      AirflowDag[];
+  error?:    string | null;
+}
+export const getAirflowSummary = () =>
+  apiFetch<AirflowSummary>("/admin/airflow/summary");
+
 export interface ServiceHealth {
   name:       string;
   port:       string;

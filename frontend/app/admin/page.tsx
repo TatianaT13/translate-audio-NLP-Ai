@@ -7,10 +7,10 @@ import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
   getServicesHealth, getTrafficEvents, openTrafficStream, getExperiments, synthesizeTTS,
-  getMlflowSummary,
+  getMlflowSummary, getAirflowSummary,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
   type ServiceHealth, type TrafficEvent, type TrafficSnapshot,
-  type ExperimentRun, type ExperimentsResponse, type MlflowSummary,
+  type ExperimentRun, type ExperimentsResponse, type MlflowSummary, type AirflowSummary,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -821,49 +821,95 @@ function InfraTab() {
 
 // ── Pipelines tab (Airflow stub) ──────────────────────────────────────────────
 function PipelinesTab() {
+  const [summary, setSummary] = useState<AirflowSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAirflowSummary()
+      .then(setSummary)
+      .catch(() => setSummary({ connected: false, url: "", dags: [], error: "Connexion impossible" }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Card title="Airflow — Orchestration"><Loader /></Card>;
+
+  if (!summary?.connected) {
+    return (
+      <Card title="Airflow — Orchestration">
+        <p style={{ fontSize: "12px", color: C.red }}>
+          ✗ Airflow non joignable {summary?.error ? `(${summary.error})` : ""}
+        </p>
+        <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px" }}>
+          Vérifiez que les conteneurs airflow-webserver et airflow-scheduler sont up.
+        </p>
+      </Card>
+    );
+  }
+
+  const STATE_COLOR: Record<string, string> = {
+    success: C.green, failed: C.red, running: C.accent, queued: C.muted, "": C.muted,
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div style={{
-        padding: "14px 18px", borderRadius: "12px", fontSize: "12px",
-        background: "rgba(201,169,110,0.06)", border: "1px solid var(--accent-dim)", color: C.accent,
-        letterSpacing: "0.05em",
-      }}>
-        Phase finale — orchestration avec Apache Airflow
+    <Card title="Airflow — Orchestration batch">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+        <p style={{ fontSize: "12px", color: C.muted, margin: 0 }}>
+          <strong style={{ color: C.fg }}>{summary.dags.length}</strong> DAGs ·
+          <strong style={{ color: C.green, marginLeft: "6px" }}>
+            {summary.dags.filter(d => !d.is_paused).length}
+          </strong> actifs
+        </p>
+        <a href="http://localhost:8080" target="_blank" rel="noreferrer" style={{
+          fontSize: "12px", padding: "6px 14px", borderRadius: "8px", fontWeight: 500,
+          background: "rgba(201,169,110,0.12)", border: `1px solid var(--accent-dim)`,
+          color: C.accent, textDecoration: "none",
+        }}>
+          Ouvrir Airflow UI ↗
+        </a>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        {[
-          { dag: "translate_pipeline", schedule: "@on_demand", runs: "84", status: "success" },
-          { dag: "model_evaluation",   schedule: "@weekly",     runs: "—",  status: "pending" },
-          { dag: "data_export",        schedule: "@daily",      runs: "—",  status: "pending" },
-        ].map(d => (
-          <div key={d.dag} style={{
-            padding: "14px 18px", borderRadius: "14px",
-            background: C.surface, border: `1px solid ${C.border}`,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 500, color: C.fg }}>{d.dag}</span>
-              <span style={{
-                fontSize: "10px", padding: "2px 8px", borderRadius: "999px",
-                background: d.status === "success" ? "rgba(126,201,160,0.1)" : "rgba(201,169,110,0.08)",
-                color: d.status === "success" ? C.green : C.accent, letterSpacing: "0.1em",
-              }}>{d.status}</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {summary.dags.map(d => {
+          const lastState = d.last_run?.state ?? "—";
+          const color = STATE_COLOR[lastState] ?? C.muted;
+          return (
+            <div key={d.dag_id} style={{
+              padding: "14px 18px", borderRadius: "14px",
+              background: C.surface, border: `1px solid ${C.border}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px", flexWrap: "wrap", gap: "8px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: C.fg, fontFamily: "monospace" }}>
+                  {d.dag_id}
+                </span>
+                <span style={{
+                  fontSize: "10px", padding: "3px 10px", borderRadius: "999px",
+                  background: `${color}15`, color, letterSpacing: "0.12em",
+                }}>
+                  {lastState}
+                </span>
+              </div>
+              {d.description && (
+                <p style={{ fontSize: "11px", color: C.muted, marginBottom: "6px" }}>
+                  {d.description}
+                </p>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", fontSize: "10px", color: C.muted }}>
+                <span>📅 {d.schedule ?? "manual"}</span>
+                {d.tags.length > 0 && (
+                  <span>🏷 {d.tags.join(", ")}</span>
+                )}
+                {d.last_run?.start_date && (
+                  <span>⏱ {new Date(d.last_run.start_date).toLocaleString("fr-FR")}</span>
+                )}
+                <span style={{ color: d.is_paused ? C.red : C.green }}>
+                  {d.is_paused ? "⏸ pausé" : "▶ actif"}
+                </span>
+              </div>
             </div>
-            <p style={{ fontSize: "11px", color: C.muted }}>{d.schedule} · {d.runs} runs</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
-
-      <ComingSoon
-        title="Airflow — Orchestration"
-        description="DAGs d'entraînement, d'évaluation et d'export. Planification automatique et monitoring des pipelines ML."
-        icon={
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-        }
-      />
-    </div>
+    </Card>
   );
 }
 
