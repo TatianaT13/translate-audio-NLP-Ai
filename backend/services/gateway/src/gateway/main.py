@@ -473,6 +473,46 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
             for v in sorted(model_map.values(), key=lambda x: x["count"], reverse=True)
         ]
 
+        # Supplément : coûts/tokens depuis Langfuse (le CSV ne les contient pas
+        # car les runs historiques sont d'avant le tracking cost). Les nouveaux
+        # runs en live ajoutent leur cost via le pipeline → on les agrège ici.
+        lf_costs:  list[float] = []
+        lf_tokens: list[float] = []
+        if LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY:
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as lf_client:
+                    page = 1
+                    while True:
+                        r = await lf_client.get(
+                            f"{LANGFUSE_HOST}/api/public/scores",
+                            auth=(LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
+                            params={"limit": 100, "page": page, "name": "cost_usd"},
+                        )
+                        if not r.is_success:
+                            break
+                        batch = r.json().get("data", [])
+                        lf_costs.extend([s["value"] for s in batch if s.get("value") is not None])
+                        if len(batch) < 100:
+                            break
+                        page += 1
+                    # tokens
+                    page = 1
+                    while True:
+                        r = await lf_client.get(
+                            f"{LANGFUSE_HOST}/api/public/scores",
+                            auth=(LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
+                            params={"limit": 100, "page": page, "name": "total_tokens"},
+                        )
+                        if not r.is_success:
+                            break
+                        batch = r.json().get("data", [])
+                        lf_tokens.extend([s["value"] for s in batch if s.get("value") is not None])
+                        if len(batch) < 100:
+                            break
+                        page += 1
+            except Exception:
+                pass
+
         return schemas.LangfuseMetricsResponse(
             connected=True,
             total_traces=len(totals),
@@ -483,11 +523,16 @@ async def admin_langfuse_metrics(_: models.User = Depends(get_admin_user)):
             avg_bleu=round(avg(bleus), 3),
             avg_meteor=round(avg(meteors), 4),
             avg_wer=round(avg(wers), 4),
+            avg_cost_usd=round(avg(lf_costs), 6) if lf_costs else 0,
+            total_cost_usd=round(sum(lf_costs), 4) if lf_costs else 0,
+            avg_tokens=round(avg(lf_tokens), 1) if lf_tokens else 0,
+            total_tokens=int(sum(lf_tokens)) if lf_tokens else 0,
             bleu_scores=bleus,
             meteor_scores=meteors,
             wer_scores=wers,
             language_probs=langs,
             latencies_total=totals,
+            cost_scores=lf_costs,
             model_stats=model_stats,
         )
 
