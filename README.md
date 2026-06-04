@@ -2,7 +2,7 @@
 
 Système LLMOps de traduction audio temps réel : **Audio FR → Transcription → Traduction EN/UK/ES/DE → Synthèse vocale**.
 
-Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse, évaluation BLEU/METEOR/WER sur 84 runs, monitoring trafic autoroutier temps réel.
+Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse end-to-end, MLflow Model Registry + 12 configurations comparées, monitoring Prometheus+Grafana, garde-fou prompt injection 3 couches, monitoring trafic autoroutier temps réel.
 
 ---
 
@@ -93,7 +93,7 @@ docker compose up --build
 **Observabilité & Registres** :
 - **Grafana** (monitoring système) : http://localhost:3001
 - **Prometheus** (métriques brutes) : http://localhost:9090
-- **MLflow** (model registry + 36 expériences) : http://localhost:5050
+- **MLflow** (model registry + 12 expériences agrégées) : http://localhost:5050
 
 > Le frontend attend que le gateway et le pipeline soient `healthy` avant de démarrer (`depends_on: condition: service_healthy`).
 
@@ -131,7 +131,7 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 | Vue générale | Stats utilisateurs, KPIs pipeline (runs, latences, BLEU/METEOR/WER, **coût total $, coût/run, tokens**) |
 | Traces & Modèles | Latences STT/LLM/TTS, histogrammes BLEU/METEOR/WER/confiance, tableau comparatif modèles avec colonne **Coût** triable |
 | Trafic Live | Incidents autoroutiers temps réel par zone (Nord/Sud/Ouest) via SSE — toggle "Tous / Urgences uniquement", usage interne admin |
-| **Expériences** | **MLflow embedded** (iframe) — 36 runs + 3 modèles registry |
+| **Expériences** | **MLflow natif via API REST** — 12 configurations + champion + 3 modèles registry (cartes intégrées au design) |
 | **Infrastructure** | Health checks temps réel des 6 microservices + **Grafana embedded** (req/s, p95, erreurs) |
 | Pipelines | DAG cards + stub Airflow (roadmap restante) |
 | Utilisateurs | CRUD complet : activer, promouvoir admin, supprimer |
@@ -157,17 +157,20 @@ Service dédié (`backend/services/watcher/`) qui tourne en arrière-plan en per
 
 ## Évaluation (Phase 1)
 
-84 runs évalués : 2 modèles Whisper × 2 LLMs × 3 prompts × 7 fichiers audio.
+**12 configurations** testées : 2 modèles Whisper × 2 LLMs × 3 prompts, évaluées sur 7 fichiers audio golden = 36 lignes de résultats agrégées.
 
 **Métriques calculées** : BLEU (sacrebleu), METEOR (nltk), WER (jiwer — nécessite refs FR)
 
-| Rang | Whisper | LLM | Prompt | BLEU moyen |
-|------|---------|-----|--------|-----------|
-| 1 | large-v3 | llama-3.1-8b | v1.1 | 31.55 |
-| 2 | large-v3 | llama-3.1-8b | v1.2 | 30.87 |
-| 3 | medium | llama-3.1-8b | v1.1 | 29.43 |
+| Rang | Whisper | LLM | Prompt | BLEU moy. | METEOR moy. |
+|------|---------|-----|--------|-----------|-------------|
+| 🏆 | large-v3 | llama-3.3-70b | v1.1 | **49.64** | **0.713** |
+| 2 | large-v3 | llama-3.3-70b | v1.0 | 47.01 | 0.697 |
+| 3 | large-v3 | llama-3.1-8b | v1.0 | 46.25 | 0.638 |
+| 4 | large-v3 | llama-3.3-70b | v1.2 | 41.67 | 0.615 |
+| 5 | large-v3 | llama-3.1-8b | v1.1 | 41.15 | 0.636 |
 
-**Combinaison déployée** : `large-v3 + llama-3.1-8b-instant + prompt v1.1`
+**Combinaison déployée** : `large-v3 + llama-3.1-8b-instant + prompt v1.1` (compromis qualité / vitesse / coût)
+**Champion qualité** (tagué dans MLflow) : `large-v3 + llama-3.3-70b-versatile + v1.1`
 
 Rapport complet : [outputs/experiments/evaluation_report.md](outputs/experiments/evaluation_report.md)
 
@@ -195,11 +198,15 @@ python scripts/langfuse_import.py    # Importer les 84 runs historiques
 ```
 
 ### MLflow (model registry + experiment tracking)
-- **3 modèles enregistrés** : `whisper-stt` · `llama-translation` · `voxtral-tts`
-- **36 runs** importés depuis `results.csv` (params, métriques, tags)
-- UI : http://localhost:5050 (ou onglet Expériences du dashboard admin)
+- **12 runs** dans l'expérience `translate-audio-llmops` — 1 par configuration unique (`whisper × llm × prompt`)
+- Métriques **agrégées** sur les 7 audios golden (`bleu_mean`, `meteor_mean`, `wer_mean`, latences)
+- **Champion automatique** : tag `champion=true` + `stage=production` sur la meilleure config (BLEU max)
+- Texte du prompt attaché en tag `prompt_text` (audit + reproductibilité)
+- **3 modèles registry** : `whisper-stt` · `llama-translation` · `voxtral-tts` (provider, version, type)
+- **Affichage natif** dans l'onglet Expériences du dashboard (API REST MLflow, pas d'iframe)
+- UI complète : http://localhost:5050
 ```bash
-python scripts/mlflow_register.py   # (Re-)importer les runs + register models
+python scripts/mlflow_register.py   # (Re-)importer les configs + register models
 ```
 
 ### Prometheus + Grafana (monitoring système)
