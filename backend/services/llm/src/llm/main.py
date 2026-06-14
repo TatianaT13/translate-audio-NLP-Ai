@@ -261,10 +261,20 @@ def summarize_meeting(req: SummarizeRequest):
         )
 
     lang_label = LANG_LABELS_FULL.get(req.target_lang, req.target_lang)
-    prompt = SUMMARY_PROMPTS[req.style].format(lang=lang_label, transcript=req.transcript[:30_000])
+    # Truncation max — Llama 3.1 8B = 128K tokens context. 80K chars ≈ 20-25K tokens
+    # → laisse de la marge pour le prompt + la génération du résumé (~3-5K tokens output).
+    # Override possible via SUMMARY_MAX_CHARS env var (ex: 120000 pour modèles plus larges).
+    max_chars = int(os.getenv("SUMMARY_MAX_CHARS", "80000"))
+    transcript = req.transcript[:max_chars]
+    truncated = len(req.transcript) > max_chars
+
+    prompt = SUMMARY_PROMPTS[req.style].format(lang=lang_label, transcript=transcript)
+    if truncated:
+        # Avertit le LLM pour qu'il mentionne que le transcript a été tronqué
+        prompt += f"\n\nNOTE: Original transcript was {len(req.transcript)} chars, truncated to {max_chars} for processing."
 
     try:
-        summary, latency_ms, usage = call_llm(prompt=prompt, model=req.model, timeout=120)
+        summary, latency_ms, usage = call_llm(prompt=prompt, model=req.model, timeout=180)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
