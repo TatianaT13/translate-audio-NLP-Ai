@@ -48,7 +48,9 @@ def get_whisper(model_name: str) -> WhisperService:
 
 
 @app.get("/health")
-def health():
+async def health():
+    """Async pour répondre immédiatement même si le thread pool est saturé
+    par les transcriptions Whisper en cours."""
     return {"status": "ok", "loaded_models": list(_whisper_cache.keys())}
 
 

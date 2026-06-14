@@ -521,7 +521,7 @@ async def _watcher_loop() -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
-def health():
+async def health():
     return {
         "status": "ok",
         "service": "watcher",
