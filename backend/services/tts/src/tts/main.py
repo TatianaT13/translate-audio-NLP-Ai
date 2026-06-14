@@ -113,7 +113,7 @@ class SynthesizeRequest(BaseModel):
 
 
 @app.get("/health")
-def health():
+async def health():
     return {
         "status": "ok",
         "backend": TTS_BACKEND,
