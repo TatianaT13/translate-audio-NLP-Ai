@@ -510,6 +510,7 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
             boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           }}>
             {[
+              { label: "Compte-rendu de réunion", action: () => router.push("/meeting"), color: "var(--accent)" },
               ...(user.is_admin ? [{ label: "Dashboard admin", action: () => router.push("/admin"), color: "var(--accent)" }] : []),
               { label: "Changer le mot de passe", action: () => { setShowPwd(true); setOpen(false); }, color: "var(--foreground)" },
               { label: "Se déconnecter", action: onLogout, color: "var(--foreground)" },

@@ -196,3 +196,83 @@ def translate(req: TranslateRequest):
         latency_ms=int(latency_ms),
         **usage_info,
     )
+
+
+# ── Meeting summary ──────────────────────────────────────────────────────────
+
+LANG_LABELS_FULL = {
+    "fr": "French", "en": "English", "uk": "Ukrainian",
+    "es": "Spanish", "de": "German",
+}
+
+SUMMARY_PROMPTS = {
+    "executive": (
+        "You are a professional meeting summarizer. "
+        "Summarize the following meeting transcript in {lang}, with this structure:\n"
+        "1. **Topic** (1 sentence)\n"
+        "2. **Key points** (3-5 bullets)\n"
+        "3. **Decisions** (if any)\n"
+        "4. **Action items** (who, what, when — if mentioned)\n"
+        "Be concise and professional. Output in Markdown format.\n\n"
+        "TRANSCRIPT:\n{transcript}"
+    ),
+    "detailed": (
+        "You are a professional meeting note-taker. "
+        "Write detailed meeting notes in {lang} based on this transcript, with sections:\n"
+        "## Summary\n## Discussion (chronological)\n## Decisions\n## Action items\n## Open questions\n"
+        "Output in Markdown.\n\nTRANSCRIPT:\n{transcript}"
+    ),
+    "actions_only": (
+        "Extract ONLY action items from the meeting transcript below. Output in {lang}, Markdown format:\n"
+        "- [ ] Action 1 (owner, deadline if known)\n- [ ] Action 2\n...\n\n"
+        "If no action items, write 'No action items identified.'\n\nTRANSCRIPT:\n{transcript}"
+    ),
+}
+
+
+class SummarizeRequest(BaseModel):
+    transcript:  str
+    target_lang: str = "en"
+    style:       str = "executive"   # executive | detailed | actions_only
+    model:       str = DEFAULT_MODEL
+
+
+class SummarizeResponse(BaseModel):
+    summary:            str
+    style:              str
+    target_lang:        str
+    model:              str
+    latency_ms:         int
+    prompt_tokens:      int = 0
+    completion_tokens:  int = 0
+    total_tokens:       int = 0
+    cost_usd:           float = 0.0
+
+
+@app.post("/summarize", response_model=SummarizeResponse)
+def summarize_meeting(req: SummarizeRequest):
+    """Génère un compte-rendu de réunion à partir d'un transcript."""
+    if not req.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript vide.")
+    if req.style not in SUMMARY_PROMPTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"style invalide. Valeurs : {list(SUMMARY_PROMPTS.keys())}",
+        )
+
+    lang_label = LANG_LABELS_FULL.get(req.target_lang, req.target_lang)
+    prompt = SUMMARY_PROMPTS[req.style].format(lang=lang_label, transcript=req.transcript[:30_000])
+
+    try:
+        summary, latency_ms, usage = call_llm(prompt=prompt, model=req.model, timeout=120)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return SummarizeResponse(
+        summary=summary,
+        style=req.style,
+        target_lang=req.target_lang,
+        model=req.model,
+        latency_ms=int(latency_ms),
+        **usage,
+    )
