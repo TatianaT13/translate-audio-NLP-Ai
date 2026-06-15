@@ -19,7 +19,9 @@ services:
     build:
       context: ./frontend
     ports:
-      - "3000:3000"
+      # Bind sur 127.0.0.1 → seul nginx (sur le host) peut joindre le frontend.
+      # Le public passe par nginx → https://traduction-audio.fr → 127.0.0.1:3000
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8004}
       - NEXT_PUBLIC_PIPELINE_URL=${NEXT_PUBLIC_PIPELINE_URL:-http://localhost:8000}
@@ -37,7 +39,7 @@ services:
     build:
       context: ./backend/services/gateway
     ports:
-      - "8004:8004"
+      - "127.0.0.1:8004:8004"
     environment:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - DEV_MODE=${DEV_MODE:-true}
@@ -66,7 +68,7 @@ services:
     build:
       context: ./backend/services/pipeline
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - STT_URL=http://stt:8001
       - LLM_URL=http://llm:8002
@@ -94,7 +96,7 @@ services:
     build:
       context: ./backend/services/stt
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       # large-v3 = ~3 Go (recommandé : medium ou small si Docker Desktop limité)
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
@@ -115,7 +117,7 @@ services:
     build:
       context: ./backend/services/llm
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-groq/llama-3.1-8b-instant}
@@ -133,7 +135,7 @@ services:
     build:
       context: ./backend/services/tts
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     environment:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - MISTRAL_VOICE_ID=${MISTRAL_VOICE_ID}
@@ -153,7 +155,7 @@ services:
     build:
       context: ./backend/services/watcher
     ports:
-      - "8005:8005"
+      - "127.0.0.1:8005:8005"
     environment:
       # Whisper small/medium suffisant ici (flashs de ~30s, pas besoin de large-v3 → OOM)
       - WHISPER_MODEL=${WATCHER_WHISPER_MODEL:-small}
@@ -177,7 +179,7 @@ services:
       context: ./monitoring/mlflow
     ports:
       # 5000 occupé par AirPlay sur macOS → on expose en 5050
-      - "5050:5000"
+      - "127.0.0.1:5050:5000"
     volumes:
       - mlflow_data:/mlflow
     restart: unless-stopped
@@ -186,7 +188,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.1
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -201,7 +203,7 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
@@ -228,6 +230,7 @@ services:
       POSTGRES_DB:       airflow
     volumes:
       - airflow_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -276,7 +279,7 @@ services:
       - ./data:/opt/airflow/data:ro
       - airflow_logs:/opt/airflow/logs
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     user: "50000:0"
     mem_limit: 2g
     command: webserver
