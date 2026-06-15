@@ -18,6 +18,13 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # NEXT_PUBLIC_* doivent être passées en BUILD ARGS (Next.js les fige au build).
+        # Sur hermes, mets /api, /pipeline, /stt, /llm dans .env → ils sont injectés ici.
+        NEXT_PUBLIC_GATEWAY_URL:  ${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8004}
+        NEXT_PUBLIC_PIPELINE_URL: ${NEXT_PUBLIC_PIPELINE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_STT_URL:     ${NEXT_PUBLIC_STT_URL:-http://localhost:8001}
+        NEXT_PUBLIC_LLM_URL:     ${NEXT_PUBLIC_LLM_URL:-http://localhost:8002}
     ports:
       # Bind sur 127.0.0.1 → seul nginx (sur le host) peut joindre le frontend.
       # Le public passe par nginx → https://traduction-audio.fr → 127.0.0.1:3000
