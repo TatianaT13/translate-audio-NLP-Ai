@@ -18,7 +18,20 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ENV NEXT_TELEMETRY_DISABLED=1
+# Next.js fige les NEXT_PUBLIC_* AU BUILD (pas au runtime). On les reçoit via
+# des build args passés par docker-compose → ils définissent ENV → npm build.
+# Défauts = dev local (URLs localhost). En prod : surcharge par .env du serveur.
+ARG NEXT_PUBLIC_GATEWAY_URL=http://localhost:8004
+ARG NEXT_PUBLIC_PIPELINE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_STT_URL=http://localhost:8001
+ARG NEXT_PUBLIC_LLM_URL=http://localhost:8002
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL \
+    NEXT_PUBLIC_PIPELINE_URL=$NEXT_PUBLIC_PIPELINE_URL \
+    NEXT_PUBLIC_STT_URL=$NEXT_PUBLIC_STT_URL \
+    NEXT_PUBLIC_LLM_URL=$NEXT_PUBLIC_LLM_URL
+
 RUN npm run build
 
 # ─── Stage 3 : Runtime (minimal, non-root) ─────────────────────────────────────
