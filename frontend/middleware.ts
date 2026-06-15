@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS  = ["/login", "/register", "/forgot-password", "/reset-password"];
+// Préfixes proxyés vers les backends Docker → laisse passer sans auth Next.js
+// (l'auth réelle est gérée par le service cible, ex: JWT côté gateway)
+const PROXY_PREFIXES = ["/api", "/pipeline", "/stt", "/llm"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,6 +13,11 @@ export function middleware(request: NextRequest) {
   // ex: /demo.mp3, /favicon.ico, /logo.png
   const lastSegment = pathname.split("/").pop() ?? "";
   if (lastSegment.includes(".")) {
+    return NextResponse.next();
+  }
+
+  // Laisse passer les rewrites vers les backends (gateway/pipeline/stt/llm)
+  if (PROXY_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
