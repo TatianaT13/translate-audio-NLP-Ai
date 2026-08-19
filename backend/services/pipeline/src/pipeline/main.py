@@ -37,15 +37,21 @@ if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
     except Exception:
         _lf = None
 
-# ── MLflow Tracing (best-effort — désactivé si serveur indispo) ──────────────
+# ── MLflow Tracing (opt-in via ENABLE_MLFLOW_TRACING=true) ───────────────────
+# Note : le tracing MLflow depuis un service distant nécessite un artifact store
+# accessible (S3/MinIO/HTTP proxy). Sans ça, mlflow tente d'écrire sur le disque
+# local et plante avec « Permission denied: '/mlflow' ». On l'active donc
+# explicitement par opt-in — désactivé par défaut en prod.
 _mlflow = None
-try:
-    import mlflow as _mlflow
-    _mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
-    _mlflow.set_experiment("pipeline-traces-live")
-except Exception as e:
-    print(f"[pipeline] MLflow tracing désactivé : {e}", flush=True)
-    _mlflow = None
+if os.getenv("ENABLE_MLFLOW_TRACING", "false").lower() == "true":
+    try:
+        import mlflow as _mlflow
+        _mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+        _mlflow.set_experiment("pipeline-traces-live")
+        print("[pipeline] MLflow tracing activé", flush=True)
+    except Exception as e:
+        print(f"[pipeline] MLflow tracing désactivé (erreur init) : {e}", flush=True)
+        _mlflow = None
 
 
 def _trace(name: str):

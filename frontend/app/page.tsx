@@ -24,9 +24,9 @@ const WHISPER_MODELS = [
 ];
 
 const LLM_MODELS = [
-  { value: "groq/llama-3.1-8b-instant",    label: "Llama 3.1 8B Instant (Groq) — défaut" },
-  { value: "groq/llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Groq) — qualité" },
-  { value: "groq/mixtral-8x7b-32768",       label: "Mixtral 8x7B (Groq)" },
+  { value: "groq/openai/gpt-oss-20b",  label: "GPT-OSS 20B (Groq) — défaut" },
+  { value: "groq/openai/gpt-oss-120b", label: "GPT-OSS 120B (Groq) — qualité" },
+  { value: "groq/qwen/qwen3.6-27b",    label: "Qwen 3.6 27B (Groq) — multilingue" },
 ];
 
 const PROMPT_VERSIONS = [
@@ -564,17 +564,18 @@ export default function Home() {
   const [isHoverDrop, setIsHoverDrop] = useState(false);
   const [targetLang,    setTargetLang]    = useState("en");
   const [whisperModel,  setWhisperModel]  = useState("large-v3");
-  const [llmModel,      setLlmModel]      = useState("groq/llama-3.1-8b-instant");
+  const [llmModel,      setLlmModel]      = useState("groq/openai/gpt-oss-20b");
   const [promptVersion, setPromptVersion] = useState("v1.1");
   const [showAdvanced,  setShowAdvanced]  = useState(false);
 
-  // Persister les choix avancés dans localStorage
+  // Persister les choix avancés dans localStorage — ignore les valeurs obsolètes
+  // (ex: modèle LLM déprécié par le provider) pour ne pas cracher au POST
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("translate_config") || "{}");
-      if (saved.whisperModel)  setWhisperModel(saved.whisperModel);
-      if (saved.llmModel)      setLlmModel(saved.llmModel);
-      if (saved.promptVersion) setPromptVersion(saved.promptVersion);
+      if (saved.whisperModel  && WHISPER_MODELS.some(m => m.value === saved.whisperModel))  setWhisperModel(saved.whisperModel);
+      if (saved.llmModel      && LLM_MODELS.some(m => m.value === saved.llmModel))          setLlmModel(saved.llmModel);
+      if (saved.promptVersion && PROMPT_VERSIONS.some(m => m.value === saved.promptVersion)) setPromptVersion(saved.promptVersion);
     } catch {}
   }, []);
 

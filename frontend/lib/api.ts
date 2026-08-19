@@ -29,7 +29,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 export async function runPipeline(
   file: File | Blob,
   targetLang    = "en",
-  llmModel      = "groq/llama-3.1-8b-instant",
+  llmModel      = "groq/openai/gpt-oss-20b",
   promptVersion = "v1.1",
   whisperModel  = "small"
 ): Promise<ProcessResult> {
