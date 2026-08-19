@@ -37,6 +37,25 @@ if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
     except Exception:
         _lf = None
 
+# ── MLflow Tracing (best-effort — désactivé si serveur indispo) ──────────────
+_mlflow = None
+try:
+    import mlflow as _mlflow
+    _mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+    _mlflow.set_experiment("pipeline-traces-live")
+except Exception as e:
+    print(f"[pipeline] MLflow tracing désactivé : {e}", flush=True)
+    _mlflow = None
+
+
+def _trace(name: str):
+    """Décorateur conditionnel : applique mlflow.trace si dispo, sinon no-op."""
+    def decorator(fn):
+        if _mlflow is None:
+            return fn
+        return _mlflow.trace(name=name)(fn)
+    return decorator
+
 app = FastAPI(title="Pipeline Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
@@ -50,6 +69,7 @@ Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose
 # Langchain LCEL — 3 étapes chaînées
 # ---------------------------------------------------------------------------
 
+@_trace(name="stt_transcribe")
 async def _stt_step(state: dict) -> dict:
     """Étape 1 : transcription audio → texte via STT Service.
     Timeout 600s pour couvrir le téléchargement initial du modèle (large-v3 = 3 Go)."""
@@ -105,6 +125,7 @@ async def _stt_step(state: dict) -> dict:
     }
 
 
+@_trace(name="llm_translate")
 async def _llm_step(state: dict) -> dict:
     """Étape 2 : traduction texte → texte traduit via LLM Service.
     Le texte est sandboxé (échappement balises) avant envoi au LLM."""
@@ -153,6 +174,7 @@ async def _llm_step(state: dict) -> dict:
     }
 
 
+@_trace(name="tts_synthesize")
 async def _tts_step(state: dict) -> dict:
     """Étape 3 : synthèse vocale texte traduit → audio via TTS Service."""
     from datetime import datetime, timezone
@@ -220,7 +242,7 @@ def health():
 async def process(
     file: UploadFile = File(...),
     target_lang: str = Form("en"),
-    llm_model: str = Form("groq/llama-3.1-8b-instant"),
+    llm_model: str = Form("groq/openai/gpt-oss-20b"),
     prompt_version: str = Form("v1.1"),
     whisper_model: str = Form("small"),
 ):

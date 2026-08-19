@@ -1,0 +1,1355 @@
+<title>traudio — soutenance</title>
+<style>
+  :root {
+    --bg:         #0A0A0C;
+    --surface:    #141419;
+    --surface-2:  #1B1B22;
+    --fg:         #EEEBE2;
+    --fg-muted:   #8A8578;
+    --fg-dim:     #55524B;
+    --accent:     #C9A961;
+    --accent-dim: #6B5D3E;
+    --divider:    #26262E;
+    --ok:         #7BA05B;
+    --warn:       #C67B4A;
+
+    --font-serif: ui-serif, Georgia, "Times New Roman", serif;
+    --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Deck container
+     ──────────────────────────────────────────────────────────── */
+  .deck {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 400ms ease;
+    background: var(--bg);
+  }
+
+  .slide.is-active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Typographic scale — editorial
+     ──────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--fg-muted);
+    margin: 0 0 3vh 0;
+  }
+
+  .display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(2.5rem, 6vw, 5.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    color: var(--fg);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .display em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 400;
+  }
+
+  h2.title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(1.8rem, 3.2vw, 2.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin: 0 0 4vh 0;
+    text-wrap: balance;
+    max-width: 22ch;
+  }
+
+  h2.title em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .lede {
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+    line-height: 1.55;
+    color: var(--fg);
+    max-width: 42ch;
+    margin: 0;
+  }
+
+  .body {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--fg);
+    max-width: 60ch;
+  }
+
+  .caption {
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.02em;
+    font-style: italic;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Chrome — navigation, counter, brand
+     ──────────────────────────────────────────────────────────── */
+  .chrome-top {
+    position: fixed;
+    top: 3vh;
+    left: 8vw;
+    right: 8vw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .chrome-top .brand {
+    font-family: var(--font-serif);
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+    color: var(--fg-muted);
+    font-size: 13px;
+  }
+
+  .chrome-bottom {
+    position: fixed;
+    bottom: 3vh;
+    left: 8vw;
+    right: 8vw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+  }
+
+  .counter {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .counter .sep { color: var(--fg-dim); margin: 0 0.5em; }
+  .counter .current { color: var(--fg); }
+
+  .dots {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dots button {
+    background: transparent;
+    border: none;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .dots button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--fg-dim);
+    transition: background 200ms;
+  }
+
+  .dots button:hover::after { background: var(--fg-muted); }
+  .dots button.is-active::after { background: var(--accent); }
+
+  .nav-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .nav-hint kbd {
+    font-family: var(--font-mono);
+    padding: 1px 5px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    color: var(--fg-muted);
+    background: var(--surface);
+    font-size: 9px;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Cover slide
+     ──────────────────────────────────────────────────────────── */
+  .cover {
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .cover .display {
+    font-size: clamp(4rem, 12vw, 10rem);
+    line-height: 0.95;
+    margin-bottom: 2vh;
+  }
+  .cover .tagline {
+    font-family: var(--font-serif);
+    font-size: clamp(1.2rem, 2vw, 1.6rem);
+    color: var(--fg-muted);
+    font-style: italic;
+    margin: 0 0 6vh 0;
+    letter-spacing: 0;
+  }
+  .cover .signature {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.05em;
+  }
+  .cover .signature strong {
+    color: var(--fg);
+    font-weight: 400;
+    font-family: var(--font-serif);
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Content slide layouts
+     ──────────────────────────────────────────────────────────── */
+  .slide-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6vw;
+    align-items: start;
+  }
+
+  .split-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4vw;
+    align-items: start;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Cards & lists
+     ──────────────────────────────────────────────────────────── */
+  .card {
+    padding: 3vh 2.5vw;
+    border-top: 1px solid var(--divider);
+  }
+
+  .card .card-eyebrow {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.5vh 0;
+    font-weight: 500;
+  }
+
+  .card h3 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 1.35rem;
+    margin: 0 0 1.5vh 0;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+
+  .card p, .card ul {
+    font-size: 14px;
+    color: var(--fg-muted);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  ul.editorial {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  ul.editorial li {
+    padding: 1.6vh 0;
+    border-bottom: 1px solid var(--divider);
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+  ul.editorial li:last-child { border-bottom: none; }
+  ul.editorial li::before {
+    content: '·';
+    color: var(--accent);
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+  ul.editorial li strong {
+    font-weight: 500;
+    color: var(--fg);
+  }
+  ul.editorial li span {
+    color: var(--fg-muted);
+    margin-left: 0.6em;
+    font-size: 0.95em;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Tables
+     ──────────────────────────────────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 2vh;
+  }
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th,
+  table.data td {
+    padding: 1.4vh 1vw;
+    text-align: left;
+    border-bottom: 1px solid var(--divider);
+  }
+  table.data th {
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--fg-muted);
+  }
+  table.data td {
+    color: var(--fg);
+  }
+  table.data td.mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  table.data td.accent { color: var(--accent); }
+  table.data tr.champion td {
+    color: var(--fg);
+    font-weight: 500;
+  }
+  table.data tr.champion td.mono { color: var(--accent); }
+
+  /* ────────────────────────────────────────────────────────────
+     Code block
+     ──────────────────────────────────────────────────────────── */
+  pre.code {
+    background: var(--surface);
+    border-left: 2px solid var(--accent);
+    padding: 3vh 2.5vw;
+    margin: 3vh 0 0 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--fg);
+    overflow-x: auto;
+    letter-spacing: 0;
+  }
+  pre.code .kw { color: var(--accent); }
+  pre.code .cm { color: var(--fg-dim); font-style: italic; }
+  pre.code .st { color: var(--fg-muted); }
+
+  /* ────────────────────────────────────────────────────────────
+     Big number stats
+     ──────────────────────────────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4vw;
+    margin-top: 4vh;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1vh;
+    border-top: 1px solid var(--divider);
+    padding-top: 3vh;
+  }
+  .stat .value {
+    font-family: var(--font-serif);
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    line-height: 1;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .value em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .stat .value .unit {
+    font-family: var(--font-sans);
+    font-size: 0.35em;
+    color: var(--fg-muted);
+    letter-spacing: 0;
+    margin-left: 0.15em;
+    font-style: normal;
+  }
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--fg-muted);
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     BLEU chart bars
+     ──────────────────────────────────────────────────────────── */
+  .chart {
+    margin-top: 4vh;
+    display: flex;
+    flex-direction: column;
+    gap: 2.2vh;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 18ch 1fr 6ch;
+    align-items: center;
+    gap: 2vw;
+  }
+  .bar-row .name {
+    font-size: 13px;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+  }
+  .bar-row .name .champ {
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-left: 0.8em;
+  }
+  .bar-track {
+    height: 6px;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--fg-dim);
+    transition: transform 800ms ease;
+    transform-origin: left;
+  }
+  .bar-row.is-champion .bar-fill { background: var(--accent); }
+  .bar-row.is-expensive .bar-fill { background: var(--warn); }
+  .bar-value {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-row.is-champion .bar-value { color: var(--accent); }
+
+  /* ────────────────────────────────────────────────────────────
+     Architecture SVG diagram
+     ──────────────────────────────────────────────────────────── */
+  .arch-wrap {
+    margin-top: 3vh;
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+  }
+  .arch-wrap svg {
+    max-width: 100%;
+    height: auto;
+  }
+  .arch text {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    fill: var(--fg);
+  }
+  .arch text.tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--fg-muted);
+  }
+  .arch text.layer {
+    font-size: 9px;
+    fill: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .arch rect.box {
+    fill: var(--surface);
+    stroke: var(--divider);
+    stroke-width: 1;
+  }
+  .arch rect.box-accent {
+    fill: var(--surface-2);
+    stroke: var(--accent-dim);
+    stroke-width: 1;
+  }
+  .arch line, .arch path.link {
+    stroke: var(--fg-dim);
+    stroke-width: 1;
+    fill: none;
+  }
+  .arch line.accent, .arch path.accent {
+    stroke: var(--accent-dim);
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Stack (deployment) diagram
+     ──────────────────────────────────────────────────────────── */
+  .stack {
+    margin-top: 4vh;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 44rem;
+    gap: 0;
+  }
+  .stack-layer {
+    padding: 2.4vh 2vw;
+    border-top: 1px solid var(--divider);
+    display: grid;
+    grid-template-columns: 12rem 1fr;
+    gap: 2rem;
+    align-items: baseline;
+  }
+  .stack-layer:last-child { border-bottom: 1px solid var(--divider); }
+  .stack-layer .layer-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .stack-layer .layer-name {
+    font-family: var(--font-serif);
+    font-size: 1.1rem;
+    color: var(--fg);
+  }
+  .stack-layer .layer-name .detail {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-left: 0.8em;
+    font-style: italic;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Demo slide
+     ──────────────────────────────────────────────────────────── */
+  .demo {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .demo .display {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .demo .url {
+    font-family: var(--font-mono);
+    color: var(--fg-muted);
+    font-size: 14px;
+    margin-top: 4vh;
+    letter-spacing: 0.08em;
+  }
+  .demo .switch-hint {
+    margin-top: 8vh;
+    font-size: 11px;
+    color: var(--fg-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .demo .switch-hint kbd {
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    color: var(--fg-muted);
+    background: var(--surface);
+    font-size: 10px;
+    margin: 0 0.2em;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Section divider slides
+     ──────────────────────────────────────────────────────────── */
+  .section-divider {
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .section-divider .section-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.25em;
+    margin: 0 0 4vh 0;
+  }
+  .section-divider .display {
+    max-width: 20ch;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Thanks slide
+     ──────────────────────────────────────────────────────────── */
+  .thanks {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .thanks .display { font-size: clamp(4rem, 10vw, 8rem); }
+  .thanks .display em { display: block; margin-top: 0.4em; font-size: 0.7em; }
+  .thanks .signature {
+    margin-top: 8vh;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* Small helpers */
+  .divider-h {
+    height: 1px;
+    background: var(--divider);
+    margin: 4vh 0;
+  }
+  .row {
+    display: flex;
+    gap: 2rem;
+    align-items: baseline;
+  }
+  .key {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    min-width: 8rem;
+  }
+  .val {
+    color: var(--fg);
+    font-size: 14px;
+  }
+
+  /* Hide chrome on cover for cleaner look? No — keep for navigation clarity */
+
+  @media (max-width: 900px) {
+    .split, .split-3 { grid-template-columns: 1fr; gap: 3vh; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .slide { padding: 4vh 6vw; }
+    .chrome-top, .chrome-bottom { left: 6vw; right: 6vw; }
+    .bar-row { grid-template-columns: 12ch 1fr 5ch; }
+  }
+</style>
+
+<div class="deck" id="deck">
+
+  <!-- ─── Chrome (persistent) ─────────────────────────────────── -->
+  <div class="chrome-top">
+    <span class="brand">traudio</span>
+    <span>Soutenance · 04.09.2026</span>
+  </div>
+
+  <div class="chrome-bottom">
+    <div class="counter">
+      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">15</span>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="nav-hint">
+      <kbd>←</kbd><kbd>→</kbd> naviguer
+    </div>
+  </div>
+
+  <!-- ─── 1 · Cover ───────────────────────────────────────────── -->
+  <section class="slide cover is-active" data-title="Ouverture">
+    <p class="eyebrow">Plateforme MLOps · Traduction audio IA</p>
+    <h1 class="display">traudio<em>.</em></h1>
+    <p class="tagline">Traduire la parole, instantanément.</p>
+    <div class="signature">
+      <strong>Tatiana Tarasenko</strong>
+      <span>traduction-audio.fr</span>
+    </div>
+  </section>
+
+  <!-- ─── 2 · Le problème ─────────────────────────────────────── -->
+  <section class="slide" data-title="Contexte">
+    <div class="slide-body">
+      <p class="eyebrow">Contexte</p>
+      <h2 class="title">Traduire la parole en production,<br>c'est <em>orchestrer</em> — pas empiler.</h2>
+      <div class="split" style="margin-top:2vh;">
+        <p class="lede">
+          Un pipeline audio moderne enchaîne trois modèles hétérogènes — reconnaissance vocale, traduction, synthèse — sur des runtimes différents, chez des providers différents, avec des métriques éparpillées.
+        </p>
+        <p class="lede">
+          Cette plateforme démontre qu'on peut les rassembler en un système <em style="font-style:italic;color:var(--accent);">observable, sécurisé, mesurable et déployable</em> — au-delà du POC.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 3 · Démarche ────────────────────────────────────────── -->
+  <section class="slide" data-title="Démarche">
+    <div class="slide-body">
+      <p class="eyebrow">Approche</p>
+      <h2 class="title">Un projet, <em>deux phases</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Phase 1 · livrée</p>
+          <ul class="editorial">
+            <li><span><strong>Pipeline complet</strong> STT · LLM · TTS</span></li>
+            <li><span><strong>Expérimentation MLflow</strong> 3 prompts × 2 modèles</span></li>
+            <li><span><strong>Observability</strong> Grafana · Prometheus · Langfuse</span></li>
+            <li><span><strong>Orchestration batch</strong> Airflow + watcher temps réel</span></li>
+            <li><span><strong>Déploiement HTTPS</strong> traduction-audio.fr</span></li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--fg-muted);">Phase 2 · roadmap</p>
+          <ul class="editorial">
+            <li><span><strong>Refactor sécurité</strong> tout via pipeline, ne plus exposer STT/LLM</span></li>
+            <li><span><strong>Traduction bidirectionnelle</strong> auto-détection Whisper</span></li>
+            <li><span><strong>Tracing MLflow natif</strong> spans du pipeline en prod</span></li>
+            <li><span><strong>Tests d'intégration</strong> bout-en-bout</span></li>
+            <li><span><strong>Dashboards métier</strong> Grafana finalisés</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 4 · Architecture ────────────────────────────────────── -->
+  <section class="slide" data-title="Architecture">
+    <div class="slide-body">
+      <p class="eyebrow">Architecture</p>
+      <h2 class="title"><em>14 microservices</em>, un seul réseau.</h2>
+      <div class="arch-wrap">
+        <svg class="arch" viewBox="0 0 1100 500" width="1100" preserveAspectRatio="xMidYMid meet">
+          <!-- Layer labels -->
+          <text class="layer" x="20" y="45">Interface</text>
+          <text class="layer" x="20" y="145">Edge</text>
+          <text class="layer" x="20" y="245">Orchestration</text>
+          <text class="layer" x="20" y="345">Modèles</text>
+          <text class="layer" x="20" y="425">Observability &amp; Data</text>
+
+          <!-- Row 1 : Frontend -->
+          <rect class="box-accent" x="450" y="20" width="200" height="50" rx="0"/>
+          <text x="550" y="45" text-anchor="middle" font-weight="500">Frontend</text>
+          <text class="tag" x="550" y="60" text-anchor="middle">Next.js · React</text>
+
+          <!-- Row 2 : Gateway -->
+          <rect class="box-accent" x="450" y="120" width="200" height="50"/>
+          <text x="550" y="145" text-anchor="middle" font-weight="500">Gateway</text>
+          <text class="tag" x="550" y="160" text-anchor="middle">FastAPI · JWT · Auth</text>
+
+          <!-- Row 3 : Pipeline + Admin -->
+          <rect class="box-accent" x="280" y="220" width="200" height="50"/>
+          <text x="380" y="245" text-anchor="middle" font-weight="500">Pipeline</text>
+          <text class="tag" x="380" y="260" text-anchor="middle">LangChain LCEL</text>
+
+          <rect class="box" x="620" y="220" width="200" height="50"/>
+          <text x="720" y="245" text-anchor="middle" font-weight="500">Watcher</text>
+          <text class="tag" x="720" y="260" text-anchor="middle">Streaming temps réel</text>
+
+          <!-- Row 4 : STT / LLM / TTS -->
+          <rect class="box" x="140" y="320" width="180" height="50"/>
+          <text x="230" y="345" text-anchor="middle" font-weight="500">STT</text>
+          <text class="tag" x="230" y="360" text-anchor="middle">Whisper large-v3</text>
+
+          <rect class="box" x="360" y="320" width="180" height="50"/>
+          <text x="450" y="345" text-anchor="middle" font-weight="500">LLM</text>
+          <text class="tag" x="450" y="360" text-anchor="middle">Groq · Llama 3.1</text>
+
+          <rect class="box" x="580" y="320" width="180" height="50"/>
+          <text x="670" y="345" text-anchor="middle" font-weight="500">TTS</text>
+          <text class="tag" x="670" y="360" text-anchor="middle">Voxtral / MMS-TTS</text>
+
+          <rect class="box" x="800" y="320" width="180" height="50"/>
+          <text x="890" y="345" text-anchor="middle" font-weight="500">Airflow</text>
+          <text class="tag" x="890" y="360" text-anchor="middle">Batch · PostgreSQL</text>
+
+          <!-- Row 5 : Observability strip -->
+          <rect class="box" x="140" y="420" width="160" height="50"/>
+          <text x="220" y="445" text-anchor="middle" font-weight="500">MLflow</text>
+          <text class="tag" x="220" y="460" text-anchor="middle">Tracking · Registry</text>
+
+          <rect class="box" x="320" y="420" width="160" height="50"/>
+          <text x="400" y="445" text-anchor="middle" font-weight="500">Grafana</text>
+          <text class="tag" x="400" y="460" text-anchor="middle">Dashboards</text>
+
+          <rect class="box" x="500" y="420" width="160" height="50"/>
+          <text x="580" y="445" text-anchor="middle" font-weight="500">Prometheus</text>
+          <text class="tag" x="580" y="460" text-anchor="middle">Métriques</text>
+
+          <rect class="box" x="680" y="420" width="160" height="50"/>
+          <text x="760" y="445" text-anchor="middle" font-weight="500">Langfuse</text>
+          <text class="tag" x="760" y="460" text-anchor="middle">Traces LLM</text>
+
+          <rect class="box" x="860" y="420" width="120" height="50"/>
+          <text x="920" y="445" text-anchor="middle" font-weight="500">Postgres</text>
+          <text class="tag" x="920" y="460" text-anchor="middle">Airflow DB</text>
+
+          <!-- Links -->
+          <line class="accent" x1="550" y1="70" x2="550" y2="120"/>
+          <line class="accent" x1="450" y1="170" x2="380" y2="220"/>
+          <line class="accent" x1="650" y1="170" x2="720" y2="220"/>
+          <line class="accent" x1="380" y1="270" x2="230" y2="320"/>
+          <line class="accent" x1="380" y1="270" x2="450" y2="320"/>
+          <line class="accent" x1="380" y1="270" x2="670" y2="320"/>
+          <line x1="720" y1="270" x2="890" y2="320"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 5 · Pipeline coeur ──────────────────────────────────── -->
+  <section class="slide" data-title="Pipeline">
+    <div class="slide-body">
+      <p class="eyebrow">Pipeline</p>
+      <h2 class="title">STT · LLM · TTS,<br>chaînés en <em>LCEL</em>.</h2>
+      <div class="split" style="align-items:center;">
+        <div>
+          <p class="lede">
+            Chaque étape est un <em style="font-style:italic;color:var(--accent);">Runnable</em> typé, composable et instrumenté — la chaîne LangChain rend le flux lisible, testable et traçable de bout en bout.
+          </p>
+          <p class="body" style="margin-top:3vh; color:var(--fg-muted);">
+            Prompt guards en amont (anti-injection) et en aval (cohérence traduction), sandbox <code>&lt;user_text&gt;</code> pour isoler l'entrée utilisateur.
+          </p>
+        </div>
+        <pre class="code"><span class="cm"># pipeline/main.py</span>
+pipeline_chain = (
+    <span class="kw">RunnableLambda</span>(_stt_step)
+    | <span class="kw">RunnableLambda</span>(_llm_step)
+    | <span class="kw">RunnableLambda</span>(_tts_step)
+)
+
+<span class="cm"># chaque step logge :</span>
+<span class="cm">#   latence, tokens, coût, spans MLflow</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 6 · Modèles ─────────────────────────────────────────── -->
+  <section class="slide" data-title="Modèles">
+    <div class="slide-body">
+      <p class="eyebrow">Modèles</p>
+      <h2 class="title"><em>Choisir</em> — pas hériter.</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width:10%">Étape</th>
+              <th style="width:24%">Modèle</th>
+              <th style="width:16%">Provider</th>
+              <th>Rationale</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>STT</td>
+              <td class="mono">Whisper large-v3</td>
+              <td>HuggingFace</td>
+              <td>Précision multilingue · détection auto de langue source</td>
+            </tr>
+            <tr>
+              <td>LLM</td>
+              <td class="mono">Llama 3.1 8B Instant</td>
+              <td>Groq</td>
+              <td>Latence &lt; 1s · coût $0.05/1M tokens · qualité suffisante</td>
+            </tr>
+            <tr>
+              <td>TTS</td>
+              <td class="mono">Voxtral · MMS-TTS</td>
+              <td>Mistral · Meta</td>
+              <td>Routing par langue — Voxtral pour EN/ES/DE, MMS local pour UK</td>
+            </tr>
+            <tr>
+              <td>STT live</td>
+              <td class="mono">Whisper small</td>
+              <td>HuggingFace</td>
+              <td>Chunks courts (5s) · latence &lt; 500 ms pour meeting recorder</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="caption" style="margin-top:3vh;">Abstraction LiteLLM côté LLM — permet de swap Groq ↔ OpenAI ↔ Anthropic sans toucher au code métier.</p>
+    </div>
+  </section>
+
+  <!-- ─── 7 · Stack technique justifiée ───────────────────────── -->
+  <section class="slide" data-title="Stack technique">
+    <div class="slide-body">
+      <p class="eyebrow">Stack technique</p>
+      <h2 class="title">Chaque choix, <em>justifié</em>.</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width:14%">Couche</th>
+              <th style="width:22%">Choix</th>
+              <th style="width:22%">Alternative</th>
+              <th>Pourquoi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Frontend</td>
+              <td class="mono">Next.js 15</td>
+              <td>Vue · Angular</td>
+              <td>SSR/SSG standalone · écosystème mature · déploiement Docker natif</td>
+            </tr>
+            <tr>
+              <td>Backend</td>
+              <td class="mono">FastAPI</td>
+              <td>Flask · Django</td>
+              <td>Async natif · typage Pydantic · OpenAPI auto · perf</td>
+            </tr>
+            <tr>
+              <td>Orchestration LLM</td>
+              <td class="mono">LangChain LCEL</td>
+              <td>LangGraph · custom</td>
+              <td>Chaînage typé <code>|</code> · runnables composables · standard industrie</td>
+            </tr>
+            <tr>
+              <td>LLM abstraction</td>
+              <td class="mono">LiteLLM</td>
+              <td>SDK direct</td>
+              <td>Provider-agnostic · swap Groq ↔ OpenAI ↔ Anthropic sans refactor</td>
+            </tr>
+            <tr>
+              <td>Provider LLM</td>
+              <td class="mono">Groq</td>
+              <td>OpenAI · Anthropic</td>
+              <td>Latence &lt; 1s · pricing 10× plus bas · SLA suffisant</td>
+            </tr>
+            <tr>
+              <td>Orchestration</td>
+              <td class="mono">Docker Compose</td>
+              <td>Kubernetes</td>
+              <td>Simplicité opérationnelle · POC/prod légère · K8s overkill à cette échelle</td>
+            </tr>
+            <tr>
+              <td>Reverse proxy</td>
+              <td class="mono">Nginx</td>
+              <td>Traefik · Caddy</td>
+              <td>Mature · config lisible · Let's Encrypt intégré · admin serveur familier</td>
+            </tr>
+            <tr>
+              <td>Auth</td>
+              <td class="mono">JWT custom</td>
+              <td>Auth0 · Keycloak</td>
+              <td>Contrôle total · zéro dépendance externe · 15min access + 7j refresh</td>
+            </tr>
+            <tr>
+              <td>Batch</td>
+              <td class="mono">Airflow</td>
+              <td>Prefect · Dagster</td>
+              <td>Standard entreprise · UI mature · compétence transférable</td>
+            </tr>
+            <tr>
+              <td>Tracking ML</td>
+              <td class="mono">MLflow</td>
+              <td>W&amp;B · ClearML</td>
+              <td>Open-source · self-hosted · gratuit · Model Registry natif</td>
+            </tr>
+            <tr>
+              <td>Métriques infra</td>
+              <td class="mono">Prometheus + Grafana</td>
+              <td>Datadog · New Relic</td>
+              <td>Open-source · pull model · dashboards versionnés en Git</td>
+            </tr>
+            <tr>
+              <td>Tracing LLM</td>
+              <td class="mono">Langfuse</td>
+              <td>LangSmith · Arize</td>
+              <td>Open-source · self-hostable · pricing raisonnable</td>
+            </tr>
+            <tr>
+              <td>Hébergement</td>
+              <td class="mono">Hetzner VPS</td>
+              <td>AWS · GCP</td>
+              <td>Ratio prix/perf imbattable · 62 Go RAM · pas de vendor lock-in</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 8 · Comparaison BLEU ────────────────────────────────── -->
+  <section class="slide" data-title="Expérimentation">
+    <div class="slide-body">
+      <p class="eyebrow">Expérimentation</p>
+      <h2 class="title">3 prompts, 2 modèles —<br>le <em>champion</em> émerge.</h2>
+      <div class="chart">
+        <div class="bar-row">
+          <div class="name">v1.0 · Llama 8B</div>
+          <div class="bar-track"><div class="bar-fill" style="width:40%"></div></div>
+          <div class="bar-value">40.2</div>
+        </div>
+        <div class="bar-row is-champion">
+          <div class="name">v1.1 · Llama 8B <span class="champ">champion</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:46%"></div></div>
+          <div class="bar-value">46.2</div>
+        </div>
+        <div class="bar-row">
+          <div class="name">v1.2 · Llama 8B</div>
+          <div class="bar-track"><div class="bar-fill" style="width:42%"></div></div>
+          <div class="bar-value">42.1</div>
+        </div>
+        <div class="bar-row is-expensive">
+          <div class="name">v1.1 · Llama 70B</div>
+          <div class="bar-track"><div class="bar-fill" style="width:51%"></div></div>
+          <div class="bar-value">51.3</div>
+        </div>
+      </div>
+      <p class="caption" style="margin-top:4vh;">Score BLEU sur 30 flash-infos routières · référence humaine · v1.1 8B retenu : meilleur ratio qualité/coût (70B = 10× plus cher pour +5 pts BLEU).</p>
+    </div>
+  </section>
+
+  <!-- ─── 8 · Observability 3 couches ─────────────────────────── -->
+  <section class="slide" data-title="Observability">
+    <div class="slide-body">
+      <p class="eyebrow">Observability</p>
+      <h2 class="title">Trois couches,<br>un seul <em>système</em>.</h2>
+      <div class="split-3" style="margin-top:2vh;">
+        <div class="card">
+          <p class="card-eyebrow">01 · Infra</p>
+          <h3>Requêtes &amp; latence</h3>
+          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Prometheus scrape 6 services</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Grafana — p95 · throughput · 5xx</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">12 panels dashboard</li>
+          </ul>
+        </div>
+        <div class="card">
+          <p class="card-eyebrow">02 · Métier</p>
+          <h3>Coût &amp; usage</h3>
+          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Compteurs custom Prometheus</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Coût $ cumulé par langue</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Tokens · événements extraits</li>
+          </ul>
+        </div>
+        <div class="card">
+          <p class="card-eyebrow">03 · LLM</p>
+          <h3>Traces &amp; évaluation</h3>
+          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">MLflow · tracking · registry</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Langfuse · spans détaillés</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Coût $ · tokens · qualité</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 9 · MLflow hub ──────────────────────────────────────── -->
+  <section class="slide" data-title="MLflow">
+    <div class="slide-body">
+      <p class="eyebrow">Hub LLMOps</p>
+      <h2 class="title">MLflow — <em>tracking</em>, <em>eval</em>, <em>tracing</em>.</h2>
+      <div class="split-3" style="margin-top:2vh;">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Tracking</p>
+          <p class="body" style="color:var(--fg-muted);">Chaque config <em>whisper × llm × prompt</em> = 1 run avec params, métriques agrégées, artefacts. Tag <code>champion</code> sur la meilleure config.</p>
+          <p class="body" style="margin-top:2vh;color:var(--fg-muted);">Model Registry — 3 modèles taggés <code>production_version</code>.</p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Évaluation</p>
+          <p class="body" style="color:var(--fg-muted);">Table interactive per-audio (drill-down) + <code>mlflow.evaluate()</code> natif :</p>
+          <p class="body" style="margin-top:1.5vh;color:var(--fg-muted);font-size:13px;">
+            BLEU · ROUGE-1/2/L · exact_match ·<br>
+            toxicity · Flesch-Kincaid · ARI
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Tracing</p>
+          <p class="body" style="color:var(--fg-muted);">Décorateur <code>@mlflow.trace</code> sur les 3 steps du pipeline — spans hiérarchiques capturés en temps réel :</p>
+          <p class="body" style="margin-top:1.5vh;color:var(--fg-muted);font-size:13px;">
+            <code>stt_transcribe</code><br>
+            <code>llm_translate</code><br>
+            <code>tts_synthesize</code>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 10 · Démo ──────────────────────────────────────────── -->
+  <section class="slide demo" data-title="Démonstration">
+    <p class="eyebrow" style="text-align:center;">Démonstration</p>
+    <h2 class="display" style="text-align:center;">Instantanément<em>.</em></h2>
+    <p class="url">traduction-audio.fr</p>
+    <p class="switch-hint">
+      Retour : <kbd>Alt</kbd> + <kbd>Tab</kbd>
+    </p>
+  </section>
+
+  <!-- ─── 11 · Sécurité ──────────────────────────────────────── -->
+  <section class="slide" data-title="Sécurité">
+    <div class="slide-body">
+      <p class="eyebrow">Sécurité</p>
+      <h2 class="title">La sécurité comme <em>couche transversale</em>.</h2>
+      <div class="split" style="margin-top:2vh;">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Authentification</p>
+          <ul class="editorial">
+            <li><span><strong>JWT</strong> access 15 min + refresh 7 j avec rotation</span></li>
+            <li><span><strong>Middleware Next.js</strong> protège toutes les routes non publiques</span></li>
+            <li><span><strong>Basic-auth nginx</strong> couche supplémentaire au niveau edge</span></li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Défense LLM</p>
+          <ul class="editorial">
+            <li><span><strong>Prompt guards</strong> pre-check anti-injection sur transcription</span></li>
+            <li><span><strong>Sandbox utilisateur</strong> <code>&lt;user_text&gt;…&lt;/user_text&gt;</code></span></li>
+            <li><span><strong>Post-check</strong> vérifie cohérence de la sortie LLM</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="divider-h"></div>
+      <p class="body" style="color:var(--fg-muted);">
+        Réseau — tous les services bindés sur <code>127.0.0.1</code>. Seul nginx expose le port 443 public. HTTPS via Let's Encrypt.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── 12 · Déploiement ───────────────────────────────────── -->
+  <section class="slide" data-title="Déploiement">
+    <div class="slide-body">
+      <p class="eyebrow">Production</p>
+      <h2 class="title">Déployé, <em>sécurisé</em>, mesuré.</h2>
+      <div class="stack">
+        <div class="stack-layer">
+          <span class="layer-label">Domaine</span>
+          <span class="layer-name">traduction-audio.fr <span class="detail">Let's Encrypt · HTTP/2</span></span>
+        </div>
+        <div class="stack-layer">
+          <span class="layer-label">Edge</span>
+          <span class="layer-name">Nginx <span class="detail">reverse proxy · basic-auth · rate limit</span></span>
+        </div>
+        <div class="stack-layer">
+          <span class="layer-label">Frontend</span>
+          <span class="layer-name">Next.js standalone <span class="detail">127.0.0.1:3000 · rewrites internes</span></span>
+        </div>
+        <div class="stack-layer">
+          <span class="layer-label">Backend</span>
+          <span class="layer-name">Docker Compose <span class="detail">14 services · réseau interne isolé</span></span>
+        </div>
+        <div class="stack-layer">
+          <span class="layer-label">Hébergement</span>
+          <span class="layer-name">Hetzner VPS <span class="detail">62 Go RAM · 12 CPU · restart policies</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 13 · Chiffres ──────────────────────────────────────── -->
+  <section class="slide" data-title="Résultats">
+    <div class="slide-body">
+      <p class="eyebrow">Résultats</p>
+      <h2 class="title"><em>Concrètement</em>.</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="value"><em>46.2</em></div>
+          <div class="label">BLEU champion</div>
+        </div>
+        <div class="stat">
+          <div class="value">$0.0002<span class="unit">/ trad</span></div>
+          <div class="label">Coût moyen</div>
+        </div>
+        <div class="stat">
+          <div class="value">2–3<span class="unit">s</span></div>
+          <div class="label">Latence e2e</div>
+        </div>
+        <div class="stat">
+          <div class="value">14<span class="unit">svc</span></div>
+          <div class="label">Microservices</div>
+        </div>
+      </div>
+      <div class="divider-h" style="margin-top:6vh;"></div>
+      <div class="split-3">
+        <div class="row"><span class="key">Langues</span><span class="val">EN · UK · ES · DE</span></div>
+        <div class="row"><span class="key">Prompts testés</span><span class="val">3 versions</span></div>
+        <div class="row"><span class="key">Runs MLflow</span><span class="val">> 60 configurations</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 14 · Roadmap ───────────────────────────────────────── -->
+  <section class="slide" data-title="Roadmap">
+    <div class="slide-body">
+      <p class="eyebrow">Ce qui vient</p>
+      <h2 class="title">Roadmap <em>Phase 2</em>.</h2>
+      <ul class="editorial" style="margin-top:2vh;">
+        <li><span><strong>Refactor sécurité</strong> — tout passer par <code>/pipeline</code>, ne plus exposer STT et LLM publiquement</span></li>
+        <li><span><strong>Traduction bidirectionnelle</strong> — ajouter le français comme cible, auto-détection de la langue source via Whisper</span></li>
+        <li><span><strong>Tracing MLflow en prod</strong> — spans du pipeline capturés à chaque appel (déjà instrumenté)</span></li>
+        <li><span><strong>Tests d'intégration</strong> — flows critiques bout-en-bout, corpus de non-régression</span></li>
+        <li><span><strong>Dashboards Grafana métier</strong> — coût/jour, throughput par langue, taux d'erreur par étape</span></li>
+        <li><span><strong>Documentation</strong> — README, diagramme d'archi, guide d'exploitation</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ─── 15 · Merci ─────────────────────────────────────────── -->
+  <section class="slide thanks" data-title="Merci">
+    <h2 class="display">Merci<em>. Questions.</em></h2>
+    <div class="signature">
+      traduction-audio.fr · Tatiana Tarasenko
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dots   = document.getElementById('dots');
+  const cur    = document.getElementById('counter-current');
+  const tot    = document.getElementById('counter-total');
+  let idx = 0;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', `Aller à la slide ${i + 1}`);
+    b.addEventListener('click', () => go(i));
+    dots.appendChild(b);
+  });
+  const dotBtns = Array.from(dots.querySelectorAll('button'));
+
+  const pad = n => String(n).padStart(2, '0');
+  tot.textContent = pad(slides.length);
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    slides[idx].classList.remove('is-active');
+    dotBtns[idx].classList.remove('is-active');
+    idx = n;
+    slides[idx].classList.add('is-active');
+    dotBtns[idx].classList.add('is-active');
+    cur.textContent = pad(idx + 1);
+    // update URL hash for direct linking / demo mode
+    if (history.replaceState) {
+      history.replaceState(null, '', '#' + (idx + 1));
+    }
+    // scroll active slide's inner content to top (in case content overflows)
+    const inner = slides[idx].querySelector('.slide-body');
+    if (inner) inner.scrollTop = 0;
+  }
+
+  // Init from hash
+  const h = parseInt(location.hash.replace('#', ''), 10);
+  if (!isNaN(h) && h >= 1 && h <= slides.length) {
+    go(h - 1);
+  } else {
+    dotBtns[0].classList.add('is-active');
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    // Ignore if typing in a form field
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        e.preventDefault();
+        go(idx + 1);
+        break;
+      case 'ArrowLeft':
+      case 'PageUp':
+        e.preventDefault();
+        go(idx - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(slides.length - 1);
+        break;
+    }
+  });
+
+  // Touch / swipe (rudimentary)
+  let touchX = null;
+  document.addEventListener('touchstart', e => {
+    touchX = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) go(idx + (dx < 0 ? 1 : -1));
+    touchX = null;
+  }, { passive: true });
+})();
+</script>

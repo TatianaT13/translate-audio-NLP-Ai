@@ -108,7 +108,7 @@ def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float, di
     if not cost_usd or cost_usd == 0.0:
         GROQ_PRICING = {
             "groq/llama-3.1-8b-instant":   (0.05, 0.08),
-            "groq/llama-3.3-70b-versatile": (0.59, 0.79),
+            "groq/openai/gpt-oss-20b": (0.59, 0.79),
             "groq/llama-3.1-70b-versatile": (0.59, 0.79),
             "groq/mixtral-8x7b-32768":      (0.24, 0.24),
         }
@@ -129,7 +129,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
 
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "groq/llama-3.1-8b-instant")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "groq/openai/gpt-oss-20b")
 DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v1.1")
 
 

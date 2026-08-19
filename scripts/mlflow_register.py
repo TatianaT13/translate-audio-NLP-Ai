@@ -29,9 +29,20 @@ except ImportError:
 
 ROOT = Path(__file__).parent.parent
 RESULTS_CSV = ROOT / "outputs" / "experiments" / "results.csv"
+REFERENCES_DIR = ROOT / "data" / "golden" / "references"
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050")
 EXPERIMENT_NAME     = "translate-audio-llmops"
+
+
+def _load_reference(audio_filename: str, target_lang: str) -> str:
+    """Charge la traduction de référence depuis data/golden/references/.
+    Fichier attendu : {audio_basename}_{lang}.txt"""
+    base = Path(audio_filename).stem
+    ref_path = REFERENCES_DIR / f"{base}_{target_lang}.txt"
+    if ref_path.exists():
+        return ref_path.read_text(encoding="utf-8").strip()
+    return ""
 
 
 # ── Prompts utilisés (copie pour l'audit, à garder synchronisé avec LLM service) ──
@@ -154,6 +165,61 @@ def main():
                 "n_audios":  str(len(config_rows)),
             })
 
+            # ── Drill-down per-audio : table interactive dans MLflow UI ──
+            import pandas as pd
+            per_audio_df = pd.DataFrame([{
+                "audio":         r["audio"],
+                "zone":          r.get("zone", ""),
+                "target_lang":   r["target_lang"],
+                "source_text":   (r["source_text"] or "")[:300],
+                "translation":   (r["translation"] or "")[:300],
+                "reference":     _load_reference(r["audio"], r["target_lang"])[:300],
+                "bleu":          _fl(r["bleu"]),
+                "meteor":        _fl(r["meteor"]),
+                "wer":           _fl(r["wer"]),
+                "tts_wer":       _fl(r["tts_wer"]),
+                "latency_stt_ms":   _fl(r["latency_stt_ms"]),
+                "latency_llm_ms":   _fl(r["latency_llm_ms"]),
+                "latency_total_ms": _fl(r["latency_total_ms"]),
+                "language_prob":    _fl(r["language_prob"]),
+            } for r in config_rows])
+            mlflow.log_table(per_audio_df, artifact_file="per_audio_results.json")
+
+            # ── mlflow.evaluate() : métriques LLM natives sur l'ensemble du config ──
+            # Garde uniquement les lignes avec référence + traduction non vides
+            eval_rows = [
+                {
+                    "inputs":      r["source_text"] or "",
+                    "predictions": r["translation"] or "",
+                    "targets":     _load_reference(r["audio"], r["target_lang"]),
+                }
+                for r in config_rows
+                if r.get("translation") and _load_reference(r["audio"], r["target_lang"])
+            ]
+            if eval_rows:
+                try:
+                    eval_df = pd.DataFrame(eval_rows)
+                    mlflow.evaluate(
+                        data=eval_df,
+                        targets="targets",
+                        predictions="predictions",
+                        model_type="text",
+                        extra_metrics=[
+                            mlflow.metrics.bleu(),
+                            mlflow.metrics.rouge1(),
+                            mlflow.metrics.rouge2(),
+                            mlflow.metrics.rougeL(),
+                            mlflow.metrics.exact_match(),
+                            mlflow.metrics.flesch_kincaid_grade_level(),
+                            mlflow.metrics.ari_grade_level(),
+                            mlflow.metrics.toxicity(),
+                        ],
+                        evaluator_config={"col_mapping": {"inputs": "inputs"}},
+                    )
+                    print(f"    ↳ mlflow.evaluate() OK ({len(eval_rows)} samples)")
+                except Exception as e:
+                    print(f"    ↳ mlflow.evaluate() skippé : {e}")
+
         config_summaries.append({
             "run_id":      run.info.run_id,
             "config":      run_name,
@@ -181,7 +247,7 @@ def main():
         {
             "name":        "llama-translation",
             "description": "LLM de traduction — Llama 3.1 8B Instant via Groq API.",
-            "tags":        {"provider": "groq", "type": "llm", "production_version": "groq/llama-3.1-8b-instant"},
+            "tags":        {"provider": "groq", "type": "llm", "production_version": "groq/openai/gpt-oss-20b"},
         },
         {
             "name":        "voxtral-tts",

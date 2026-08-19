@@ -122,13 +122,19 @@ async def health():
     }
 
 
+# Langues mal supportées par Voxtral → fallback obligatoire vers MMS local
+MISTRAL_UNSUPPORTED_LANGS = {"uk"}
+
+
 @app.post("/synthesize")
 def synthesize(req: SynthesizeRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Le champ text est vide.")
 
+    use_mistral = (TTS_BACKEND == "mistral" and req.lang not in MISTRAL_UNSUPPORTED_LANGS)
+
     try:
-        if TTS_BACKEND == "mistral":
+        if use_mistral:
             audio_bytes = synthesize_mistral(req.text, req.lang)
             media_type = "audio/mpeg"
             filename = "synthesis.mp3"

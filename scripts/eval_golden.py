@@ -85,7 +85,7 @@ WHISPER_MODELS = [
 
 LLM_MODELS = [
     "groq/llama-3.1-8b-instant",
-    "groq/llama-3.3-70b-versatile",
+    "groq/openai/gpt-oss-20b",
 ]
 
 PROMPT_VERSIONS = ["v1.0", "v1.1", "v1.2"]

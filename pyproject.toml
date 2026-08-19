@@ -34,4 +34,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "integration: tests appelant les services HTTP (docker compose up requis)",
+    "slow: tests longs (> 10s) — pipeline complet avec Whisper/LLM/TTS",
+    "e2e: tests bout-en-bout via UI (Playwright, à venir)",
+]
