@@ -20,11 +20,13 @@ export interface ChunkTranscript {
 /** Envoie un chunk audio (Blob WebM/MP4) au STT pour transcription. */
 export async function transcribeChunk(
   audio: Blob,
-  whisperModel: string = "small"
+  whisperModel: string = "small",
+  language: string = "auto"       // "auto" = Whisper détecte, "fr" = forcé français…
 ): Promise<ChunkTranscript> {
   const form = new FormData();
   form.append("file", audio, "chunk.webm");
   form.append("model", whisperModel);
+  form.append("language", language);
 
   const headers = await authHeaders();
   const res = await fetch(`${STT_URL}/transcribe`, {
