@@ -33,6 +33,13 @@ dev = [
     # Deps nécessaires aux tests unitaires cross-service :
     "python-jose[cryptography]>=3.3",  # gateway JWT
     "bcrypt>=4.0",                     # gateway password hashing
+    "litellm>=1.40",                   # llm service (imports)
+    "langchain-core>=0.2",             # pipeline service (imports)
+    "sqlalchemy>=2.0",                 # gateway models
+    "pydantic>=2.0",                   # tous les services (schemas)
+    "prometheus-fastapi-instrumentator>=7.0",  # tous les services (metrics)
+    "python-multipart>=0.0.9",         # fastapi Form / UploadFile
+    "langfuse>=4.0",                   # pipeline + watcher tracing
 ]
 
 [tool.setuptools.packages.find]
