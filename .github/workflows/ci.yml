@@ -29,11 +29,12 @@ jobs:
         # Les tests d'intégration nécessitent docker compose up (non dispo en CI).
         # Ils skippent élégamment via _service_up() mais on préfère les exclure
         # explicitement pour un CI rapide et déterministe.
-        run: pytest tests/unit/ -v --tb=short
+        # --junitxml : rapport JUnit uploadé en artifact pour PR reviewers
+        run: pytest tests/unit/ -v --tb=short --junitxml=pytest-report.xml
 
-      - name: Upload test results
+      - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-results
-          path: .pytest_cache/
+          name: pytest-report
+          path: pytest-report.xml
