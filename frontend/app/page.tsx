@@ -579,11 +579,20 @@ export default function Home() {
   const [promptVersion, setPromptVersion] = useState("v1.1");
   const [showAdvanced,  setShowAdvanced]  = useState(false);
 
-  // Persister les choix avancés dans localStorage — ignore les valeurs obsolètes
-  // (ex: modèle LLM déprécié par le provider) pour ne pas cracher au POST
+  // Persister les choix avancés dans localStorage — migration auto des valeurs obsolètes.
+  // Clé versionnée pour invalider les anciennes configs sans intervention user
+  // (v1 contenait des modèles Groq dépréciés → v2 utilise le default env du frontend).
+  const CONFIG_STORAGE_KEY = "translate_config_v2";
+
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("translate_config") || "{}");
+      // Migration : purger l'ancienne clé (v1) et forcer le user à repartir des defaults
+      // du build. Sans ça, les visiteurs récurrents restent bloqués sur un modèle mort.
+      if (typeof window !== "undefined" && localStorage.getItem("translate_config")) {
+        localStorage.removeItem("translate_config");
+      }
+
+      const saved = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}");
       if (saved.whisperModel  && WHISPER_MODELS.some(m => m.value === saved.whisperModel))  setWhisperModel(saved.whisperModel);
       if (saved.llmModel      && LLM_MODELS.some(m => m.value === saved.llmModel))          setLlmModel(saved.llmModel);
       if (saved.promptVersion && PROMPT_VERSIONS.some(m => m.value === saved.promptVersion)) setPromptVersion(saved.promptVersion);
@@ -591,7 +600,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("translate_config", JSON.stringify({ whisperModel, llmModel, promptVersion }));
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify({ whisperModel, llmModel, promptVersion }));
   }, [whisperModel, llmModel, promptVersion]);
   const [toast, setToast]           = useState<string | null>(null);
   const [copied, setCopied]         = useState(false);
