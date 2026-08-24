@@ -308,6 +308,18 @@ async def process(
         import traceback
         print(f"[pipeline] HTTPStatusError: {e.response.status_code} {e.response.text}", flush=True)
         traceback.print_exc()
+        # Détection des erreurs ffmpeg courantes → message user-friendly
+        err_text = e.response.text.lower()
+        if "ffmpeg" in err_text and ("invalid data" in err_text or "misdetection" in err_text or "failed to find" in err_text):
+            raise HTTPException(
+                status_code=415,
+                detail=(
+                    "Format audio non reconnu. Le fichier n'est pas un MP3, WAV ou M4A valide "
+                    "(souvent : extension .mp3 mais contenu différent, ou fichier corrompu). "
+                    "Réencode-le avec un outil comme https://cloudconvert.com/mp3-converter, "
+                    "ou utilise le bouton « Lancer la démo » pour tester."
+                ),
+            )
         raise HTTPException(status_code=502, detail=f"Service error: {e.response.text}")
     except Exception as e:
         import traceback
