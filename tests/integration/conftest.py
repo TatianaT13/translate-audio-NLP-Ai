@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from pathlib import Path
 from typing import Iterator
 
 import httpx
@@ -74,6 +75,30 @@ def client() -> Iterator[httpx.Client]:
         yield c
 
 
+# ── Cleanup global : purge tous les users pytest_* à la fin de la session ───
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_pytest_users(request):
+    """Filet de sécurité : à la fin de la session, purge tous les comptes
+    pytest_*@example.com créés par les tests qui n'utilisent pas la fixture
+    registered_user (register/login direct)."""
+    yield
+    try:
+        import subprocess
+        subprocess.run(
+            ["docker", "compose", "exec", "-T", "gateway", "python3", "-c", """
+import sqlite3
+c = sqlite3.connect('/app/data/auth.db')
+n = c.execute('DELETE FROM users WHERE email LIKE \"pytest_%@example.com\"').rowcount
+c.commit(); c.close()
+print(f'[cleanup] {n} pytest users purgés')
+"""],
+            capture_output=True, timeout=10, cwd=str(Path(__file__).parent.parent.parent),
+        )
+    except Exception:
+        pass  # best-effort
+
+
 # ── User de test jetable + token JWT ─────────────────────────────────────────
 
 @pytest.fixture
@@ -89,9 +114,9 @@ def test_user_credentials() -> dict:
 
 
 @pytest.fixture
-def registered_user(client: httpx.Client, gateway_url: str, test_user_credentials: dict) -> dict:
+def registered_user(client: httpx.Client, gateway_url: str, test_user_credentials: dict):
     """Crée un user via /auth/register puis login pour récupérer les tokens.
-    Renvoie {email, password, access_token, refresh_token}."""
+    Cleanup automatique après le test : delete son propre compte via /auth/account."""
     r = client.post(f"{gateway_url}/auth/register", json=test_user_credentials)
     assert r.status_code in (200, 201), f"register failed: {r.status_code} {r.text}"
 
@@ -99,11 +124,24 @@ def registered_user(client: httpx.Client, gateway_url: str, test_user_credential
     assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
     tokens = r.json()
 
-    return {
+    user = {
         **test_user_credentials,
         "access_token":  tokens["access_token"],
         "refresh_token": tokens["refresh_token"],
     }
+
+    yield user
+
+    # ── Teardown : le user supprime son propre compte (évite pollution DB) ──
+    try:
+        client.request(
+            "DELETE",
+            f"{gateway_url}/auth/account",
+            headers={"Authorization": f"Bearer {user['access_token']}"},
+            json={"password": user["password"]},
+        )
+    except Exception:
+        pass  # best-effort : si l'endpoint change ou le token est déjà révoqué
 
 
 @pytest.fixture
