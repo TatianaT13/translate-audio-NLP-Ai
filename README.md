@@ -172,7 +172,7 @@ Service dédié (`backend/services/watcher/`) qui tourne en arrière-plan en per
 | 4 | large-v3 | llama-3.3-70b | v1.2 | 41.67 | 0.615 |
 | 5 | large-v3 | llama-3.1-8b | v1.1 | 41.15 | 0.636 |
 
-**Combinaison déployée** : `large-v3 + llama-3.1-8b-instant + prompt v1.1` (compromis qualité / vitesse / coût)
+**Combinaison déployée** : `large-v3 + openai/gpt-4o-mini + prompt v1.1 (Llama 3.1 8B déprécié par Groq en août 2026 → migration vers OpenAI via LiteLLM)` (compromis qualité / vitesse / coût)
 **Champion qualité** (tagué dans MLflow) : `large-v3 + llama-3.3-70b-versatile + v1.1`
 
 Rapport complet : [outputs/experiments/evaluation_report.md](outputs/experiments/evaluation_report.md)
@@ -243,7 +243,7 @@ pip install -e ".[dev]"
 
 python scripts/run_pipeline.py \
     --audio data/flash_audio_archive/2026-01-23/nord/flash_nord_20260123_164916.mp3 \
-    --model groq/llama-3.1-8b-instant \
+    --model openai/gpt-4o-mini \
     --target-lang en \
     --prompt-version v1.1 \
     --whisper-model large-v3
@@ -333,7 +333,7 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 | `JWT_SECRET` | Clé secrète JWT (32+ chars) | Oui |
 | `WHISPER_MODEL` | Modèle Whisper du STT service (`small`, `medium`, `large-v3`) | Non (défaut: `small`) |
 | `WATCHER_WHISPER_MODEL` | Modèle Whisper du watcher (séparé du STT) | Non (défaut: `small` — `large-v3` cause OOM) |
-| `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `groq/llama-3.1-8b-instant`) |
+| `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `openai/gpt-4o-mini`) |
 | `PROMPT_VERSION` | Version du prompt (`v1.0`–`v1.2`) | Non (défaut: `v1.1`) |
 | `DATABASE_URL` | URL base de données | Non (défaut: SQLite) |
 | `DEV_MODE` | Endpoints de développement (ex: `/admin/seed`, mots de passe reset retournés en clair) | Non (défaut: `false`) |
