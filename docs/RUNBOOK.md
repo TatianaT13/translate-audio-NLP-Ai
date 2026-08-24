@@ -26,14 +26,29 @@ Accès :
 
 ### 1.2 Production (hermes VPS Hetzner)
 
+**Utiliser le script de déploiement** qui garantit toujours la dernière version :
+
 ```bash
 ssh tanya@144.76.165.54
 cd ~/traudio
-git pull
-docker compose up -d --build
+./scripts/deploy.sh              # rebuild tous les services
+# OU pour un seul service :
+./scripts/deploy.sh frontend     # rebuild uniquement le frontend
 ```
 
-Le déploiement est **manuel** — la CI GitHub Actions lance uniquement les tests (pas de CD auto). Voir Roadmap Phase 2.
+Le script fait, dans l'ordre :
+1. `git pull --ff-only` de la dernière version
+2. `docker compose build --no-cache` (pas de layer périmé)
+3. `docker compose up -d --force-recreate` (recharge `.env` + volumes)
+4. Attente healthchecks (timeout 90s)
+5. Affichage du commit déployé + suggestions post-deploy
+
+⚠️ **Ne PAS utiliser** `docker compose up -d --build` seul — Docker cache
+agressivement le layer `npm run build` de Next.js et peut servir un vieux
+bundle. Le script utilise `--no-cache` pour éviter ce piège.
+
+Le déploiement est **manuel** — la CI GitHub Actions lance uniquement les tests
+(pas de CD auto). Voir Roadmap Phase 2.
 
 ---
 
