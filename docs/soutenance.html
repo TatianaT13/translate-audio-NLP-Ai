@@ -160,6 +160,37 @@
     font-style: italic;
     color: var(--fg-muted);
     font-size: 13px;
+    text-decoration: none;
+    pointer-events: auto;
+    transition: color 200ms ease;
+  }
+  .chrome-top .brand:hover {
+    color: var(--accent);
+  }
+  .chrome-top .back-to-app {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    text-decoration: none;
+    pointer-events: auto;
+    padding: 4px 10px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    transition: color 200ms ease, border-color 200ms ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chrome-top .back-to-app:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+  .chrome-top .right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
   }
 
   .chrome-bottom {
@@ -710,8 +741,11 @@
 
   <!-- ─── Chrome (persistent) ─────────────────────────────────── -->
   <div class="chrome-top">
-    <span class="brand">traudio</span>
-    <span>Soutenance · 04.09.2026</span>
+    <a href="/" class="brand" title="Retour à l'application">traudio</a>
+    <div class="right">
+      <span>Soutenance · 04.09.2026</span>
+      <a href="/" class="back-to-app" title="Retour à l'application">← app</a>
+    </div>
   </div>
 
   <div class="chrome-bottom">
@@ -727,10 +761,10 @@
   <!-- ─── 1 · Cover ───────────────────────────────────────────── -->
   <section class="slide cover is-active" data-title="Ouverture">
     <p class="eyebrow">Plateforme MLOps · Traduction audio IA</p>
-    <h1 class="display">traudio<em>.</em></h1>
+    <h1 class="display">Traduction audio<em>.</em></h1>
     <p class="tagline">Traduire la parole, instantanément.</p>
     <div class="signature">
-      <strong>Tatiana Tarasenko</strong>
+      <strong>Tetyana Tarasenko</strong>
       <span>traduction-audio.fr</span>
     </div>
   </section>
@@ -1261,7 +1295,7 @@ pipeline_chain = (
   <section class="slide thanks" data-title="Merci">
     <h2 class="display">Merci<em>. Questions.</em></h2>
     <div class="signature">
-      traduction-audio.fr · Tatiana Tarasenko
+      traduction-audio.fr · Tetyana Tarasenko
     </div>
   </section>
 
