@@ -244,11 +244,30 @@ def health():
     }
 
 
+# ── Alias serveur : redirection des modèles obsolètes / instables ─────────────
+# Protège les visiteurs dont le localStorage garde d'anciens modèles :
+#   - groq/llama-3.1-8b-instant      : déprécié par Groq (août 2026)
+#   - groq/openai/gpt-oss-*           : 60% de faux positifs prompt_guard
+#   - groq/qwen/qwen3.6-27b           : idem instable
+# → tout est redirigé vers openai/gpt-4o-mini (stable, pay-as-you-go).
+# Le user qui a explicitement choisi Groq via l'UI avancée verra un warning en logs
+# mais sa traduction passera sur OpenAI (garantie de succès pour la démo).
+_LEGACY_MODEL_ALIASES = {
+    "groq/llama-3.1-8b-instant":   "openai/gpt-4o-mini",
+    "groq/openai/gpt-oss-20b":     "openai/gpt-4o-mini",
+    "groq/openai/gpt-oss-120b":    "openai/gpt-4o-mini",
+    "groq/qwen/qwen3.6-27b":       "openai/gpt-4o-mini",
+    "groq/llama-3.3-70b-versatile":"openai/gpt-4o-mini",
+    "groq/llama-3.1-70b-versatile":"openai/gpt-4o-mini",
+    "groq/mixtral-8x7b-32768":     "openai/gpt-4o-mini",
+}
+
+
 @app.post("/process")
 async def process(
     file: UploadFile = File(...),
     target_lang: str = Form("en"),
-    llm_model: str = Form("groq/openai/gpt-oss-20b"),
+    llm_model: str = Form("openai/gpt-4o-mini"),
     prompt_version: str = Form("v1.1"),
     whisper_model: str = Form("small"),
 ):
@@ -257,10 +276,16 @@ async def process(
 
     - **file**          : fichier audio (MP3, WAV, M4A...)
     - **target_lang**   : langue cible (en, uk, es, de)
-    - **llm_model**     : modèle LiteLLM (groq/llama-3.1-8b-instant...)
+    - **llm_model**     : modèle LiteLLM (openai/gpt-4o-mini par défaut)
     - **prompt_version**: version du prompt (v1.0, v1.1, v1.2)
     - **whisper_model** : modèle Whisper (small, large-v3...)
     """
+    # Alias auto : redirige les modèles obsolètes / instables vers un modèle stable
+    if llm_model in _LEGACY_MODEL_ALIASES:
+        aliased = _LEGACY_MODEL_ALIASES[llm_model]
+        print(f"[pipeline] Model alias: {llm_model} → {aliased} (client outdated)", flush=True)
+        llm_model = aliased
+
     audio_bytes = await file.read()
     filename = file.filename or "audio.mp3"
 
