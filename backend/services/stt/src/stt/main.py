@@ -31,23 +31,52 @@ DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
 def convert_audio(src: str, dst: str) -> None:
     """Convertit n'importe quel audio en WAV 16kHz mono via ffmpeg.
 
-    Robuste aux mauvaises extensions (fichiers .mp3 qui contiennent en fait
-    du M4A/AAC/WebM/etc — typique des enregistreurs iOS/Android) :
-      - probesize 100M : laisse ffmpeg lire jusqu'à 100 MB pour détecter le
-        vrai format (défaut = 5 MB seulement, insuffisant pour du M4A avec
-        moov box en fin de fichier)
-      - analyzeduration 100M : idem pour la détection des streams
+    Robuste aux mauvaises extensions et aux fichiers corrompus :
+
+    ▸ ESSAI 1 — options standard permissives :
+      - probesize 100M / analyzeduration 100M : sniffing du format sur le contenu
+        (défaut = 5 MB, insuffisant pour du M4A avec moov box en fin de fichier)
+      - loudnorm : normalise le volume (audio faible → mieux transcrit par Whisper)
+
+    ▸ ESSAI 2 (fallback si essai 1 échoue) — options de récupération d'erreur :
+      - err_detect ignore_err : ignore les erreurs de header/frame corrompues
+      - fflags +igndts+genpts : régénère les timestamps si corrompus
+      - ignore_unknown : passe outre les codecs inconnus
+
+    ▸ ÉCHEC final : lève RuntimeError avec le message ffmpeg pour que le
+      pipeline le convertisse en 415 avec message user-friendly.
     """
+    common_args = ["-y", "-analyzeduration", "100M", "-probesize", "100M"]
+    output_args = [
+        "-vn", "-ac", "1", "-ar", "16000",
+        "-af", "loudnorm=I=-16:LRA=11:TP=-1.5",  # normalise volume audio
+        "-c:a", "pcm_s16le", dst,
+    ]
+
+    # Essai 1 : options standard
     result = subprocess.run(
-        ["ffmpeg", "-y",
-         "-analyzeduration", "100M", "-probesize", "100M",
-         "-i", src,
-         "-vn", "-ac", "1", "-ar", "16000",
-         "-c:a", "pcm_s16le", dst],
+        ["ffmpeg"] + common_args + ["-i", src] + output_args,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg error: {result.stderr.decode()}")
+    if result.returncode == 0:
+        return
+
+    # Essai 2 : options de récupération d'erreur (fichiers corrompus, headers manquants)
+    fallback_args = [
+        "-err_detect", "ignore_err",
+        "-fflags", "+igndts+genpts",
+        "-ignore_unknown",
+    ]
+    result2 = subprocess.run(
+        ["ffmpeg"] + common_args + fallback_args + ["-i", src] + output_args,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result2.returncode == 0:
+        print(f"[stt] convert_audio: recovered via fallback for {src}", flush=True)
+        return
+
+    # Les deux essais ont échoué → fichier vraiment inutilisable
+    raise RuntimeError(f"ffmpeg error: {result.stderr.decode()}")
 
 
 def get_whisper(model_name: str) -> WhisperService:
