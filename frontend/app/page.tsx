@@ -514,6 +514,7 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
             {[
               { label: "Compte-rendu de réunion", action: () => router.push("/meeting"), color: "var(--accent)" },
               ...(user.is_admin ? [{ label: "Dashboard admin", action: () => router.push("/admin"), color: "var(--accent)" }] : []),
+              { label: "Support de soutenance", action: () => { window.open("/soutenance.html", "_blank", "noopener,noreferrer"); setOpen(false); }, color: "var(--accent)" },
               { label: "Changer le mot de passe", action: () => { setShowPwd(true); setOpen(false); }, color: "var(--foreground)" },
               { label: "Se déconnecter", action: onLogout, color: "var(--foreground)" },
               { label: "Supprimer le compte", action: () => { setShowDel(true); setOpen(false); }, color: "#e87070" },
