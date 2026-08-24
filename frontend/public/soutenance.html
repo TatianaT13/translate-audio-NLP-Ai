@@ -1532,74 +1532,153 @@ pipeline = (
       <p class="eyebrow">Architecture</p>
       <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
       <div class="arch-wrap">
-        <svg class="arch" viewBox="0 0 1100 500" width="1100" preserveAspectRatio="xMidYMid meet">
-          <text class="layer" x="20" y="45">Interface</text>
-          <text class="layer" x="20" y="145">Edge</text>
-          <text class="layer" x="20" y="245">Orchestration</text>
-          <text class="layer" x="20" y="345">Modèles</text>
-          <text class="layer" x="20" y="425">Observability &amp; Data</text>
+        <svg class="arch" viewBox="0 0 1200 680" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
+          <!-- Layer labels -->
+          <text class="layer" x="15" y="48">Edge</text>
+          <text class="layer" x="15" y="130">UI</text>
+          <text class="layer" x="15" y="230">Backend</text>
+          <text class="layer" x="15" y="335">Modèles</text>
+          <text class="layer" x="15" y="440">Batch</text>
+          <text class="layer" x="15" y="540">Observability</text>
 
-          <rect class="box-accent" x="450" y="20" width="200" height="50"/>
-          <text x="550" y="45" text-anchor="middle" font-weight="500">Frontend</text>
-          <text class="tag" x="550" y="60" text-anchor="middle">Next.js · React</text>
+          <!-- Edge — Nginx (host, pas conteneur Docker) -->
+          <rect x="500" y="20" width="200" height="55" fill="var(--surface)" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="600" y="45" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Nginx</text>
+          <text x="600" y="62" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">host · HTTPS · basic-auth</text>
 
-          <rect class="box-accent" x="450" y="120" width="200" height="50"/>
-          <text x="550" y="145" text-anchor="middle" font-weight="500">Gateway</text>
-          <text class="tag" x="550" y="160" text-anchor="middle">FastAPI · JWT · Auth</text>
+          <!-- UI — Frontend -->
+          <rect class="box-accent" x="500" y="100" width="200" height="55"/>
+          <text x="600" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Frontend</text>
+          <text x="600" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Next.js standalone</text>
 
-          <rect class="box-accent" x="280" y="220" width="200" height="50"/>
-          <text x="380" y="245" text-anchor="middle" font-weight="500">Pipeline</text>
-          <text class="tag" x="380" y="260" text-anchor="middle">LangChain LCEL</text>
+          <!-- Backend row : Gateway | Pipeline | Watcher -->
+          <rect class="box-accent" x="200" y="195" width="200" height="65"/>
+          <text x="300" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Gateway</text>
+          <text x="300" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">FastAPI · JWT · Admin API</text>
+          <text x="300" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8004</text>
 
-          <rect class="box" x="620" y="220" width="200" height="50"/>
-          <text x="720" y="245" text-anchor="middle" font-weight="500">Watcher</text>
-          <text class="tag" x="720" y="260" text-anchor="middle">Streaming temps réel</text>
+          <rect class="box-accent" x="500" y="195" width="200" height="65"/>
+          <text x="600" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Pipeline</text>
+          <text x="600" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL orch.</text>
+          <text x="600" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8000</text>
 
-          <rect class="box" x="140" y="320" width="180" height="50"/>
-          <text x="230" y="345" text-anchor="middle" font-weight="500">STT</text>
-          <text class="tag" x="230" y="360" text-anchor="middle">Whisper large-v3</text>
+          <rect class="box-accent" x="800" y="195" width="220" height="65"/>
+          <text x="910" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Watcher</text>
+          <text x="910" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">poll 107.7 · Whisper embed</text>
+          <text x="910" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8005</text>
 
-          <rect class="box" x="360" y="320" width="180" height="50"/>
-          <text x="450" y="345" text-anchor="middle" font-weight="500">LLM</text>
-          <text class="tag" x="450" y="360" text-anchor="middle">LiteLLM · OpenAI</text>
+          <!-- Models row : STT | LLM | TTS -->
+          <rect class="box" x="380" y="305" width="160" height="60"/>
+          <text x="460" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">STT</text>
+          <text x="460" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
+          <text x="460" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8001</text>
 
-          <rect class="box" x="580" y="320" width="180" height="50"/>
-          <text x="670" y="345" text-anchor="middle" font-weight="500">TTS</text>
-          <text class="tag" x="670" y="360" text-anchor="middle">Voxtral / MMS-TTS</text>
+          <rect class="box" x="560" y="305" width="160" height="60"/>
+          <text x="640" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">LLM</text>
+          <text x="640" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM · GPT-4o mini</text>
+          <text x="640" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8002</text>
 
-          <rect class="box" x="800" y="320" width="180" height="50"/>
-          <text x="890" y="345" text-anchor="middle" font-weight="500">Airflow</text>
-          <text class="tag" x="890" y="360" text-anchor="middle">Batch · PostgreSQL</text>
+          <rect class="box" x="740" y="305" width="160" height="60"/>
+          <text x="820" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">TTS</text>
+          <text x="820" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral / MMS-TTS</text>
+          <text x="820" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8003</text>
 
-          <rect class="box" x="140" y="420" width="160" height="50"/>
-          <text x="220" y="445" text-anchor="middle" font-weight="500">MLflow</text>
-          <text class="tag" x="220" y="460" text-anchor="middle">Tracking · Registry</text>
+          <!-- Batch group : Airflow (scheduler + webserver + postgres) englobés -->
+          <rect x="180" y="400" width="500" height="80" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
+          <text x="200" y="395" fill="var(--accent)" font-size="9" letter-spacing="0.2em" style="text-transform:uppercase; font-weight:500;">Airflow</text>
 
-          <rect class="box" x="320" y="420" width="160" height="50"/>
-          <text x="400" y="445" text-anchor="middle" font-weight="500">Grafana</text>
-          <text class="tag" x="400" y="460" text-anchor="middle">Dashboards</text>
+          <rect class="box" x="200" y="415" width="140" height="50"/>
+          <text x="270" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Scheduler</text>
+          <text x="270" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAGs cron</text>
 
-          <rect class="box" x="500" y="420" width="160" height="50"/>
-          <text x="580" y="445" text-anchor="middle" font-weight="500">Prometheus</text>
-          <text class="tag" x="580" y="460" text-anchor="middle">Métriques</text>
+          <rect class="box" x="360" y="415" width="140" height="50"/>
+          <text x="430" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Webserver</text>
+          <text x="430" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">UI :8080</text>
 
-          <rect class="box" x="680" y="420" width="160" height="50"/>
-          <text x="760" y="445" text-anchor="middle" font-weight="500">Langfuse</text>
-          <text class="tag" x="760" y="460" text-anchor="middle">Traces LLM</text>
+          <rect class="box" x="520" y="415" width="140" height="50"/>
+          <text x="590" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Postgres</text>
+          <text x="590" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">metadata</text>
 
-          <rect class="box" x="860" y="420" width="120" height="50"/>
-          <text x="920" y="445" text-anchor="middle" font-weight="500">Postgres</text>
-          <text class="tag" x="920" y="460" text-anchor="middle">Airflow DB</text>
+          <!-- Observability row -->
+          <rect class="box" x="180" y="510" width="150" height="60"/>
+          <text x="255" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">MLflow</text>
+          <text x="255" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Runs · Registry · Traces</text>
+          <text x="255" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:5050</text>
 
-          <line class="accent" x1="550" y1="70" x2="550" y2="120"/>
-          <line class="accent" x1="450" y1="170" x2="380" y2="220"/>
-          <line class="accent" x1="650" y1="170" x2="720" y2="220"/>
-          <line class="accent" x1="380" y1="270" x2="230" y2="320"/>
-          <line class="accent" x1="380" y1="270" x2="450" y2="320"/>
-          <line class="accent" x1="380" y1="270" x2="670" y2="320"/>
-          <line x1="720" y1="270" x2="890" y2="320"/>
+          <rect class="box" x="350" y="510" width="150" height="60"/>
+          <text x="425" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Prometheus</text>
+          <text x="425" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Scrape /metrics</text>
+          <text x="425" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:9090</text>
+
+          <rect class="box" x="520" y="510" width="150" height="60"/>
+          <text x="595" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Grafana</text>
+          <text x="595" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">12 panels dashboards</text>
+          <text x="595" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:3001</text>
+
+          <rect class="box" x="690" y="510" width="160" height="60" stroke-dasharray="4,2"/>
+          <text x="770" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Langfuse</text>
+          <text x="770" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">cloud · traces LLM</text>
+          <text x="770" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">external</text>
+
+          <!-- ═══════════ Flows métier (accent doré, solide) ═══════════ -->
+          <!-- Nginx → Frontend -->
+          <line class="accent" x1="600" y1="75" x2="600" y2="100" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Gateway -->
+          <line class="accent" x1="500" y1="155" x2="300" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Pipeline -->
+          <line class="accent" x1="600" y1="155" x2="600" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Watcher (SSE admin) -->
+          <line class="accent" x1="700" y1="155" x2="910" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → STT -->
+          <line class="accent" x1="580" y1="260" x2="460" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → LLM -->
+          <line class="accent" x1="620" y1="260" x2="640" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → TTS -->
+          <line class="accent" x1="660" y1="260" x2="820" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+
+          <!-- ═══════════ Watcher → LLM direct (dashed muted, PAS via Pipeline) ═══════════ -->
+          <line x1="890" y1="260" x2="700" y2="320" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+          <text x="810" y="288" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">POST /translate</text>
+
+          <!-- ═══════════ Airflow interne + orchestre le pipeline ═══════════ -->
+          <line x1="340" y1="440" x2="360" y2="440" stroke="var(--fg-dim)" stroke-width="1"/>
+          <line x1="500" y1="440" x2="520" y2="440" stroke="var(--fg-dim)" stroke-width="1"/>
+          <!-- Airflow-Scheduler → Pipeline (batch nightly_golden_eval) -->
+          <path d="M 270,415 C 350,380 500,300 550,260" stroke="var(--fg-dim)" stroke-width="1" fill="none" stroke-dasharray="6,3"/>
+          <text x="380" y="378" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace">nightly_golden_eval</text>
+
+          <!-- ═══════════ Observability (pointillé fin, opacity légère) ═══════════ -->
+          <!-- Prometheus scrape backend (courbe qui remonte) -->
+          <path d="M 425,510 C 425,460 480,340 550,300" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <text x="440" y="395" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.7">scrape /metrics</text>
+
+          <!-- Grafana ← Prometheus -->
+          <line x1="500" y1="540" x2="520" y2="540" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.6"/>
+
+          <!-- Pipeline → MLflow (tracing + eval) -->
+          <path d="M 550,260 C 400,360 300,450 255,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Pipeline → Langfuse (traces cloud) -->
+          <path d="M 680,260 C 720,360 750,440 770,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Watcher → Langfuse (traces) -->
+          <path d="M 940,260 C 900,360 850,440 800,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- ═══════════ Légende ═══════════ -->
+          <g transform="translate(900, 610)">
+            <text x="0" y="-6" fill="var(--fg-muted)" font-size="9" letter-spacing="0.15em" style="text-transform:uppercase;">Légende</text>
+            <line x1="0" y1="8" x2="24" y2="8" stroke="var(--accent-dim)" stroke-width="1.5"/>
+            <text x="30" y="12" fill="var(--fg-muted)" font-size="10">flow traduction</text>
+            <line x1="0" y1="26" x2="24" y2="26" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+            <text x="30" y="30" fill="var(--fg-muted)" font-size="10">accès direct · batch</text>
+            <line x1="0" y1="44" x2="24" y2="44" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.7"/>
+            <text x="30" y="48" fill="var(--fg-muted)" font-size="10" opacity="0.8">observability</text>
+          </g>
         </svg>
       </div>
+      <p class="caption" style="margin-top:2vh;">
+        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe.
+      </p>
     </div>
   </section>
 
