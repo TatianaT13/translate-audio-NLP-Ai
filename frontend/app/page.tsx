@@ -24,8 +24,10 @@ const WHISPER_MODELS = [
 ];
 
 const LLM_MODELS = [
-  { value: "groq/openai/gpt-oss-20b",  label: "GPT-OSS 20B (Groq) — défaut" },
-  { value: "groq/openai/gpt-oss-120b", label: "GPT-OSS 120B (Groq) — qualité" },
+  { value: "openai/gpt-4o-mini",       label: "GPT-4o mini (OpenAI) — pay-per-use" },
+  { value: "openai/gpt-4o",            label: "GPT-4o (OpenAI) — qualité premium" },
+  { value: "groq/openai/gpt-oss-20b",  label: "GPT-OSS 20B (Groq) — free tier" },
+  { value: "groq/openai/gpt-oss-120b", label: "GPT-OSS 120B (Groq) — free tier XL" },
   { value: "groq/qwen/qwen3.6-27b",    label: "Qwen 3.6 27B (Groq) — multilingue" },
 ];
 
@@ -568,7 +570,11 @@ export default function Home() {
   const [whisperModel,  setWhisperModel]  = useState(
     process.env.NEXT_PUBLIC_DEFAULT_WHISPER_MODEL || "medium"
   );
-  const [llmModel,      setLlmModel]      = useState("groq/openai/gpt-oss-20b");
+  // Default configurable par env (bake au build via NEXT_PUBLIC_DEFAULT_LLM_MODEL)
+  // → permet de switcher de provider (OpenAI/Groq/Anthropic) sans toucher au code
+  const [llmModel,      setLlmModel]      = useState(
+    process.env.NEXT_PUBLIC_DEFAULT_LLM_MODEL || "openai/gpt-4o-mini"
+  );
   const [promptVersion, setPromptVersion] = useState("v1.1");
   const [showAdvanced,  setShowAdvanced]  = useState(false);
 

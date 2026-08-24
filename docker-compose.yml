@@ -28,6 +28,8 @@ services:
         # Default STT modèle bakerisé dans le bundle Next.js :
         # local (Docker limité) : medium (500 Mo) — prod (hermes 62 Go) : large-v3
         NEXT_PUBLIC_DEFAULT_WHISPER_MODEL: ${NEXT_PUBLIC_DEFAULT_WHISPER_MODEL:-medium}
+        # Default LLM modèle bakerisé — permet de switcher de provider sans code change
+        NEXT_PUBLIC_DEFAULT_LLM_MODEL: ${NEXT_PUBLIC_DEFAULT_LLM_MODEL:-openai/gpt-4o-mini}
     ports:
       # Bind sur 127.0.0.1 → seul nginx (sur le host) peut joindre le frontend.
       # Le public passe par nginx → https://traduction-audio.fr → 127.0.0.1:3000
