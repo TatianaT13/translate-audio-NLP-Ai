@@ -292,156 +292,113 @@ async def process(
 
     latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
-    # ── Tracing Langfuse end-to-end (trace + 3 observations + scores) ─────────
-    # Stratégie : 1 trace racine + spans STT/TTS + 1 generation LLM (avec usage)
-    # → Langfuse affiche la vue WATERFALL des 3 étapes avec leurs durées.
-    if _lf and os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    # ── Tracing Langfuse v4 end-to-end (SDK, plus de raw /api/public/ingestion) ─
+    # Migration v3→v4 : le SDK client gère OTEL sous le capot via
+    # start_as_current_observation(). Chaque span est exporté automatiquement
+    # à la sortie du context manager (flush explicite à la fin pour garantir
+    # l'export avant que la requête FastAPI se termine).
+    if _lf:
         try:
-            import uuid as _uuid
-            from datetime import datetime as _dt, timezone as _tz
-            tid     = str(_uuid.uuid4())
-            stt_id  = str(_uuid.uuid4())
-            gid     = str(_uuid.uuid4())
-            tts_id  = str(_uuid.uuid4())
-            now_iso = _dt.now(_tz.utc).isoformat()
-            comment = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
+            from datetime import datetime as _dt
 
             prompt_tokens     = result.get("prompt_tokens",     0)
             completion_tokens = result.get("completion_tokens", 0)
             total_tokens      = result.get("total_tokens",      0)
             cost_usd          = result.get("cost_usd",          0.0)
+            audio_in_size_kb  = round(len(initial_state["audio_bytes"]) / 1024, 1)
+            comment           = f"{filename} | {whisper_model} | {llm_model} | {prompt_version}"
 
-            audio_in_size_kb = round(len(initial_state["audio_bytes"]) / 1024, 1)
+            def _iso(k: str):
+                v = result.get(k)
+                return _dt.fromisoformat(v) if v else None
 
-            batch = [
-                # 1. Trace racine — regroupe toute la pipeline
-                {
-                    "id": str(_uuid.uuid4()),
-                    "type": "trace-create",
-                    "timestamp": now_iso,
-                    "body": {
-                        "id": tid,
-                        "name": "translation",
-                        "input":  {"audio_kb": audio_in_size_kb, "target_lang": target_lang},
-                        "output": {"translation": result["translation"][:500]},
-                        "metadata": {
-                            "whisper_model":  whisper_model,
-                            "llm_model":      llm_model,
-                            "prompt_version": prompt_version,
-                            "target_lang":    target_lang,
-                            "filename":       filename,
-                            "total_latency_ms": latency_total_ms,
-                            "cost_usd":         cost_usd,
-                        },
-                    },
+            # Trace racine — pipeline complet
+            with _lf.start_as_current_observation(
+                name="translation",
+                input={"audio_kb": audio_in_size_kb, "target_lang": target_lang},
+                metadata={
+                    "whisper_model":    whisper_model,
+                    "llm_model":        llm_model,
+                    "prompt_version":   prompt_version,
+                    "target_lang":      target_lang,
+                    "filename":         filename,
+                    "total_latency_ms": latency_total_ms,
+                    "cost_usd":         cost_usd,
                 },
+            ) as root:
+                root.update(output={"translation": result["translation"][:500]})
 
-                # 2. Span STT — Faster-Whisper transcription
-                {
-                    "id": str(_uuid.uuid4()),
-                    "type": "span-create",
-                    "timestamp": now_iso,
-                    "body": {
-                        "id":        stt_id,
-                        "traceId":   tid,
-                        "name":      "stt",
-                        "startTime": result.get("stt_start_iso", now_iso),
-                        "endTime":   result.get("stt_end_iso",   now_iso),
-                        "input":  {
-                            "filename":      filename,
-                            "audio_size_kb": audio_in_size_kb,
-                            "whisper_model": whisper_model,
-                        },
-                        "output": {
+                # STT — span
+                with root.start_observation(
+                    name="stt",
+                    input={
+                        "filename":      filename,
+                        "audio_size_kb": audio_in_size_kb,
+                        "whisper_model": whisper_model,
+                    },
+                    start_time=_iso("stt_start_iso"),
+                    end_time=_iso("stt_end_iso"),
+                ) as stt_span:
+                    stt_span.update(
+                        output={
                             "text":          result["source_text"][:1000],
                             "language":      result["language"],
                             "language_prob": result["language_prob"],
                         },
-                        "metadata": {"latency_ms": result["latency_stt_ms"]},
-                    },
-                },
+                        metadata={"latency_ms": result["latency_stt_ms"]},
+                    )
 
-                # 3. Generation LLM — Llama via Groq (avec usage tokens + cost)
-                {
-                    "id": str(_uuid.uuid4()),
-                    "type": "generation-create",
-                    "timestamp": now_iso,
-                    "body": {
-                        "id":         gid,
-                        "traceId":    tid,
-                        "name":       "llm_translate",
-                        "startTime":  result.get("llm_start_iso", now_iso),
-                        "endTime":    result.get("llm_end_iso",   now_iso),
-                        "model":      llm_model,
-                        "modelParameters": {"prompt_version": prompt_version, "target_lang": target_lang},
-                        "input":      result.get("safe_input_text", result["source_text"])[:2000],
-                        "output":     result["translation"][:2000],
-                        "usage":      {
+                # LLM — generation (avec usage tokens + coût)
+                with root.start_observation(
+                    name="llm_translate",
+                    as_type="generation",
+                    model=llm_model,
+                    model_parameters={"prompt_version": prompt_version, "target_lang": target_lang},
+                    input=result.get("safe_input_text", result["source_text"])[:2000],
+                    start_time=_iso("llm_start_iso"),
+                    end_time=_iso("llm_end_iso"),
+                ) as gen:
+                    gen.update(
+                        output=result["translation"][:2000],
+                        usage_details={
                             "input":  prompt_tokens,
                             "output": completion_tokens,
                             "total":  total_tokens,
-                            "unit":   "TOKENS",
-                            "totalCost":  cost_usd,
                         },
-                    },
-                },
+                        cost_details={"total": cost_usd},
+                    )
 
-                # 4. Span TTS — Mistral Voxtral synthesis
-                {
-                    "id": str(_uuid.uuid4()),
-                    "type": "span-create",
-                    "timestamp": now_iso,
-                    "body": {
-                        "id":        tts_id,
-                        "traceId":   tid,
-                        "name":      "tts",
-                        "startTime": result.get("tts_start_iso", now_iso),
-                        "endTime":   result.get("tts_end_iso",   now_iso),
-                        "input":  {
-                            "text":   result["translation"][:1000],
-                            "lang":   target_lang,
-                        },
-                        "output": {
+                # TTS — span
+                with root.start_observation(
+                    name="tts",
+                    input={"text": result["translation"][:1000], "lang": target_lang},
+                    start_time=_iso("tts_start_iso"),
+                    end_time=_iso("tts_end_iso"),
+                ) as tts_span:
+                    tts_span.update(
+                        output={
                             "audio_size_kb": result.get("audio_out_size_kb"),
                             "content_type":  result["audio_content_type"],
                         },
-                        "metadata": {"latency_ms": result["latency_tts_ms"]},
-                    },
-                },
-                *[
-                    {
-                        "id": str(_uuid.uuid4()),
-                        "type": "score-create",
-                        "timestamp": now_iso,
-                        "body": {
-                            "id":       str(_uuid.uuid4()),
-                            "traceId":  tid,
-                            "name":     name,
-                            "value":    float(value),
-                            "dataType": "NUMERIC",
-                            "comment":  comment,
-                        },
-                    }
-                    for name, value in [
-                        ("latency_total_ms",  latency_total_ms),
-                        ("latency_stt_ms",    result["latency_stt_ms"]),
-                        ("latency_llm_ms",    result["latency_llm_ms"]),
-                        ("latency_tts_ms",    result["latency_tts_ms"]),
-                        ("language_prob",     result["language_prob"]),
-                        ("cost_usd",          cost_usd),
-                        ("total_tokens",      total_tokens),
-                    ]
-                ],
-            ]
+                        metadata={"latency_ms": result["latency_tts_ms"]},
+                    )
 
-            async with httpx.AsyncClient(timeout=8.0) as lf_client:
-                await lf_client.post(
-                    f"{os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')}/api/public/ingestion",
-                    auth=(os.getenv("LANGFUSE_PUBLIC_KEY"), os.getenv("LANGFUSE_SECRET_KEY")),
-                    json={"batch": batch},
-                )
+                # Scores associés à la trace
+                for name, value in [
+                    ("latency_total_ms", latency_total_ms),
+                    ("latency_stt_ms",   result["latency_stt_ms"]),
+                    ("latency_llm_ms",   result["latency_llm_ms"]),
+                    ("latency_tts_ms",   result["latency_tts_ms"]),
+                    ("language_prob",    result["language_prob"]),
+                    ("cost_usd",         cost_usd),
+                    ("total_tokens",     total_tokens),
+                ]:
+                    root.score_trace(name=name, value=float(value), comment=comment)
+
+            # Force l'export avant retour de la requête (BatchSpanProcessor asynchrone)
+            _lf.flush()
         except Exception as e:
-            print(f"[pipeline] Langfuse ingestion warning: {e}", flush=True)
+            print(f"[pipeline] Langfuse v4 tracing warning: {e}", flush=True)
 
     return {
         "source_text":        result["source_text"],

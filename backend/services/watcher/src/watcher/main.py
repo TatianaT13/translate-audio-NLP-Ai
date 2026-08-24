@@ -129,10 +129,24 @@ WATCHER_TOKENS = Counter(
     labelnames=["lang"],
 )
 
-# ── Langfuse tracing (best-effort, ne bloque jamais) ─────────────────────────
+# ── Langfuse v4 tracing (best-effort, ne bloque jamais) ─────────────────────
 LANGFUSE_PUBLIC = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_HOST   = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+# Client SDK v4 — plus de raw /api/public/ingestion
+_lf = None
+if LANGFUSE_PUBLIC and LANGFUSE_SECRET:
+    try:
+        from langfuse import Langfuse as _LangfuseClient
+        _lf = _LangfuseClient(
+            public_key=LANGFUSE_PUBLIC,
+            secret_key=LANGFUSE_SECRET,
+            host=LANGFUSE_HOST,
+        )
+    except Exception as e:
+        print(f"[watcher] Langfuse v4 SDK init warning: {e}", flush=True)
+        _lf = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -247,7 +261,7 @@ def _broadcast(zone: str, events: list[dict]) -> None:
 # ── Tracing Langfuse end-to-end d'un cycle watcher ───────────────────────────
 
 async def _langfuse_trace_flash(
-    client: httpx.AsyncClient,
+    client: httpx.AsyncClient,   # gardé pour compat signature — plus utilisé
     zone: str,
     text: str,
     lang_prob: float,
@@ -255,12 +269,13 @@ async def _langfuse_trace_flash(
     translations: dict,
     llm_meta: dict,
 ) -> None:
-    """Envoie 1 trace Langfuse par flash polled avec spans STT + extraction + N generations."""
-    import uuid as _uuid
-    from datetime import datetime as _dt, timezone as _tz
+    """Trace 1 flash polled dans Langfuse via SDK v4 (spans STT + extraction + N generations).
 
-    tid = str(_uuid.uuid4())
-    now_iso = _dt.now(_tz.utc).isoformat()
+    Migration v3→v4 : plus de raw POST vers /api/public/ingestion. Le SDK v4
+    utilise OTEL sous le capot via start_as_current_observation().
+    """
+    if _lf is None:
+        return
 
     # Compteurs par sévérité pour les scores
     sev_counts = {"high": 0, "medium": 0, "low": 0}
@@ -269,99 +284,64 @@ async def _langfuse_trace_flash(
     total_cost   = sum(m.get("cost_usd", 0)   for m in llm_meta.values())
     total_tokens = sum(m.get("total_tokens", 0) for m in llm_meta.values())
 
-    batch = [
-        # Trace racine
-        {
-            "id": str(_uuid.uuid4()),
-            "type": "trace-create",
-            "timestamp": now_iso,
-            "body": {
-                "id": tid,
-                "name": "watcher_flash",
-                "input":  {"zone": zone},
-                "output": {"events_count": len(events), "translations": list(translations.keys())},
-                "metadata": {
-                    "zone":            zone,
-                    "events_total":    len(events),
-                    "events_high":     sev_counts["high"],
-                    "events_medium":   sev_counts["medium"],
-                    "events_low":      sev_counts["low"],
-                    "cost_usd_total":  round(total_cost, 6),
-                    "tokens_total":    total_tokens,
-                },
+    try:
+        with _lf.start_as_current_observation(
+            name="watcher_flash",
+            input={"zone": zone},
+            metadata={
+                "zone":            zone,
+                "events_total":    len(events),
+                "events_high":     sev_counts["high"],
+                "events_medium":   sev_counts["medium"],
+                "events_low":      sev_counts["low"],
+                "cost_usd_total":  round(total_cost, 6),
+                "tokens_total":    total_tokens,
             },
-        },
-        # Span STT
-        {
-            "id": str(_uuid.uuid4()),
-            "type": "span-create",
-            "timestamp": now_iso,
-            "body": {
-                "id":      str(_uuid.uuid4()),
-                "traceId": tid,
-                "name":    "stt",
-                "input":   {"source": "autorouteinfo.fr/" + zone},
-                "output":  {"text": text[:1000], "language_prob": lang_prob},
-            },
-        },
-        # Span event extraction
-        {
-            "id": str(_uuid.uuid4()),
-            "type": "span-create",
-            "timestamp": now_iso,
-            "body": {
-                "id":      str(_uuid.uuid4()),
-                "traceId": tid,
-                "name":    "event_extraction",
-                "input":   {"text": text[:500]},
-                "output":  {
+        ) as root:
+            root.update(output={
+                "events_count": len(events),
+                "translations": list(translations.keys()),
+            })
+
+            # STT — span
+            with root.start_observation(
+                name="stt",
+                input={"source": "autorouteinfo.fr/" + zone},
+            ) as stt_span:
+                stt_span.update(output={"text": text[:1000], "language_prob": lang_prob})
+
+            # Event extraction — span
+            with root.start_observation(
+                name="event_extraction",
+                input={"text": text[:500]},
+            ) as ev_span:
+                ev_span.update(output={
                     "events": [
                         {"type": ev.type, "severity": ev.severity,
                          "routes": ev.routes, "direction": ev.direction}
                         for ev in events
                     ],
-                },
-            },
-        },
-        # Generations pour chaque traduction
-        *[
-            {
-                "id": str(_uuid.uuid4()),
-                "type": "generation-create",
-                "timestamp": now_iso,
-                "body": {
-                    "id":      str(_uuid.uuid4()),
-                    "traceId": tid,
-                    "name":    f"translate_to_{lang}",
-                    "model":   meta.get("model", os.getenv("LLM_MODEL", "")),
-                    "input":   text[:1500],
-                    "output":  translations.get(lang, "")[:1500],
-                    "usage": {
-                        "input":     meta.get("prompt_tokens", 0),
-                        "output":    meta.get("completion_tokens", 0),
-                        "total":     meta.get("total_tokens", 0),
-                        "unit":      "TOKENS",
-                        "totalCost": meta.get("cost_usd", 0),
-                    },
-                },
-            }
-            for lang, meta in llm_meta.items()
-        ],
-        # Scores agrégés
-        *[
-            {
-                "id": str(_uuid.uuid4()),
-                "type": "score-create",
-                "timestamp": now_iso,
-                "body": {
-                    "id":       str(_uuid.uuid4()),
-                    "traceId":  tid,
-                    "name":     name,
-                    "value":    float(value),
-                    "dataType": "NUMERIC",
-                    "comment":  f"watcher | zone={zone}",
-                },
-            }
+                })
+
+            # Generations LLM — une par langue traduite
+            for lang, meta in llm_meta.items():
+                with root.start_observation(
+                    name=f"translate_to_{lang}",
+                    as_type="generation",
+                    model=meta.get("model", os.getenv("LLM_MODEL", "")),
+                    input=text[:1500],
+                ) as gen:
+                    gen.update(
+                        output=translations.get(lang, "")[:1500],
+                        usage_details={
+                            "input":  meta.get("prompt_tokens", 0),
+                            "output": meta.get("completion_tokens", 0),
+                            "total":  meta.get("total_tokens", 0),
+                        },
+                        cost_details={"total": meta.get("cost_usd", 0)},
+                    )
+
+            # Scores agrégés
             for name, value in [
                 ("events_total",   len(events)),
                 ("events_high",    sev_counts["high"]),
@@ -369,16 +349,13 @@ async def _langfuse_trace_flash(
                 ("language_prob",  lang_prob),
                 ("cost_usd",       total_cost),
                 ("total_tokens",   total_tokens),
-            ]
-        ],
-    ]
+            ]:
+                root.score_trace(name=name, value=float(value), comment=f"watcher | zone={zone}")
 
-    await client.post(
-        f"{LANGFUSE_HOST}/api/public/ingestion",
-        auth=(LANGFUSE_PUBLIC, LANGFUSE_SECRET),
-        json={"batch": batch},
-        timeout=8.0,
-    )
+        # Flush explicite pour garantir l'export avant la fin du cycle async
+        _lf.flush()
+    except Exception as e:
+        print(f"[watcher] Langfuse v4 tracing warning: {e}", flush=True)
 
 
 # ── Boucle de polling par zone ────────────────────────────────────────────────

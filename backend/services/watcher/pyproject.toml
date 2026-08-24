@@ -12,6 +12,7 @@ dependencies = [
     "requests>=2.31",
     "numpy>=1.26",
     "prometheus-fastapi-instrumentator>=7.0",
+    "langfuse>=4.0",   # tracing v4 SDK (remplace le raw /api/public/ingestion)
 ]
 
 [build-system]
