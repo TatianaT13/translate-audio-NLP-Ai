@@ -29,9 +29,20 @@ DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
 
 
 def convert_audio(src: str, dst: str) -> None:
-    """Convertit n'importe quel audio en WAV 16kHz mono via ffmpeg."""
+    """Convertit n'importe quel audio en WAV 16kHz mono via ffmpeg.
+
+    Robuste aux mauvaises extensions (fichiers .mp3 qui contiennent en fait
+    du M4A/AAC/WebM/etc — typique des enregistreurs iOS/Android) :
+      - probesize 100M : laisse ffmpeg lire jusqu'à 100 MB pour détecter le
+        vrai format (défaut = 5 MB seulement, insuffisant pour du M4A avec
+        moov box en fin de fichier)
+      - analyzeduration 100M : idem pour la détection des streams
+    """
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", src, "-vn", "-ac", "1", "-ar", "16000",
+        ["ffmpeg", "-y",
+         "-analyzeduration", "100M", "-probesize", "100M",
+         "-i", src,
+         "-vn", "-ac", "1", "-ar", "16000",
          "-c:a", "pcm_s16le", dst],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
@@ -69,13 +80,15 @@ async def transcribe(
     - **language** : langue source (fr, en, auto)
     - **beam_size** : précision beam search
     """
-    suffix = Path(file.filename or "audio.mp3").suffix.lower()
-
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_in:
+    # Suffix .bin (générique) au lieu de l'extension client : force ffmpeg à
+    # détecter le format sur le CONTENU du fichier, pas sur son nom. Résout
+    # les cas où un fichier .mp3 contient en fait du M4A/AAC/WebM (enregistreurs
+    # iOS/Android) → ffmpeg refuserait de le lire comme MP3 sinon.
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp_in:
         tmp_in.write(await file.read())
         tmp_in_path = tmp_in.name
 
-    tmp_wav_path = tmp_in_path.replace(suffix, ".wav")
+    tmp_wav_path = tmp_in_path + ".wav"
 
     try:
         convert_audio(tmp_in_path, tmp_wav_path)
