@@ -743,7 +743,7 @@
   <div class="chrome-top">
     <a href="/" class="brand" title="Retour à l'application">traudio</a>
     <div class="right">
-      <span>Soutenance · 04.09.2026</span>
+      <span>Soutenance · 03.09.2026</span>
       <a href="/" class="back-to-app" title="Retour à l'application">← app</a>
     </div>
   </div>
@@ -769,77 +769,508 @@
     </div>
   </section>
 
-  <!-- ─── 2 · Le problème ─────────────────────────────────────── -->
-  <section class="slide" data-title="Contexte">
+  <!-- ─── Frontend — Next.js ──────────────────────────────────── -->
+  <section class="slide" data-title="Next.js">
     <div class="slide-body">
-      <p class="eyebrow">Contexte</p>
-      <h2 class="title">Traduire la parole en production,<br>c'est <em>orchestrer</em> — pas empiler.</h2>
-      <div class="split" style="margin-top:2vh;">
-        <p class="lede">
-          Un pipeline audio moderne enchaîne trois modèles hétérogènes — reconnaissance vocale, traduction, synthèse — sur des runtimes différents, chez des providers différents, avec des métriques éparpillées.
-        </p>
-        <p class="lede">
-          Cette plateforme démontre qu'on peut les rassembler en un système <em style="font-style:italic;color:var(--accent);">observable, sécurisé, mesurable et déployable</em> — au-delà du POC.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── 3 · Démarche ────────────────────────────────────────── -->
-  <section class="slide" data-title="Démarche">
-    <div class="slide-body">
-      <p class="eyebrow">Approche</p>
-      <h2 class="title">Un projet, <em>deux phases</em>.</h2>
+      <p class="eyebrow">Stack — Interface</p>
+      <h2 class="title">Next.js 15,<br><em>standalone</em>.</h2>
       <div class="split">
         <div>
-          <p class="eyebrow" style="color:var(--accent);">Phase 1 · livrée</p>
-          <ul class="editorial">
-            <li><span><strong>Pipeline complet</strong> STT · LLM · TTS</span></li>
-            <li><span><strong>Expérimentation MLflow</strong> 3 prompts × 2 modèles</span></li>
-            <li><span><strong>Observability</strong> Grafana · Prometheus · Langfuse</span></li>
-            <li><span><strong>Orchestration batch</strong> Airflow + watcher temps réel</span></li>
-            <li><span><strong>Déploiement HTTPS</strong> traduction-audio.fr</span></li>
-          </ul>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Framework React avec SSR/SSG, rendu <code>output: standalone</code> pour Docker minimal.
+            Rewrites internes vers les services backend — évite d'exposer plusieurs ports publics.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Middleware pour l'auth JWT côté edge, redirection automatique vers <code>/login</code>.
+          </p>
         </div>
         <div>
-          <p class="eyebrow" style="color:var(--fg-muted);">Phase 2 · roadmap</p>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
           <ul class="editorial">
-            <li><span><strong>Refactor sécurité</strong> tout via pipeline, ne plus exposer STT/LLM</span></li>
-            <li><span><strong>Traduction bidirectionnelle</strong> auto-détection Whisper</span></li>
-            <li><span><strong>Tracing MLflow natif</strong> spans du pipeline en prod</span></li>
-            <li><span><strong>Tests d'intégration</strong> bout-en-bout</span></li>
-            <li><span><strong>Dashboards métier</strong> Grafana finalisés</span></li>
+            <li><span><strong>Vue.js</strong> écosystème plus petit, moins de composants tiers</span></li>
+            <li><span><strong>Angular</strong> overkill pour un frontend de cette taille</span></li>
+            <li><span><strong>Next.js</strong> ✓ SSR natif, hot reload, standard industrie, image Docker &lt; 250 Mo</span></li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ─── 4 · Architecture ────────────────────────────────────── -->
+  <!-- ─── Backend — FastAPI ──────────────────────────────────── -->
+  <section class="slide" data-title="FastAPI">
+    <div class="slide-body">
+      <p class="eyebrow">Stack — Backend microservices</p>
+      <h2 class="title">FastAPI<br>sur les <em>6 services</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Framework Python asynchrone pour construire des APIs REST. Validation automatique via Pydantic, OpenAPI/Swagger généré automatiquement, support natif async/await.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Utilisé sur les 6 services : Gateway, Pipeline, STT, LLM, TTS, Watcher.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Flask</strong> synchrone, pas de validation typée native</span></li>
+            <li><span><strong>Django</strong> monolithique, trop lourd pour du microservice</span></li>
+            <li><span><strong>Express.js</strong> Node — obligerait à réécrire toute la logique ML en JS</span></li>
+            <li><span><strong>FastAPI</strong> ✓ async natif, Pydantic, OpenAPI auto, perf 3× Flask</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Orchestration — LangChain LCEL ─────────────────────── -->
+  <section class="slide" data-title="LangChain">
+    <div class="slide-body">
+      <p class="eyebrow">Stack — Orchestration LLM</p>
+      <h2 class="title">LangChain <em>LCEL</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Chaînage typé des 3 étapes du pipeline (STT → LLM → TTS) via l'opérateur <code>|</code>. Chaque étape est un <code>Runnable</code> composable, testable, instrumenté.
+          </p>
+          <pre class="code" style="margin-top:2vh;"><span class="cm"># LCEL — 3 étapes composées</span>
+pipeline = (
+    <span class="kw">RunnableLambda</span>(_stt_step)
+    | <span class="kw">RunnableLambda</span>(_llm_step)
+    | <span class="kw">RunnableLambda</span>(_tts_step)
+)</pre>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>LangGraph</strong> overkill pour un flow linéaire (pas de branching)</span></li>
+            <li><span><strong>Custom Python</strong> chaque étape écrite à la main, pas d'instrumentation gratuite</span></li>
+            <li><span><strong>Haystack</strong> plus orienté RAG que pipeline générique</span></li>
+            <li><span><strong>LCEL</strong> ✓ typage, composabilité, tracing Langfuse gratuit, standard</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── LiteLLM — abstraction LLM ──────────────────────────── -->
+  <section class="slide" data-title="LiteLLM">
+    <div class="slide-body">
+      <p class="eyebrow">Stack — Abstraction LLM</p>
+      <h2 class="title">LiteLLM<br><em>provider-agnostic</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Une seule API qui route vers Groq, OpenAI, Anthropic, Ollama, Mistral, etc. selon le préfixe du nom de modèle. Pricing intégré, gestion des tokens et coûts automatique.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            <strong>Preuve concrète</strong> : quand Groq a déprécié <code>llama-3.1-8b-instant</code> en août 2026, migration vers OpenAI en changeant <em>une seule variable d'environnement</em> — zéro ligne de code touchée.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>SDK OpenAI direct</strong> vendor lock-in, impossible de switcher</span></li>
+            <li><span><strong>LangChain LLM wrappers</strong> couplés à l'écosystème LangChain</span></li>
+            <li><span><strong>Portkey / OpenRouter</strong> ajoute un hop réseau, latence +100ms</span></li>
+            <li><span><strong>LiteLLM</strong> ✓ 100+ providers, pricing intégré, cost tracking natif</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── STT — Whisper ──────────────────────────────────────── -->
+  <section class="slide" data-title="Whisper">
+    <div class="slide-body">
+      <p class="eyebrow">Modèle — Speech-to-Text</p>
+      <h2 class="title">Faster-Whisper<br><em>large-v3</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Transcription audio multilingue (99 langues supportées). Version <code>large-v3</code> de Meta/OpenAI en prod (3 Go), <code>small</code> pour le meeting live (250 Mo).
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Détection automatique de la langue source → paramètre <code>language_probability</code> utilisé pour rejeter les audios non-français.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>OpenAI Whisper API</strong> coût $0.006/min, pas de contrôle sur la version</span></li>
+            <li><span><strong>Google Speech-to-Text</strong> $0.024/min, moins précis en FR technique</span></li>
+            <li><span><strong>AssemblyAI</strong> $0.015/min, précis mais cher à l'échelle</span></li>
+            <li><span><strong>Faster-Whisper</strong> ✓ auto-hébergé, gratuit, 4× plus rapide que Whisper Python vanille</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── LLM — OpenAI + Groq multi-provider ─────────────────── -->
+  <section class="slide" data-title="LLM providers">
+    <div class="slide-body">
+      <p class="eyebrow">Modèles — Traduction</p>
+      <h2 class="title">OpenAI GPT-4o mini,<br>en <em>fallback multi-provider</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            LLM de traduction FR → EN/UK/ES/DE. Défaut prod <code>openai/gpt-4o-mini</code> (pay-as-you-go). Fallback dispo sur Groq (free tier) et Anthropic Claude.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            <strong>Choix data-driven</strong> — comparé sur 30 flash-infos golden :
+          </p>
+          <div class="chart" style="margin-top:1.5vh;">
+            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 8B · v1.0</div><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><div class="bar-value">40.2</div></div>
+            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ">✓</span></div><div class="bar-track"><div class="bar-fill" style="width:46%"></div></div><div class="bar-value">46.2</div></div>
+            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 70B · v1.1</div><div class="bar-track"><div class="bar-fill" style="width:51%"></div></div><div class="bar-value">51.3</div></div>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Modèles locaux (Ollama)</strong> gratuit mais latence 10-30s, qualité inférieure</span></li>
+            <li><span><strong>Anthropic Claude Haiku</strong> excellent mais 2× plus cher qu'OpenAI mini</span></li>
+            <li><span><strong>DeepL API</strong> spécialisé traduction, mais boîte noire non pilotable par prompt</span></li>
+            <li><span><strong>OpenAI GPT-4o mini</strong> ✓ pay-as-you-go, latence &lt; 2s, $0.0005/traduction, prompts custom</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TTS — Voxtral + MMS local ──────────────────────────── -->
+  <section class="slide" data-title="TTS">
+    <div class="slide-body">
+      <p class="eyebrow">Modèle — Text-to-Speech</p>
+      <h2 class="title">Voxtral (Mistral)<br>+ MMS local <em>par langue</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Synthèse vocale avec routing intelligent selon la langue cible :
+          </p>
+          <ul class="editorial" style="margin-top:1.5vh;">
+            <li><span><strong>EN / ES / DE / FR</strong> → Mistral Voxtral (MP3, voix naturelle)</span></li>
+            <li><span><strong>UK (ukrainien)</strong> → MMS-TTS local de Meta (WAV, voix native)</span></li>
+          </ul>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            <strong>Pourquoi ce split</strong> : Voxtral n'est pas entraîné en ukrainien → voix anglaise avec accent. MMS-TTS a un modèle <code>mms-tts-ukr</code> natif.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>OpenAI TTS</strong> excellent mais cher ($15/1M chars), pas de UK</span></li>
+            <li><span><strong>ElevenLabs</strong> qualité premium, prix élevé, pas de UK avant fin 2026</span></li>
+            <li><span><strong>Google TTS</strong> couvre l'UK mais voix robotique</span></li>
+            <li><span><strong>Voxtral + MMS</strong> ✓ qualité pro sur langues supportées + fallback natif pour UK</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Docker Compose ─────────────────────────────────────── -->
+  <section class="slide" data-title="Docker Compose">
+    <div class="slide-body">
+      <p class="eyebrow">Infrastructure — Container orchestration</p>
+      <h2 class="title">Docker Compose,<br>pour <em>14 services</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Orchestre 14 conteneurs sur une seule machine : frontend, 6 microservices FastAPI, MLflow, Grafana, Prometheus, Airflow (scheduler + webserver + postgres).
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Réseau Docker interne isolé — services bindés sur <code>127.0.0.1</code>, seul nginx expose le port public.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Kubernetes</strong> overkill (14 services sur 1 machine) — courbe d'apprentissage 6 mois</span></li>
+            <li><span><strong>Docker Swarm</strong> abandonné par la communauté, écosystème mort</span></li>
+            <li><span><strong>Nomad (Hashicorp)</strong> peu répandu, moins de tutos</span></li>
+            <li><span><strong>Compose</strong> ✓ un fichier YAML, <code>up --build</code>, healthchecks natifs, standard démo</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Nginx + Let's Encrypt ──────────────────────────────── -->
+  <section class="slide" data-title="Nginx + SSL">
+    <div class="slide-body">
+      <p class="eyebrow">Infrastructure — Edge</p>
+      <h2 class="title">Nginx +<br>Let's Encrypt <em>SSL</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Reverse proxy HTTPS sur <code>traduction-audio.fr</code>. Certificats Let's Encrypt renouvelés automatiquement via certbot. Basic-auth au niveau edge en fallback.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Config découpée : <code>traudio.conf</code> (server + SSL) + <code>traudio-proxy.conf</code> (headers proxy réutilisables).
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Traefik</strong> config dynamique via labels Docker, moins lisible</span></li>
+            <li><span><strong>Caddy</strong> HTTPS auto mais écosystème plus petit, moins de tutos ops</span></li>
+            <li><span><strong>Apache</strong> config verbose, moins performant en reverse proxy</span></li>
+            <li><span><strong>Nginx</strong> ✓ maturité 20 ans, config lisible, benchmarks de référence</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Auth — JWT custom ──────────────────────────────────── -->
+  <section class="slide" data-title="JWT custom">
+    <div class="slide-body">
+      <p class="eyebrow">Sécurité — Authentification</p>
+      <h2 class="title">JWT custom,<br><em>rotation refresh</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Access token JWT HS256 <strong>15 min</strong> + refresh token aléatoire <strong>7 jours</strong> hashé SHA-256 en DB. Rotation obligatoire à chaque refresh (ancien révoqué).
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            25 tests unitaires couvrant : bcrypt, roundtrip JWT, expiration, tampering, wrong signature, wrong algorithm.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Auth0</strong> $23/mois minimum, dépendance externe critique</span></li>
+            <li><span><strong>Firebase Auth</strong> vendor lock-in Google, quotas gratuits serrés</span></li>
+            <li><span><strong>Keycloak</strong> puissant mais 1 GB RAM, overkill pour ce projet</span></li>
+            <li><span><strong>JWT custom</strong> ✓ zéro dépendance, contrôle total, testable, 100 lignes de code</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Airflow — batch ────────────────────────────────────── -->
+  <section class="slide" data-title="Airflow">
+    <div class="slide-body">
+      <p class="eyebrow">Data engineering — Batch</p>
+      <h2 class="title">Apache Airflow,<br><em>nightly eval</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Orchestrateur de workflows. DAG <code>nightly_golden_eval</code> qui tourne à 02:00 UTC : traduit le corpus golden, calcule les métriques BLEU/METEOR, agrège, détecte les dérives.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Stack complète : scheduler + webserver + PostgreSQL dédié. Interface web sur <code>:8080</code>.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Prefect</strong> API plus moderne mais moins répandu en entreprise</span></li>
+            <li><span><strong>Dagster</strong> excellent modèle de données mais courbe d'apprentissage</span></li>
+            <li><span><strong>cron simple</strong> pas de monitoring, retries, dépendances entre tâches</span></li>
+            <li><span><strong>Airflow</strong> ✓ standard entreprise, compétence transférable, écosystème mature</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── MLflow — tracking + eval + tracing ─────────────────── -->
+  <section class="slide" data-title="MLflow">
+    <div class="slide-body">
+      <p class="eyebrow">MLOps — Hub</p>
+      <h2 class="title">MLflow<br><em>tracking · eval · tracing</em>.</h2>
+      <div class="split-3">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Tracking</p>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            12 runs (2 Whisper × 2 LLM × 3 prompts). Métriques BLEU/METEOR/WER/latence/coût. Tag <code>champion</code> auto sur meilleur BLEU. Model Registry avec 3 modèles taggés <code>production_version</code>.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Evaluation</p>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            <code>mlflow.evaluate()</code> — 8 métriques natives : BLEU, ROUGE-1/2/L, exact_match, toxicity, Flesch-Kincaid, ARI. <code>log_table</code> per-audio (drill-down cliquable).
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Tracing</p>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            Décorateurs <code>@mlflow.trace</code> sur les 3 steps du pipeline LangChain. Spans hiérarchiques STT → LLM → TTS visibles dans l'UI. Opt-in via env var.
+          </p>
+        </div>
+      </div>
+      <div class="divider-h"></div>
+      <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+      <ul class="editorial" style="margin-top:1vh;">
+        <li><span><strong>Weights &amp; Biases</strong> excellent mais SaaS payant après quota gratuit</span></li>
+        <li><span><strong>ClearML</strong> puissant mais moins standardisé en France</span></li>
+        <li><span><strong>MLflow</strong> ✓ open-source, self-hosted, gratuit, standard Databricks/AWS</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ─── Prometheus + Grafana ───────────────────────────────── -->
+  <section class="slide" data-title="Prometheus + Grafana">
+    <div class="slide-body">
+      <p class="eyebrow">Observability — Métriques infra</p>
+      <h2 class="title">Prometheus + Grafana,<br><em>12 panels</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            <strong>Prometheus</strong> scrape <code>/metrics</code> sur les 6 services FastAPI toutes les 15s (<code>prometheus-fastapi-instrumentator</code>).
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            <strong>Grafana</strong> — dashboard "LLMOps Overview" avec 12 panels : req/s par service, latence p95, taux d'erreur 5xx, coût cumulé LLM, événements watcher.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Dashboards versionnés en Git (<code>monitoring/grafana/dashboards/*.json</code>).
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>Datadog</strong> excellent mais SaaS $15+/host/mois</span></li>
+            <li><span><strong>New Relic</strong> idem, payant</span></li>
+            <li><span><strong>ELK Stack</strong> lourd (2-4 Go RAM juste pour ES)</span></li>
+            <li><span><strong>Prom + Grafana</strong> ✓ open-source, pull model, dashboards en Git</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Langfuse — tracing LLM ─────────────────────────────── -->
+  <section class="slide" data-title="Langfuse">
+    <div class="slide-body">
+      <p class="eyebrow">Observability — Tracing LLM</p>
+      <h2 class="title">Langfuse,<br><em>spans hiérarchiques</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Rôle</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Capture chaque appel LLM avec input/output/latence/coût/tokens. Vue waterfall des spans du pipeline (STT + LLM generation + TTS).
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
+            Intégré au pipeline via 1 client init + 4 spans par requête. Cloud hosted (<code>cloud.langfuse.com</code>) avec option self-hosted possible.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
+          <ul class="editorial">
+            <li><span><strong>LangSmith</strong> couplé à LangChain, moins ouvert</span></li>
+            <li><span><strong>Arize Phoenix</strong> excellent mais orienté enterprise</span></li>
+            <li><span><strong>Helicone</strong> proxy HTTP intrusif</span></li>
+            <li><span><strong>Langfuse</strong> ✓ open-source, self-hostable, pricing raisonnable, UI moderne</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Tests + CI GitHub Actions ──────────────────────────── -->
+  <section class="slide" data-title="Tests + CI">
+    <div class="slide-body">
+      <p class="eyebrow">Qualité — Tests + CI/CD</p>
+      <h2 class="title"><em>103 tests</em>,<br>CI GitHub Actions.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Structure</p>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            <code>tests/unit/</code> — 78 tests (prompt_guard, auth JWT, legacy)<br>
+            <code>tests/integration/</code> — 23 tests (auth flow, pipeline e2e, TTS routing)<br>
+            <code>tests/e2e/</code> — emplacement prêt pour Phase 2 (Playwright)
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh; font-size:13px;">
+            Coverage : sécurité JWT (25 tests), résistance aux injections (24 tests), flows critiques HTTP (16 tests).
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">CI</p>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            GitHub Actions à chaque push sur <code>main</code>. Lance <code>pytest tests/unit/</code> en 5s. Rapport JUnit XML uploadé comme artifact.
+          </p>
+          <p class="body" style="color:var(--fg-muted); margin-top:2vh; font-size:13px;">
+            Comparé à : GitLab CI (payant après quota), Jenkins (auto-hébergé lourd), CircleCI (quota gratuit serré).
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Sécurité — 3 couches ───────────────────────────────── -->
+  <section class="slide" data-title="Sécurité">
+    <div class="slide-body">
+      <p class="eyebrow">Sécurité — Défense en profondeur</p>
+      <h2 class="title">Sécurité,<br><em>3 couches</em>.</h2>
+      <div class="split-3">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Réseau</p>
+          <ul style="list-style:none;padding:0;margin:1vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Services bindés <code>127.0.0.1</code></li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">HTTPS Let's Encrypt</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Basic-auth nginx edge</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Réseau Docker isolé</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Auth applicative</p>
+          <ul style="list-style:none;padding:0;margin:1vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">JWT 15 min HS256</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Refresh 7j rotatif SHA-256</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Bcrypt password (salt auto)</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">25 tests unitaires sécu</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">LLM — anti-injection</p>
+          <ul style="list-style:none;padding:0;margin:1vh 0 0 0;">
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Pre-check regex (FR + EN)</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Sandbox <code>&lt;user_text&gt;</code></li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Post-check ratio + leak</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">OWASP LLM01 conforme</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Architecture globale ───────────────────────────────── -->
   <section class="slide" data-title="Architecture">
     <div class="slide-body">
       <p class="eyebrow">Architecture</p>
-      <h2 class="title"><em>14 microservices</em>, un seul réseau.</h2>
+      <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
       <div class="arch-wrap">
         <svg class="arch" viewBox="0 0 1100 500" width="1100" preserveAspectRatio="xMidYMid meet">
-          <!-- Layer labels -->
           <text class="layer" x="20" y="45">Interface</text>
           <text class="layer" x="20" y="145">Edge</text>
           <text class="layer" x="20" y="245">Orchestration</text>
           <text class="layer" x="20" y="345">Modèles</text>
           <text class="layer" x="20" y="425">Observability &amp; Data</text>
 
-          <!-- Row 1 : Frontend -->
-          <rect class="box-accent" x="450" y="20" width="200" height="50" rx="0"/>
+          <rect class="box-accent" x="450" y="20" width="200" height="50"/>
           <text x="550" y="45" text-anchor="middle" font-weight="500">Frontend</text>
           <text class="tag" x="550" y="60" text-anchor="middle">Next.js · React</text>
 
-          <!-- Row 2 : Gateway -->
           <rect class="box-accent" x="450" y="120" width="200" height="50"/>
           <text x="550" y="145" text-anchor="middle" font-weight="500">Gateway</text>
           <text class="tag" x="550" y="160" text-anchor="middle">FastAPI · JWT · Auth</text>
 
-          <!-- Row 3 : Pipeline + Admin -->
           <rect class="box-accent" x="280" y="220" width="200" height="50"/>
           <text x="380" y="245" text-anchor="middle" font-weight="500">Pipeline</text>
           <text class="tag" x="380" y="260" text-anchor="middle">LangChain LCEL</text>
@@ -848,14 +1279,13 @@
           <text x="720" y="245" text-anchor="middle" font-weight="500">Watcher</text>
           <text class="tag" x="720" y="260" text-anchor="middle">Streaming temps réel</text>
 
-          <!-- Row 4 : STT / LLM / TTS -->
           <rect class="box" x="140" y="320" width="180" height="50"/>
           <text x="230" y="345" text-anchor="middle" font-weight="500">STT</text>
           <text class="tag" x="230" y="360" text-anchor="middle">Whisper large-v3</text>
 
           <rect class="box" x="360" y="320" width="180" height="50"/>
           <text x="450" y="345" text-anchor="middle" font-weight="500">LLM</text>
-          <text class="tag" x="450" y="360" text-anchor="middle">Groq · Llama 3.1</text>
+          <text class="tag" x="450" y="360" text-anchor="middle">LiteLLM · OpenAI</text>
 
           <rect class="box" x="580" y="320" width="180" height="50"/>
           <text x="670" y="345" text-anchor="middle" font-weight="500">TTS</text>
@@ -865,7 +1295,6 @@
           <text x="890" y="345" text-anchor="middle" font-weight="500">Airflow</text>
           <text class="tag" x="890" y="360" text-anchor="middle">Batch · PostgreSQL</text>
 
-          <!-- Row 5 : Observability strip -->
           <rect class="box" x="140" y="420" width="160" height="50"/>
           <text x="220" y="445" text-anchor="middle" font-weight="500">MLflow</text>
           <text class="tag" x="220" y="460" text-anchor="middle">Tracking · Registry</text>
@@ -886,7 +1315,6 @@
           <text x="920" y="445" text-anchor="middle" font-weight="500">Postgres</text>
           <text class="tag" x="920" y="460" text-anchor="middle">Airflow DB</text>
 
-          <!-- Links -->
           <line class="accent" x1="550" y1="70" x2="550" y2="120"/>
           <line class="accent" x1="450" y1="170" x2="380" y2="220"/>
           <line class="accent" x1="650" y1="170" x2="720" y2="220"/>
@@ -899,280 +1327,6 @@
     </div>
   </section>
 
-  <!-- ─── 5 · Pipeline coeur ──────────────────────────────────── -->
-  <section class="slide" data-title="Pipeline">
-    <div class="slide-body">
-      <p class="eyebrow">Pipeline</p>
-      <h2 class="title">STT · LLM · TTS,<br>chaînés en <em>LCEL</em>.</h2>
-      <div class="split" style="align-items:center;">
-        <div>
-          <p class="lede">
-            Chaque étape est un <em style="font-style:italic;color:var(--accent);">Runnable</em> typé, composable et instrumenté — la chaîne LangChain rend le flux lisible, testable et traçable de bout en bout.
-          </p>
-          <p class="body" style="margin-top:3vh; color:var(--fg-muted);">
-            Prompt guards en amont (anti-injection) et en aval (cohérence traduction), sandbox <code>&lt;user_text&gt;</code> pour isoler l'entrée utilisateur.
-          </p>
-        </div>
-        <pre class="code"><span class="cm"># pipeline/main.py</span>
-pipeline_chain = (
-    <span class="kw">RunnableLambda</span>(_stt_step)
-    | <span class="kw">RunnableLambda</span>(_llm_step)
-    | <span class="kw">RunnableLambda</span>(_tts_step)
-)
-
-<span class="cm"># chaque step logge :</span>
-<span class="cm">#   latence, tokens, coût, spans MLflow</span></pre>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── 6 · Modèles ─────────────────────────────────────────── -->
-  <section class="slide" data-title="Modèles">
-    <div class="slide-body">
-      <p class="eyebrow">Modèles</p>
-      <h2 class="title"><em>Choisir</em> — pas hériter.</h2>
-      <div class="table-wrap">
-        <table class="data">
-          <thead>
-            <tr>
-              <th style="width:10%">Étape</th>
-              <th style="width:24%">Modèle</th>
-              <th style="width:16%">Provider</th>
-              <th>Rationale</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>STT</td>
-              <td class="mono">Whisper large-v3</td>
-              <td>HuggingFace</td>
-              <td>Précision multilingue · détection auto de langue source</td>
-            </tr>
-            <tr>
-              <td>LLM</td>
-              <td class="mono">Llama 3.1 8B Instant</td>
-              <td>Groq</td>
-              <td>Latence &lt; 1s · coût $0.05/1M tokens · qualité suffisante</td>
-            </tr>
-            <tr>
-              <td>TTS</td>
-              <td class="mono">Voxtral · MMS-TTS</td>
-              <td>Mistral · Meta</td>
-              <td>Routing par langue — Voxtral pour EN/ES/DE, MMS local pour UK</td>
-            </tr>
-            <tr>
-              <td>STT live</td>
-              <td class="mono">Whisper small</td>
-              <td>HuggingFace</td>
-              <td>Chunks courts (5s) · latence &lt; 500 ms pour meeting recorder</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="caption" style="margin-top:3vh;">Abstraction LiteLLM côté LLM — permet de swap Groq ↔ OpenAI ↔ Anthropic sans toucher au code métier.</p>
-    </div>
-  </section>
-
-  <!-- ─── 7 · Stack technique justifiée ───────────────────────── -->
-  <section class="slide" data-title="Stack technique">
-    <div class="slide-body">
-      <p class="eyebrow">Stack technique</p>
-      <h2 class="title">Chaque choix, <em>justifié</em>.</h2>
-      <div class="table-wrap">
-        <table class="data">
-          <thead>
-            <tr>
-              <th style="width:14%">Couche</th>
-              <th style="width:22%">Choix</th>
-              <th style="width:22%">Alternative</th>
-              <th>Pourquoi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Frontend</td>
-              <td class="mono">Next.js 15</td>
-              <td>Vue · Angular</td>
-              <td>SSR/SSG standalone · écosystème mature · déploiement Docker natif</td>
-            </tr>
-            <tr>
-              <td>Backend</td>
-              <td class="mono">FastAPI</td>
-              <td>Flask · Django</td>
-              <td>Async natif · typage Pydantic · OpenAPI auto · perf</td>
-            </tr>
-            <tr>
-              <td>Orchestration LLM</td>
-              <td class="mono">LangChain LCEL</td>
-              <td>LangGraph · custom</td>
-              <td>Chaînage typé <code>|</code> · runnables composables · standard industrie</td>
-            </tr>
-            <tr>
-              <td>LLM abstraction</td>
-              <td class="mono">LiteLLM</td>
-              <td>SDK direct</td>
-              <td>Provider-agnostic · swap Groq ↔ OpenAI ↔ Anthropic sans refactor</td>
-            </tr>
-            <tr>
-              <td>Provider LLM</td>
-              <td class="mono">Groq</td>
-              <td>OpenAI · Anthropic</td>
-              <td>Latence &lt; 1s · pricing 10× plus bas · SLA suffisant</td>
-            </tr>
-            <tr>
-              <td>Orchestration</td>
-              <td class="mono">Docker Compose</td>
-              <td>Kubernetes</td>
-              <td>Simplicité opérationnelle · POC/prod légère · K8s overkill à cette échelle</td>
-            </tr>
-            <tr>
-              <td>Reverse proxy</td>
-              <td class="mono">Nginx</td>
-              <td>Traefik · Caddy</td>
-              <td>Mature · config lisible · Let's Encrypt intégré · admin serveur familier</td>
-            </tr>
-            <tr>
-              <td>Auth</td>
-              <td class="mono">JWT custom</td>
-              <td>Auth0 · Keycloak</td>
-              <td>Contrôle total · zéro dépendance externe · 15min access + 7j refresh</td>
-            </tr>
-            <tr>
-              <td>Batch</td>
-              <td class="mono">Airflow</td>
-              <td>Prefect · Dagster</td>
-              <td>Standard entreprise · UI mature · compétence transférable</td>
-            </tr>
-            <tr>
-              <td>Tracking ML</td>
-              <td class="mono">MLflow</td>
-              <td>W&amp;B · ClearML</td>
-              <td>Open-source · self-hosted · gratuit · Model Registry natif</td>
-            </tr>
-            <tr>
-              <td>Métriques infra</td>
-              <td class="mono">Prometheus + Grafana</td>
-              <td>Datadog · New Relic</td>
-              <td>Open-source · pull model · dashboards versionnés en Git</td>
-            </tr>
-            <tr>
-              <td>Tracing LLM</td>
-              <td class="mono">Langfuse</td>
-              <td>LangSmith · Arize</td>
-              <td>Open-source · self-hostable · pricing raisonnable</td>
-            </tr>
-            <tr>
-              <td>Hébergement</td>
-              <td class="mono">Hetzner VPS</td>
-              <td>AWS · GCP</td>
-              <td>Ratio prix/perf imbattable · 62 Go RAM · pas de vendor lock-in</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── 8 · Comparaison BLEU ────────────────────────────────── -->
-  <section class="slide" data-title="Expérimentation">
-    <div class="slide-body">
-      <p class="eyebrow">Expérimentation</p>
-      <h2 class="title">3 prompts, 2 modèles —<br>le <em>champion</em> émerge.</h2>
-      <div class="chart">
-        <div class="bar-row">
-          <div class="name">v1.0 · Llama 8B</div>
-          <div class="bar-track"><div class="bar-fill" style="width:40%"></div></div>
-          <div class="bar-value">40.2</div>
-        </div>
-        <div class="bar-row is-champion">
-          <div class="name">v1.1 · Llama 8B <span class="champ">champion</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:46%"></div></div>
-          <div class="bar-value">46.2</div>
-        </div>
-        <div class="bar-row">
-          <div class="name">v1.2 · Llama 8B</div>
-          <div class="bar-track"><div class="bar-fill" style="width:42%"></div></div>
-          <div class="bar-value">42.1</div>
-        </div>
-        <div class="bar-row is-expensive">
-          <div class="name">v1.1 · Llama 70B</div>
-          <div class="bar-track"><div class="bar-fill" style="width:51%"></div></div>
-          <div class="bar-value">51.3</div>
-        </div>
-      </div>
-      <p class="caption" style="margin-top:4vh;">Score BLEU sur 30 flash-infos routières · référence humaine · v1.1 8B retenu : meilleur ratio qualité/coût (70B = 10× plus cher pour +5 pts BLEU).</p>
-    </div>
-  </section>
-
-  <!-- ─── 8 · Observability 3 couches ─────────────────────────── -->
-  <section class="slide" data-title="Observability">
-    <div class="slide-body">
-      <p class="eyebrow">Observability</p>
-      <h2 class="title">Trois couches,<br>un seul <em>système</em>.</h2>
-      <div class="split-3" style="margin-top:2vh;">
-        <div class="card">
-          <p class="card-eyebrow">01 · Infra</p>
-          <h3>Requêtes &amp; latence</h3>
-          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Prometheus scrape 6 services</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Grafana — p95 · throughput · 5xx</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">12 panels dashboard</li>
-          </ul>
-        </div>
-        <div class="card">
-          <p class="card-eyebrow">02 · Métier</p>
-          <h3>Coût &amp; usage</h3>
-          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Compteurs custom Prometheus</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Coût $ cumulé par langue</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Tokens · événements extraits</li>
-          </ul>
-        </div>
-        <div class="card">
-          <p class="card-eyebrow">03 · LLM</p>
-          <h3>Traces &amp; évaluation</h3>
-          <ul style="list-style:none;padding:0;margin:1.5vh 0 0 0;">
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">MLflow · tracking · registry</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Langfuse · spans détaillés</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Coût $ · tokens · qualité</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── 9 · MLflow hub ──────────────────────────────────────── -->
-  <section class="slide" data-title="MLflow">
-    <div class="slide-body">
-      <p class="eyebrow">Hub LLMOps</p>
-      <h2 class="title">MLflow — <em>tracking</em>, <em>eval</em>, <em>tracing</em>.</h2>
-      <div class="split-3" style="margin-top:2vh;">
-        <div>
-          <p class="eyebrow" style="color:var(--accent);">Tracking</p>
-          <p class="body" style="color:var(--fg-muted);">Chaque config <em>whisper × llm × prompt</em> = 1 run avec params, métriques agrégées, artefacts. Tag <code>champion</code> sur la meilleure config.</p>
-          <p class="body" style="margin-top:2vh;color:var(--fg-muted);">Model Registry — 3 modèles taggés <code>production_version</code>.</p>
-        </div>
-        <div>
-          <p class="eyebrow" style="color:var(--accent);">Évaluation</p>
-          <p class="body" style="color:var(--fg-muted);">Table interactive per-audio (drill-down) + <code>mlflow.evaluate()</code> natif :</p>
-          <p class="body" style="margin-top:1.5vh;color:var(--fg-muted);font-size:13px;">
-            BLEU · ROUGE-1/2/L · exact_match ·<br>
-            toxicity · Flesch-Kincaid · ARI
-          </p>
-        </div>
-        <div>
-          <p class="eyebrow" style="color:var(--accent);">Tracing</p>
-          <p class="body" style="color:var(--fg-muted);">Décorateur <code>@mlflow.trace</code> sur les 3 steps du pipeline — spans hiérarchiques capturés en temps réel :</p>
-          <p class="body" style="margin-top:1.5vh;color:var(--fg-muted);font-size:13px;">
-            <code>stt_transcribe</code><br>
-            <code>llm_translate</code><br>
-            <code>tts_synthesize</code>
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ─── 10 · Démo ──────────────────────────────────────────── -->
   <section class="slide demo" data-title="Démonstration">
     <p class="eyebrow" style="text-align:center;">Démonstration</p>
@@ -1181,66 +1335,6 @@ pipeline_chain = (
     <p class="switch-hint">
       Retour : <kbd>Alt</kbd> + <kbd>Tab</kbd>
     </p>
-  </section>
-
-  <!-- ─── 11 · Sécurité ──────────────────────────────────────── -->
-  <section class="slide" data-title="Sécurité">
-    <div class="slide-body">
-      <p class="eyebrow">Sécurité</p>
-      <h2 class="title">La sécurité comme <em>couche transversale</em>.</h2>
-      <div class="split" style="margin-top:2vh;">
-        <div>
-          <p class="eyebrow" style="color:var(--accent);">Authentification</p>
-          <ul class="editorial">
-            <li><span><strong>JWT</strong> access 15 min + refresh 7 j avec rotation</span></li>
-            <li><span><strong>Middleware Next.js</strong> protège toutes les routes non publiques</span></li>
-            <li><span><strong>Basic-auth nginx</strong> couche supplémentaire au niveau edge</span></li>
-          </ul>
-        </div>
-        <div>
-          <p class="eyebrow" style="color:var(--accent);">Défense LLM</p>
-          <ul class="editorial">
-            <li><span><strong>Prompt guards</strong> pre-check anti-injection sur transcription</span></li>
-            <li><span><strong>Sandbox utilisateur</strong> <code>&lt;user_text&gt;…&lt;/user_text&gt;</code></span></li>
-            <li><span><strong>Post-check</strong> vérifie cohérence de la sortie LLM</span></li>
-          </ul>
-        </div>
-      </div>
-      <div class="divider-h"></div>
-      <p class="body" style="color:var(--fg-muted);">
-        Réseau — tous les services bindés sur <code>127.0.0.1</code>. Seul nginx expose le port 443 public. HTTPS via Let's Encrypt.
-      </p>
-    </div>
-  </section>
-
-  <!-- ─── 12 · Déploiement ───────────────────────────────────── -->
-  <section class="slide" data-title="Déploiement">
-    <div class="slide-body">
-      <p class="eyebrow">Production</p>
-      <h2 class="title">Déployé, <em>sécurisé</em>, mesuré.</h2>
-      <div class="stack">
-        <div class="stack-layer">
-          <span class="layer-label">Domaine</span>
-          <span class="layer-name">traduction-audio.fr <span class="detail">Let's Encrypt · HTTP/2</span></span>
-        </div>
-        <div class="stack-layer">
-          <span class="layer-label">Edge</span>
-          <span class="layer-name">Nginx <span class="detail">reverse proxy · basic-auth · rate limit</span></span>
-        </div>
-        <div class="stack-layer">
-          <span class="layer-label">Frontend</span>
-          <span class="layer-name">Next.js standalone <span class="detail">127.0.0.1:3000 · rewrites internes</span></span>
-        </div>
-        <div class="stack-layer">
-          <span class="layer-label">Backend</span>
-          <span class="layer-name">Docker Compose <span class="detail">14 services · réseau interne isolé</span></span>
-        </div>
-        <div class="stack-layer">
-          <span class="layer-label">Hébergement</span>
-          <span class="layer-name">Hetzner VPS <span class="detail">62 Go RAM · 12 CPU · restart policies</span></span>
-        </div>
-      </div>
-    </div>
   </section>
 
   <!-- ─── 13 · Chiffres ──────────────────────────────────────── -->
