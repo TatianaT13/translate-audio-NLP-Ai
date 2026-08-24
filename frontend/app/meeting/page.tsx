@@ -46,7 +46,7 @@ export default function MeetingPage() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef        = useRef<MediaStream | null>(null);
-  const chunkTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunkTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auth check
@@ -55,66 +55,92 @@ export default function MeetingPage() {
   }, [router]);
 
   // ── Recording lifecycle ────────────────────────────────────────────────
+  //
+  // Pattern "stop + restart" pour chunker : chaque MediaRecorder produit UN
+  // fichier WebM COMPLET (avec header) à chaque stop(). Utiliser timeslice sur
+  // start() envoie des fragments sans header → Whisper ne peut décoder que le
+  // 1er chunk, les suivants sont invalides silencieusement.
+  const stoppingRef      = useRef(false);          // évite de redémarrer sur stop volontaire
+  const buildRecorder = useCallback((stream: MediaStream): MediaRecorder => {
+    const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+
+    // À chaque dataavailable → envoie chunk au STT
+    mr.ondataavailable = async (e) => {
+      if (e.data.size < 1000) return;              // ignore les chunks vides
+      try {
+        const t = await transcribeChunk(e.data);
+        if (t.text.trim().length > 0) {
+          setSegments(prev => [...prev, {
+            text:       t.text,
+            language:   t.language,
+            confidence: t.confidence,
+            ts:         new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          }]);
+        }
+      } catch (err) {
+        console.error("STT chunk error:", err);
+      }
+    };
+
+    // À chaque stop → si on n'est pas en train d'arrêter volontairement,
+    // relancer un nouveau MediaRecorder pour le chunk suivant
+    mr.onstop = () => {
+      if (stoppingRef.current) return;             // stop volontaire (bouton Arrêter)
+      if (!streamRef.current) return;
+      const nextMr = buildRecorder(streamRef.current);
+      mediaRecorderRef.current = nextMr;
+      nextMr.start();
+      // Reprogrammer le prochain stop dans 30s
+      chunkTimerRef.current = setTimeout(() => nextMr.stop(), CHUNK_DURATION_MS);
+    };
+
+    return mr;
+  }, []);
+
   const startRecording = useCallback(async () => {
     setError(null);
     setSegments([]);
     setSummary(null);
     setElapsedSec(0);
+    stoppingRef.current = false;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      const mr = buildRecorder(stream);
       mediaRecorderRef.current = mr;
-
-      // À chaque dataavailable, on envoie le chunk au STT (en background)
-      mr.ondataavailable = async (e) => {
-        if (e.data.size < 1000) return;       // ignore les chunks vides
-        setStep("processing_chunk");
-        try {
-          const t = await transcribeChunk(e.data);
-          if (t.text.trim().length > 0) {
-            setSegments(prev => [...prev, {
-              text:       t.text,
-              language:   t.language,
-              confidence: t.confidence,
-              ts:         new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-            }]);
-          }
-        } catch (err) {
-          console.error("STT chunk error:", err);
-        } finally {
-          setStep("recording");
-        }
-      };
-
-      // Démarrer avec timeslice → flush automatique toutes les 30s
-      mr.start(CHUNK_DURATION_MS);
+      mr.start();                                  // pas de timeslice
       setStep("recording");
 
-      // Timer affichage
+      // Timer chunks : stop() après 30s → onstop restart un nouveau MR
+      chunkTimerRef.current = setTimeout(() => mr.stop(), CHUNK_DURATION_MS);
+
+      // Timer d'affichage temps écoulé
       elapsedTimerRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Microphone inaccessible.");
       setStep("error");
     }
-  }, []);
+  }, [buildRecorder]);
 
   const stopRecording = useCallback(() => {
+    // Marquer l'arrêt volontaire → onstop ne relancera pas de nouveau MR
+    stoppingRef.current = true;
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+    if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
     mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach(t => t.stop());
-    if (chunkTimerRef.current)    clearInterval(chunkTimerRef.current);
-    if (elapsedTimerRef.current)  clearInterval(elapsedTimerRef.current);
     setStep("stopped");
   }, []);
 
   // Cleanup au unmount
   useEffect(() => {
     return () => {
+      stoppingRef.current = true;
       mediaRecorderRef.current?.stop();
       streamRef.current?.getTracks().forEach(t => t.stop());
-      if (chunkTimerRef.current)   clearInterval(chunkTimerRef.current);
+      if (chunkTimerRef.current)   clearTimeout(chunkTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     };
   }, []);
