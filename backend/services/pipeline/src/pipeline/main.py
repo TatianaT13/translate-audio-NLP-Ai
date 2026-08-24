@@ -365,61 +365,63 @@ async def process(
             ) as root:
                 root.update(output={"translation": result["translation"][:500]})
 
-                # STT — span
-                with root.start_observation(
+                # STT — child span (LangfuseSpan n'est pas context manager en v4,
+                # on doit appeler .end() explicitement)
+                stt_span = root.start_observation(
                     name="stt",
                     input={
                         "filename":      filename,
                         "audio_size_kb": audio_in_size_kb,
                         "whisper_model": whisper_model,
                     },
-                    # Note : SDK v4 utilise le temps réel du context manager
-                    # (les timestamps historiques passent en metadata plus bas)
-                ) as stt_span:
-                    stt_span.update(
-                        output={
-                            "text":          result["source_text"][:1000],
-                            "language":      result["language"],
-                            "language_prob": result["language_prob"],
-                        },
-                        metadata={"latency_ms": result["latency_stt_ms"]},
-                    )
+                )
+                stt_span.update(
+                    output={
+                        "text":          result["source_text"][:1000],
+                        "language":      result["language"],
+                        "language_prob": result["language_prob"],
+                    },
+                    metadata={"latency_ms": result["latency_stt_ms"]},
+                )
+                stt_span.end()
 
-                # LLM — generation (avec usage tokens + coût)
-                with root.start_observation(
+                # LLM — generation
+                gen = root.start_observation(
                     name="llm_translate",
                     as_type="generation",
                     model=llm_model,
                     model_parameters={"prompt_version": prompt_version, "target_lang": target_lang},
                     input=result.get("safe_input_text", result["source_text"])[:2000],
-                ) as gen:
-                    gen.update(
-                        output=result["translation"][:2000],
-                        usage_details={
-                            "input":  prompt_tokens,
-                            "output": completion_tokens,
-                            "total":  total_tokens,
-                        },
-                        cost_details={"total": cost_usd},
-                        metadata={
-                            "start_time": result.get("llm_start_iso"),
-                            "end_time":   result.get("llm_end_iso"),
-                            "latency_ms": result["latency_llm_ms"],
-                        },
-                    )
+                )
+                gen.update(
+                    output=result["translation"][:2000],
+                    usage_details={
+                        "input":  prompt_tokens,
+                        "output": completion_tokens,
+                        "total":  total_tokens,
+                    },
+                    cost_details={"total": cost_usd},
+                    metadata={
+                        "start_time": result.get("llm_start_iso"),
+                        "end_time":   result.get("llm_end_iso"),
+                        "latency_ms": result["latency_llm_ms"],
+                    },
+                )
+                gen.end()
 
-                # TTS — span
-                with root.start_observation(
+                # TTS — child span
+                tts_span = root.start_observation(
                     name="tts",
                     input={"text": result["translation"][:1000], "lang": target_lang},
-                ) as tts_span:
-                    tts_span.update(
-                        output={
-                            "audio_size_kb": result.get("audio_out_size_kb"),
-                            "content_type":  result["audio_content_type"],
-                        },
-                        metadata={"latency_ms": result["latency_tts_ms"]},
-                    )
+                )
+                tts_span.update(
+                    output={
+                        "audio_size_kb": result.get("audio_out_size_kb"),
+                        "content_type":  result["audio_content_type"],
+                    },
+                    metadata={"latency_ms": result["latency_tts_ms"]},
+                )
+                tts_span.end()
 
                 # Scores associés à la trace
                 for name, value in [
