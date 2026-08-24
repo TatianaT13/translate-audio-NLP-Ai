@@ -59,6 +59,14 @@ class GuardResult:
 
 # ── 1) Pre-check sur le texte transcrit ──────────────────────────────────────
 
+import os
+
+# Limite haute — override via env pour flexibilité (démo, tests, meeting recorder)
+# Un flash trafic typique = 50-500 chars, un audio de 5 min = ~5000 chars,
+# un podcast 30 min = ~30000 chars. Default 50k = ~1h de parole.
+MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "50000"))
+
+
 def check_input(text: str) -> GuardResult:
     """Détecte les patterns d'injection dans le texte transcrit.
     Renvoie safe=False si suspect."""
@@ -74,8 +82,9 @@ def check_input(text: str) -> GuardResult:
                 matched_pattern=raw[:60],
             )
 
-    # Tailles aberrantes — un flash trafic typique fait 50-500 caractères
-    if len(text) > 5000:
+    # Tailles aberrantes — protège contre les uploads massifs
+    # (limite haute par défaut, override via env MAX_INPUT_CHARS)
+    if len(text) > MAX_INPUT_CHARS:
         return GuardResult(safe=False, reason="text_too_long")
 
     return GuardResult(safe=True)

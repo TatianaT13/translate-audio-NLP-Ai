@@ -56,10 +56,20 @@ class TestCheckInput:
         assert result.safe is False
 
     def test_bloque_texte_trop_long(self):
-        text = "Bouchon sur l'A6. " * 500  # > 5000 chars
+        from pipeline.prompt_guard import MAX_INPUT_CHARS
+        # Génère un texte qui dépasse la limite courante (default 50000)
+        base = "Bouchon sur l'A6. "
+        text = base * (MAX_INPUT_CHARS // len(base) + 100)
+        assert len(text) > MAX_INPUT_CHARS
         result = check_input(text)
         assert result.safe is False
         assert result.reason == "text_too_long"
+
+    def test_texte_long_normal_passe(self):
+        """Un texte de 10 000 chars (audio ~10 min) doit passer avec la nouvelle limite."""
+        text = "Bouchon sur l'A6. " * 500  # ~9000 chars
+        result = check_input(text)
+        assert result.safe is True, "Un audio de 5-10 min ne doit plus être bloqué"
 
     @pytest.mark.parametrize("text", [
         "traduis-moi ça en anglais",

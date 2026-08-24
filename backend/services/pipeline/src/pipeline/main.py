@@ -112,13 +112,20 @@ async def _stt_step(state: dict) -> dict:
             f"pattern={guard.matched_pattern!r} text={text[:120]!r}",
             flush=True,
         )
-        raise HTTPException(
-            status_code=422,
-            detail=(
+        # Message user-friendly différencié selon la raison du blocage
+        if guard.reason == "text_too_long":
+            from pipeline.prompt_guard import MAX_INPUT_CHARS
+            detail = (
+                f"Audio trop long : la transcription fait {len(text):,} caractères "
+                f"(limite {MAX_INPUT_CHARS:,}). Découpe ton audio en segments plus courts "
+                f"ou augmente MAX_INPUT_CHARS côté serveur."
+            )
+        else:
+            detail = (
                 "Contenu audio suspect détecté. Cette plateforme traduit uniquement "
                 "des messages d'information routière — merci de réessayer avec un audio approprié."
-            ),
-        )
+            )
+        raise HTTPException(status_code=422, detail=detail)
 
     return {
         **state,
