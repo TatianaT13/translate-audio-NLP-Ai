@@ -361,8 +361,8 @@ async def process(
                         "audio_size_kb": audio_in_size_kb,
                         "whisper_model": whisper_model,
                     },
-                    start_time=_iso("stt_start_iso"),
-                    end_time=_iso("stt_end_iso"),
+                    # Note : SDK v4 utilise le temps réel du context manager
+                    # (les timestamps historiques passent en metadata plus bas)
                 ) as stt_span:
                     stt_span.update(
                         output={
@@ -380,8 +380,6 @@ async def process(
                     model=llm_model,
                     model_parameters={"prompt_version": prompt_version, "target_lang": target_lang},
                     input=result.get("safe_input_text", result["source_text"])[:2000],
-                    start_time=_iso("llm_start_iso"),
-                    end_time=_iso("llm_end_iso"),
                 ) as gen:
                     gen.update(
                         output=result["translation"][:2000],
@@ -391,14 +389,17 @@ async def process(
                             "total":  total_tokens,
                         },
                         cost_details={"total": cost_usd},
+                        metadata={
+                            "start_time": result.get("llm_start_iso"),
+                            "end_time":   result.get("llm_end_iso"),
+                            "latency_ms": result["latency_llm_ms"],
+                        },
                     )
 
                 # TTS — span
                 with root.start_observation(
                     name="tts",
                     input={"text": result["translation"][:1000], "lang": target_lang},
-                    start_time=_iso("tts_start_iso"),
-                    end_time=_iso("tts_end_iso"),
                 ) as tts_span:
                     tts_span.update(
                         output={
