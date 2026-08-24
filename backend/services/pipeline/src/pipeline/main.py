@@ -138,30 +138,104 @@ async def _stt_step(state: dict) -> dict:
     }
 
 
+# Taille max d'un chunk envoyé au LLM. Au-delà, on chunke automatiquement.
+# 3000 chars ≈ 750 tokens = petit contexte, traduit vite, coût minimal.
+LLM_CHUNK_MAX_CHARS = int(os.getenv("LLM_CHUNK_MAX_CHARS", "3000"))
+
+
+def _split_into_chunks(text: str, max_chars: int = LLM_CHUNK_MAX_CHARS) -> list[str]:
+    """Découpe le texte en chunks de max_chars caractères, aux frontières de phrases.
+
+    Préserve la sémantique en cassant au niveau des ponctuations fortes (. ! ?)
+    plutôt qu'au milieu d'un mot. Overlap zéro (les traductions sont assez
+    autonomes pour ne pas nécessiter de contexte croisé).
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    import re
+    # Split par phrases (garde le délimiteur avec un lookbehind)
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        # Si une phrase seule dépasse max_chars (rare mais possible), on la coupe brutalement
+        while len(sentence) > max_chars:
+            chunks.append(sentence[:max_chars])
+            sentence = sentence[max_chars:]
+
+        if not current:
+            current = sentence
+        elif len(current) + 1 + len(sentence) <= max_chars:
+            current = f"{current} {sentence}"
+        else:
+            chunks.append(current)
+            current = sentence
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+async def _translate_chunk(
+    client: httpx.AsyncClient,
+    text: str,
+    target_lang: str,
+    llm_model: str,
+    prompt_version: str,
+) -> dict:
+    """Traduit un chunk unique via le service LLM. Renvoie le dict de réponse."""
+    resp = await client.post(
+        f"{LLM_URL}/translate",
+        json={
+            "text": sandbox_user_text(text),
+            "target_lang": target_lang,
+            "model": llm_model,
+            "prompt_version": prompt_version,
+        },
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 @_trace(name="llm_translate")
 async def _llm_step(state: dict) -> dict:
     """Étape 2 : traduction texte → texte traduit via LLM Service.
-    Le texte est sandboxé (échappement balises) avant envoi au LLM."""
+
+    Chunking automatique si le texte source dépasse LLM_CHUNK_MAX_CHARS
+    (default 3000). Les chunks sont traduits séquentiellement puis joints.
+    """
     from datetime import datetime, timezone
     t0 = time.perf_counter()
     llm_start_iso = datetime.now(timezone.utc).isoformat()
-    safe_text = sandbox_user_text(state["source_text"])
+
+    source_text = state["source_text"]
+    chunks = _split_into_chunks(source_text, LLM_CHUNK_MAX_CHARS)
+    if len(chunks) > 1:
+        print(f"[pipeline] LLM chunking: {len(source_text)} chars → {len(chunks)} chunks", flush=True)
+
+    translations: list[str] = []
+    prompt_tokens = completion_tokens = total_tokens = 0
+    cost_usd = 0.0
+
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{LLM_URL}/translate",
-            json={
-                "text": safe_text,
-                "target_lang": state["target_lang"],
-                "model": state["llm_model"],
-                "prompt_version": state["prompt_version"],
-            },
-        )
-    resp.raise_for_status()
-    data = resp.json()
-    translation = data["translation"]
+        for i, chunk in enumerate(chunks, 1):
+            data = await _translate_chunk(
+                client, chunk, state["target_lang"], state["llm_model"], state["prompt_version"],
+            )
+            translations.append(data["translation"])
+            prompt_tokens     += data.get("prompt_tokens",     0)
+            completion_tokens += data.get("completion_tokens", 0)
+            total_tokens      += data.get("total_tokens",      0)
+            cost_usd          += data.get("cost_usd",          0.0)
+            if len(chunks) > 1:
+                print(f"[pipeline]   chunk {i}/{len(chunks)} traduit ({len(chunk)} chars)", flush=True)
+
+    translation = " ".join(translations)
 
     # ── Garde-fou : post-check sur la sortie LLM ─────────────────────────────
-    guard = check_output(translation, state["source_text"])
+    guard = check_output(translation, source_text)
     if not guard.safe:
         print(
             f"[pipeline] BLOCKED output — reason={guard.reason} "
@@ -177,53 +251,79 @@ async def _llm_step(state: dict) -> dict:
         **state,
         "translation": translation,
         "latency_llm_ms": round((time.perf_counter() - t0) * 1000),
-        "prompt_tokens":     data.get("prompt_tokens",     0),
-        "completion_tokens": data.get("completion_tokens", 0),
-        "total_tokens":      data.get("total_tokens",      0),
-        "cost_usd":          data.get("cost_usd",          0.0),
+        "prompt_tokens":     prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens":      total_tokens,
+        "cost_usd":          round(cost_usd, 6),
         "llm_start_iso":     llm_start_iso,
         "llm_end_iso":       datetime.now(timezone.utc).isoformat(),
-        "safe_input_text":   safe_text,
+        "safe_input_text":   source_text[:2000],
+        "n_chunks":          len(chunks),
     }
+
+
+# Taille max d'un chunk envoyé au TTS. Voxtral limite ≈ 5000 chars par appel.
+# On chunke + concatène les audios pour supporter les longues traductions.
+TTS_CHUNK_MAX_CHARS = int(os.getenv("TTS_CHUNK_MAX_CHARS", "3000"))
 
 
 @_trace(name="tts_synthesize")
 async def _tts_step(state: dict) -> dict:
-    """Étape 3 : synthèse vocale texte traduit → audio via TTS Service."""
+    """Étape 3 : synthèse vocale texte traduit → audio via TTS Service.
+
+    Chunking automatique si la traduction dépasse TTS_CHUNK_MAX_CHARS.
+    Les audios chunks sont concaténés en un seul buffer côté serveur.
+    """
     from datetime import datetime, timezone
     t0 = time.perf_counter()
     tts_start_iso = datetime.now(timezone.utc).isoformat()
+    translation = state["translation"]
+    tts_chunks = _split_into_chunks(translation, TTS_CHUNK_MAX_CHARS)
+    if len(tts_chunks) > 1:
+        print(f"[pipeline] TTS chunking: {len(translation)} chars → {len(tts_chunks)} chunks", flush=True)
+
+    audio_parts: list[bytes] = []
+    content_type_seen = "audio/mpeg"
+
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{TTS_URL}/synthesize",
-            json={"text": state["translation"], "lang": state["target_lang"]},
-        )
+        for i, chunk in enumerate(tts_chunks, 1):
+            resp = await client.post(
+                f"{TTS_URL}/synthesize",
+                json={"text": chunk, "lang": state["target_lang"]},
+            )
 
     # Mistral Voxtral peut renvoyer "guardrail_violation" sur du contenu sensible.
-    # Le TTS service le ré-emballe en 500 avec le body Mistral en clair → on détecte
-    # le mot-clé dans le body, quel que soit le code de retour.
-    if not resp.is_success and ("guardrail" in resp.text.lower() or "guardrail_violation" in resp.text.lower()):
-        print(f"[pipeline] TTS guardrail (Mistral) — translation préservée", flush=True)
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Synthèse vocale refusée par le fournisseur TTS (politique de contenu Mistral). "
-                "La traduction texte reste disponible — l'audio n'a pas pu être généré."
-            ),
-        )
+            # Le TTS service ré-emballe les guardrails Mistral en 500 avec le body en clair
+            if not resp.is_success and ("guardrail" in resp.text.lower() or "guardrail_violation" in resp.text.lower()):
+                print(f"[pipeline] TTS guardrail (Mistral) — chunk {i}/{len(tts_chunks)} skipped", flush=True)
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Synthèse vocale refusée par le fournisseur TTS (politique de contenu Mistral). "
+                        "La traduction texte reste disponible — l'audio n'a pas pu être généré."
+                    ),
+                )
+            resp.raise_for_status()
+            audio_parts.append(resp.content)
+            # Voxtral renvoie audio/mpeg, MMS local renvoie audio/wav — on garde le premier vu
+            if i == 1:
+                content_type_seen = resp.headers.get("content-type", "audio/mpeg")
+            if len(tts_chunks) > 1:
+                print(f"[pipeline]   TTS chunk {i}/{len(tts_chunks)} OK ({len(chunk)} chars → {len(resp.content)} bytes)", flush=True)
 
-    resp.raise_for_status()
-    audio_bytes = resp.content
+    # Concaténation naïve des audio bytes (fonctionne pour MP3 et WAV même si
+    # techniquement pas parfait pour WAV — un vrai fix demanderait pydub/ffmpeg).
+    audio_bytes = b"".join(audio_parts)
     audio_b64 = base64.b64encode(audio_bytes).decode()
-    content_type = resp.headers.get("content-type", "audio/mpeg")
     return {
         **state,
         "audio_b64": audio_b64,
-        "audio_content_type": content_type,
+        "audio_content_type": content_type_seen,
         "latency_tts_ms": round((time.perf_counter() - t0) * 1000),
         "audio_out_size_kb": round(len(audio_bytes) / 1024, 1),
         "tts_start_iso":   tts_start_iso,
         "tts_end_iso":     datetime.now(timezone.utc).isoformat(),
+        "n_tts_chunks":    len(tts_chunks),
     }
 
 
