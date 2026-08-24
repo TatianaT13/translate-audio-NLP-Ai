@@ -79,9 +79,14 @@ def _clean_meta(text: str) -> str:
     return cleaned or text.strip()
 
 
-def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float, dict]:
-    """Retourne (translation, latency_ms, usage_info).
-    usage_info = {prompt_tokens, completion_tokens, total_tokens, cost_usd}"""
+def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> tuple[str, float, dict]:
+    """Retourne (output, latency_ms, usage_info).
+    usage_info = {prompt_tokens, completion_tokens, total_tokens, cost_usd}
+
+    clean=True (défaut) applique _clean_meta — pensé pour la traduction single-line
+                       (retire "Here is the translation:" etc.)
+    clean=False         garde la sortie brute — utilisé pour le summarize markdown
+                       (les regex de cleanup mangeraient les ":" du markdown)."""
     t0 = time.perf_counter()
     response = litellm.completion(
         model=model,
@@ -89,7 +94,7 @@ def call_llm(prompt: str, model: str, timeout: int = 60) -> tuple[str, float, di
         timeout=timeout,
     )
     raw = response.choices[0].message.content.strip()
-    translation = _clean_meta(raw)
+    translation = _clean_meta(raw) if clean else raw
     latency_ms = (time.perf_counter() - t0) * 1000
 
     # Extraction tokens + coût (LiteLLM pricing intégré)
@@ -274,7 +279,10 @@ def summarize_meeting(req: SummarizeRequest):
         prompt += f"\n\nNOTE: Original transcript was {len(req.transcript)} chars, truncated to {max_chars} for processing."
 
     try:
-        summary, latency_ms, usage = call_llm(prompt=prompt, model=req.model, timeout=180)
+        # clean=False : le résumé est du markdown multi-ligne avec ":", "-", etc.
+        # → les regex _clean_meta (pensées pour de la traduction single-line)
+        # mangeraient tout le contenu utile en s'arrêtant au premier ":".
+        summary, latency_ms, usage = call_llm(prompt=prompt, model=req.model, timeout=180, clean=False)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
