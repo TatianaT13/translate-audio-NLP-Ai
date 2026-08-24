@@ -286,6 +286,17 @@ def summarize_meeting(req: SummarizeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    # Retire l'éventuel wrapper ```markdown ... ``` que le LLM ajoute parfois
+    summary = summary.strip()
+    if summary.startswith("```"):
+        # Retire la première ligne (```markdown ou ```) et la dernière (```)
+        lines = summary.split("\n")
+        if lines[-1].strip() == "```":
+            lines = lines[1:-1]
+        else:
+            lines = lines[1:]
+        summary = "\n".join(lines).strip()
+
     return SummarizeResponse(
         summary=summary,
         style=req.style,
