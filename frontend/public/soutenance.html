@@ -1168,7 +1168,7 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">Rôle</p>
           <p class="body" style="color:var(--fg-muted);">
-            Transcription audio multilingue (99 langues supportées). Version <code>large-v3</code> de Meta/OpenAI en prod (3 Go), <code>small</code> pour le meeting live (250 Mo).
+            Transcription audio multilingue (99 langues supportées). Version <code>large-v3</code> d'OpenAI, servie via <code>faster-whisper</code> (implémentation CTranslate2 optimisée). <strong>large-v3</strong> en prod (3 Go), <strong>small</strong> pour le meeting live (250 Mo).
           </p>
           <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
             Détection automatique de la langue source → paramètre <code>language_probability</code> utilisé pour rejeter les audios non-français.
@@ -1203,9 +1203,10 @@ pipeline = (
           </p>
           <div class="chart" style="margin-top:1.5vh;">
             <div class="bar-row"><div class="name" style="font-size:11px;">Llama 8B · v1.0</div><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><div class="bar-value">40.2</div></div>
-            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ">✓</span></div><div class="bar-track"><div class="bar-fill" style="width:46%"></div></div><div class="bar-value">46.2</div></div>
-            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 70B · v1.1</div><div class="bar-track"><div class="bar-fill" style="width:51%"></div></div><div class="bar-value">51.3</div></div>
+            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ">retenu prod</span></div><div class="bar-track"><div class="bar-fill" style="width:46%"></div></div><div class="bar-value">46.2</div></div>
+            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 70B · v1.1 <span class="champ" style="color:var(--fg-muted);">champion BLEU</span></div><div class="bar-track"><div class="bar-fill" style="width:51%"></div></div><div class="bar-value">51.3</div></div>
           </div>
+          <p class="caption" style="margin-top:1.5vh;">Champion BLEU = 70B, mais retenu prod = 8B (70B coûte 10× plus pour +5 pts).</p>
         </div>
         <div>
           <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
@@ -1373,7 +1374,7 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">Tracking</p>
           <p class="body" style="color:var(--fg-muted); font-size:13px;">
-            12 runs (2 Whisper × 2 LLM × 3 prompts). Métriques BLEU/METEOR/WER/latence/coût. Tag <code>champion</code> auto sur meilleur BLEU. Model Registry avec 3 modèles taggés <code>production_version</code>.
+            <strong>12 configurations</strong> comparées (2 Whisper × 2 LLM × 3 prompts) × 5 audios golden = <strong>60 runs</strong>. Métriques BLEU/METEOR/WER/latence/coût. Tag <code>champion</code> auto sur meilleur BLEU. Model Registry avec 3 modèles taggés <code>production_version</code>. <em style="color:var(--fg-muted);">Runs pré-migration OpenAI (Groq Llama à l'époque).</em>
           </p>
         </div>
         <div>
@@ -1462,12 +1463,12 @@ pipeline = (
   <section class="slide" data-title="Tests + CI">
     <div class="slide-body">
       <p class="eyebrow">Qualité — Tests + CI/CD</p>
-      <h2 class="title"><em>103 tests</em>,<br>CI GitHub Actions.</h2>
+      <h2 class="title"><em>126 tests</em>,<br>CI GitHub Actions.</h2>
       <div class="split">
         <div>
           <p class="eyebrow" style="color:var(--accent);">Structure</p>
           <p class="body" style="color:var(--fg-muted); font-size:13px;">
-            <code>tests/unit/</code> — 78 tests (prompt_guard, auth JWT, legacy)<br>
+            <code>tests/unit/</code> — 103 tests (prompt_guard, auth JWT, legacy flash_nlp)<br>
             <code>tests/integration/</code> — 23 tests (auth flow, pipeline e2e, TTS routing)<br>
             <code>tests/e2e/</code> — emplacement prêt pour Phase 2 (Playwright)
           </p>
@@ -1666,7 +1667,7 @@ pipeline = (
       <div class="split-3">
         <div class="row"><span class="key">Langues</span><span class="val">EN · UK · ES · DE</span></div>
         <div class="row"><span class="key">Prompts testés</span><span class="val">3 versions</span></div>
-        <div class="row"><span class="key">Runs MLflow</span><span class="val">> 60 configurations</span></div>
+        <div class="row"><span class="key">Runs MLflow</span><span class="val">12 configs · 60 runs</span></div>
       </div>
     </div>
   </section>
