@@ -27,7 +27,13 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = ["PySide6>=6.7"]
-dev = ["pytest>=8.0", "pytest-mock>=3.12"]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    # Deps nécessaires aux tests unitaires cross-service :
+    "python-jose[cryptography]>=3.3",  # gateway JWT
+    "bcrypt>=4.0",                     # gateway password hashing
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
