@@ -563,7 +563,11 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isHoverDrop, setIsHoverDrop] = useState(false);
   const [targetLang,    setTargetLang]    = useState("en");
-  const [whisperModel,  setWhisperModel]  = useState("large-v3");
+  // Default configurable par env (bake au build via NEXT_PUBLIC_DEFAULT_WHISPER_MODEL)
+  // → local : medium (Docker Desktop limité), prod : large-v3 (Hetzner 62 Go)
+  const [whisperModel,  setWhisperModel]  = useState(
+    process.env.NEXT_PUBLIC_DEFAULT_WHISPER_MODEL || "medium"
+  );
   const [llmModel,      setLlmModel]      = useState("groq/openai/gpt-oss-20b");
   const [promptVersion, setPromptVersion] = useState("v1.1");
   const [showAdvanced,  setShowAdvanced]  = useState(false);
