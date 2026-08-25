@@ -1129,12 +1129,6 @@ ${result.translation}
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
               <span>Parler au micro</span>
-              <kbd style={{
-                marginLeft: "6px", padding: "2px 8px", borderRadius: "5px",
-                fontSize: "10px", fontFamily: "ui-monospace, monospace",
-                background: "rgba(201,169,110,0.08)", border: "1px solid var(--border)",
-                color: "var(--muted)", letterSpacing: "0.05em",
-              }}>ESPACE</kbd>
             </button>
 
             {/* Lien discret vers la démo — pas un CTA principal */}
