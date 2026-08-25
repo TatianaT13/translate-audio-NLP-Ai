@@ -148,8 +148,16 @@ class TestAccessTokenSecurity:
     def test_tampered_payload_is_rejected(self):
         """Modifier le payload sans re-signer casse la signature."""
         t = create_access_token(user_id=1, email="a@b.c", is_admin=False)
-        # Change le dernier caractère (une partie de la signature)
-        tampered = t[:-1] + ("A" if t[-1] != "A" else "B")
+        # On modifie un char AU MILIEU du payload (partie 2 du JWT).
+        # NB : pas la signature (partie 3) — ses derniers chars base64url
+        # contiennent des bits ignorés (256 bits ne rentrent pas pile dans
+        # 43 chars × 6 bits), donc changer le dernier char peut décoder
+        # aux mêmes bytes → faux négatif selon le SECRET_KEY.
+        parts = t.split(".")
+        payload = parts[1]
+        i = len(payload) // 2  # milieu, jamais un bit ignoré
+        tampered_payload = payload[:i] + ("X" if payload[i] != "X" else "Y") + payload[i + 1:]
+        tampered = f"{parts[0]}.{tampered_payload}.{parts[2]}"
         assert decode_access_token(tampered) is None
 
     def test_expiration_is_15_minutes(self):
