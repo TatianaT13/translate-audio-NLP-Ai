@@ -110,7 +110,7 @@ function WaveTransform({ mini = false }: { mini?: boolean }) {
           <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
             <span style={{
               fontSize: mini ? "12px" : "19px",
-              fontFamily: "var(--font-playfair), serif",
+              fontFamily: "var(--font-body), ui-monospace, monospace",
               fontStyle: "italic", color: "var(--foreground)", opacity: 0.78,
             }}>
               &ldquo;{q.fr}&rdquo;
@@ -120,7 +120,7 @@ function WaveTransform({ mini = false }: { mini?: boolean }) {
 
             <span style={{
               fontSize: mini ? "12px" : "19px",
-              fontFamily: "var(--font-playfair), serif",
+              fontFamily: "var(--font-body), ui-monospace, monospace",
               fontStyle: "italic", color: q.color,
             }}>
               &ldquo;{q.text}&rdquo;

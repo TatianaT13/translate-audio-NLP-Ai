@@ -390,7 +390,7 @@ export default function MeetingPage() {
               </button>
             </div>
             <pre style={{
-              whiteSpace: "pre-wrap", fontFamily: "var(--font-playfair), Georgia, serif",
+              whiteSpace: "pre-wrap", fontFamily: "var(--font-body), ui-monospace, monospace",
               fontSize: "14px", lineHeight: 1.7, color: "var(--foreground)", margin: 0,
             }}>
               {summary.summary}

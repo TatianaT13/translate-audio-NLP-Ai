@@ -19,13 +19,22 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-inter), sans-serif;
-  font-weight: 300;
+  font-family: var(--font-body), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 400;
+  font-feature-settings: "tnum" 1, "ss01" 1;
   min-height: 100vh;
 }
 
+/* Titres : machine à écrire — un seul poids (400), c'est le look. */
 .font-serif {
-  font-family: var(--font-playfair), serif;
+  font-family: var(--font-display), "Courier New", ui-monospace, monospace;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* Chiffres/latences : alignement colonne (tabular-nums natif via IBM Plex Mono) */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Scrollbar */
