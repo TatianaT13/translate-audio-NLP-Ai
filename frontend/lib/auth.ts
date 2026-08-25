@@ -17,8 +17,10 @@ export function getAccessToken(): string | null {
 export function setTokens(accessToken: string, refreshToken: string) {
   localStorage.setItem("access_token", accessToken);
   localStorage.setItem("refresh_token", refreshToken);
-  // Cookie for Next.js middleware (15 min)
-  document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Strict`;
+  // Cookie pour le middleware Next.js — aligné sur le refresh token (7j).
+  // La vraie validation JWT reste faite par le gateway ; le cookie ne sert
+  // qu'à savoir "présence de session" pour l'auth-gate côté SSR/middleware.
+  document.cookie = `access_token=${accessToken}; path=/; max-age=604800; SameSite=Strict`;
 }
 
 export function clearTokens() {
