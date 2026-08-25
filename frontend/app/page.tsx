@@ -197,9 +197,10 @@ interface ResultsViewProps {
   copied: boolean;
   onCopy: () => void;
   onDownload: () => void;
+  onDownloadTranscript: () => void;
 }
 
-function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload }: ResultsViewProps) {
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript }: ResultsViewProps) {
   const latencies = [
     { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
     { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
@@ -283,19 +284,30 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload }
           <span style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 600 }}>
             {langLabel}
           </span>
-          <button onClick={onCopy} style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
-            cursor: "pointer", transition: "all 0.2s",
-            background: copied ? "rgba(201,169,110,0.18)" : "rgba(201,169,110,0.06)",
-            border: "1px solid var(--accent-dim)", color: "var(--accent)",
-          }}>
-            {copied ? (
-              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié</>
-            ) : (
-              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</>
-            )}
-          </button>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button onClick={onDownloadTranscript} title="Télécharger source + traduction (.txt)" style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", background: "rgba(201,169,110,0.06)",
+              border: "1px solid var(--accent-dim)", color: "var(--accent)",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              .txt
+            </button>
+            <button onClick={onCopy} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", transition: "all 0.2s",
+              background: copied ? "rgba(201,169,110,0.18)" : "rgba(201,169,110,0.06)",
+              border: "1px solid var(--accent-dim)", color: "var(--accent)",
+            }}>
+              {copied ? (
+                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié</>
+              ) : (
+                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</>
+              )}
+            </button>
+          </div>
         </div>
         <div style={{ padding: "20px 22px" }}>
           <ExpandableText text={result.translation} color="var(--foreground)" />
@@ -613,6 +625,8 @@ export default function Home() {
     durationSec: number | null;
   } | null>(null);
   const [subStep, setSubStep] = useState<SubStep>(null);
+  const [errorSuggestion, setErrorSuggestion] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const fileRef      = useRef<HTMLInputElement>(null);
@@ -743,9 +757,18 @@ export default function Home() {
       setToast(res.language_prob < 0.7 ? "Confiance faible — vérifiez la transcription" : "Traduction terminée");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // PipelineError : préférer userMessage, sinon fallback message brut
+      // PipelineError : préférer userMessage + suggestion + status
       const isPipelineErr = e instanceof Error && "userMessage" in e;
-      setError(isPipelineErr ? (e as unknown as { userMessage: string }).userMessage : msg);
+      if (isPipelineErr) {
+        const pe = e as unknown as { userMessage: string; suggestion: string | null; status: number };
+        setError(pe.userMessage);
+        setErrorSuggestion(pe.suggestion);
+        setErrorStatus(pe.status);
+      } else {
+        setError(msg);
+        setErrorSuggestion(null);
+        setErrorStatus(null);
+      }
       setStep(msg === "Requête annulée" ? "idle" : "error");
       setSubStep(null);
     } finally {
@@ -810,6 +833,27 @@ export default function Home() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(audioBlobRef.current);
     a.download = `translation.${ext}`; a.click();
+  };
+
+  const downloadTranscript = () => {
+    if (!result) return;
+    const content = `# Traduction audio — traduction-audio.fr
+Date : ${new Date().toLocaleString("fr-FR")}
+Langue source : ${result.language} (confiance ${(result.language_prob * 100).toFixed(0)}%)
+Langue cible  : ${langLabel}
+Latence totale : ${(result.latency_total_ms / 1000).toFixed(1)}s
+${result.cost_usd != null ? `Coût : $${result.cost_usd.toFixed(6)}\n` : ""}
+─── Transcription ───
+${result.source_text}
+
+─── Traduction (${langLabel}) ───
+${result.translation}
+`;
+    const blob = new Blob(["﻿" + content], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `traduction_${result.language}_to_${targetLang}_${Date.now()}.txt`;
+    a.click();
   };
 
   const reset = () => {
@@ -1180,10 +1224,11 @@ export default function Home() {
             copied={copied}
             onCopy={copyTranslation}
             onDownload={downloadAudio}
+            onDownloadTranscript={downloadTranscript}
           />
         )}
 
-        {/* ── Error ── */}
+        {/* ── Error enrichie (message + suggestion + code) ── */}
         {step === "error" && error && (
           <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
             <div style={{
@@ -1193,15 +1238,37 @@ export default function Home() {
             }}>
               <span style={{ color: "#e87070", fontSize: "18px" }}>×</span>
             </div>
-            <p style={{ fontSize: "14px", color: "#e87070", marginBottom: "8px" }}>Une erreur est survenue</p>
-            <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "42ch", margin: "0 auto 32px" }}>{error}</p>
-            <button onClick={reset} style={{
-              padding: "10px 28px", borderRadius: "999px", fontSize: "13px",
-              cursor: "pointer", background: "var(--surface)",
-              border: "1px solid var(--border)", color: "var(--foreground)",
-            }}>
-              Réessayer
-            </button>
+            <p style={{ fontSize: "14px", color: "#e87070", marginBottom: "8px" }}>
+              Une erreur est survenue
+              {errorStatus && <span style={{ marginLeft: "8px", fontSize: "11px", opacity: 0.6, fontFamily: "monospace" }}>HTTP {errorStatus}</span>}
+            </p>
+            <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "48ch", margin: "0 auto 20px", lineHeight: 1.5 }}>{error}</p>
+            {errorSuggestion && (
+              <p style={{
+                fontSize: "12px", color: "var(--accent)", maxWidth: "48ch",
+                margin: "0 auto 32px", fontStyle: "italic",
+              }}>
+                💡 {errorSuggestion}
+              </p>
+            )}
+            <div style={{ display: "flex", justifyContent: "center", gap: S.gap12, flexWrap: "wrap" }}>
+              {errorStatus === 415 && (
+                <a href="https://cloudconvert.com/mp3-converter" target="_blank" rel="noopener noreferrer" style={{
+                  padding: "10px 20px", borderRadius: "999px", fontSize: "13px",
+                  background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
+                  color: "var(--accent)", textDecoration: "none",
+                }}>
+                  Ouvrir CloudConvert ↗
+                </a>
+              )}
+              <button onClick={reset} style={{
+                padding: "10px 28px", borderRadius: "999px", fontSize: "13px",
+                cursor: "pointer", background: "var(--surface)",
+                border: "1px solid var(--border)", color: "var(--foreground)",
+              }}>
+                Réessayer
+              </button>
+            </div>
           </div>
         )}
       </div>
