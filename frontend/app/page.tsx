@@ -1052,7 +1052,7 @@ ${result.translation}
                   }}>
                     Annuler
                   </button>
-                  <button onClick={() => run(pendingFile.file)} disabled={step === "processing"} style={{
+                  <button onClick={() => run(pendingFile.file)} style={{
                     padding: "8px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 500,
                     background: "var(--accent)", border: "none", color: "#0c0c0e", cursor: "pointer",
                   }}>
