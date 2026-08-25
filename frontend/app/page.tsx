@@ -604,6 +604,13 @@ export default function Home() {
   }, [whisperModel, llmModel, promptVersion]);
   const [toast, setToast]           = useState<string | null>(null);
   const [copied, setCopied]         = useState(false);
+  const [pendingFile, setPendingFile] = useState<{
+    file: File | Blob;
+    name: string;
+    sizeKb: number;
+    previewUrl: string;
+    durationSec: number | null;
+  } | null>(null);
 
   const fileRef      = useRef<HTMLInputElement>(null);
   const mediaRef     = useRef<MediaRecorder | null>(null);
@@ -630,6 +637,65 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKey);
   }, [step]);
 
+  // ── Validation format audio côté client (whitelist stricte) ──────────────
+  const ACCEPTED_AUDIO_EXTS = [".mp3", ".wav", ".m4a", ".ogg", ".opus", ".webm", ".flac", ".aac", ".mp4"];
+  const ACCEPTED_MIME_PREFIXES = ["audio/", "video/mp4", "video/webm"];  // video/mp4 = m4a parfois
+
+  const validateAudioFile = (file: File): string | null => {
+    const name = file.name.toLowerCase();
+    const hasValidExt = ACCEPTED_AUDIO_EXTS.some(ext => name.endsWith(ext));
+    const hasValidMime = ACCEPTED_MIME_PREFIXES.some(p => file.type.startsWith(p));
+    if (!hasValidExt && !hasValidMime) {
+      return `Format non supporté : « ${file.name} ». Formats acceptés : MP3, WAV, M4A, OGG, WebM, FLAC.`;
+    }
+    const MAX_MB = 25;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      return `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : ${MAX_MB} Mo (~20 min d'audio).`;
+    }
+    if (file.size < 500) {
+      return `Fichier trop petit (${file.size} bytes) — probablement vide ou corrompu.`;
+    }
+    return null;
+  };
+
+  const preparePendingFile = useCallback((file: File | Blob) => {
+    setError(null); setResult(null); setAudioUrl(null); setCopied(false);
+    // Réinitialiser tout preview précédent (libère l'URL blob)
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+
+    const asFile = file instanceof File ? file : new File([file], "recording.webm", { type: file.type });
+    const validationErr = validateAudioFile(asFile);
+    if (validationErr) {
+      setError(validationErr);
+      setStep("error");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(asFile);
+    // Extraire la durée via un élément <audio> temporaire
+    const tmp = new Audio(previewUrl);
+    tmp.addEventListener("loadedmetadata", () => {
+      setPendingFile(prev => prev ? { ...prev, durationSec: Math.round(tmp.duration) } : prev);
+    });
+    tmp.addEventListener("error", () => { /* preview OK sans metadata */ });
+
+    setPendingFile({
+      file:        asFile,
+      name:        asFile.name,
+      sizeKb:      Math.round(asFile.size / 1024),
+      previewUrl,
+      durationSec: null,
+    });
+    setStep("idle");
+  }, [pendingFile]);
+
+  const cancelPending = () => {
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+    setPendingFile(null);
+    setError(null);
+    setStep("idle");
+  };
+
   const run = useCallback(async (file: File | Blob) => {
     setError(null); setResult(null); setAudioUrl(null); setCopied(false);
     const MAX_MB = 25;
@@ -648,6 +714,9 @@ export default function Home() {
         setAudioUrl(URL.createObjectURL(blob));
       }
       setStep("done");
+      // Nettoyage du preview après succès (libère la mémoire de la URL blob)
+      if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+      setPendingFile(null);
       setToast(res.language_prob < 0.7 ? "Confiance faible — vérifiez la transcription" : "Traduction terminée");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -671,7 +740,7 @@ export default function Home() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false); setIsHoverDrop(false);
     const f = e.dataTransfer.files[0];
-    if (f) run(f);
+    if (f) preparePendingFile(f);
   };
 
   const startRecording = async () => {
@@ -707,7 +776,11 @@ export default function Home() {
     a.download = `translation.${ext}`; a.click();
   };
 
-  const reset = () => { setStep("idle"); setResult(null); setAudioUrl(null); setError(null); setCopied(false); };
+  const reset = () => {
+    setStep("idle"); setResult(null); setAudioUrl(null); setError(null); setCopied(false);
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+    setPendingFile(null);
+  };
 
   const langLabel = LANGS.find(l => l.code === targetLang)?.label ?? "English";
 
@@ -861,39 +934,88 @@ export default function Home() {
 
             <WaveTransform />
 
-            {/* Drop zone */}
-            <div
-              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-              onClick={() => fileRef.current?.click()}
-              onMouseEnter={() => setIsHoverDrop(true)}
-              onMouseLeave={() => setIsHoverDrop(false)}
-              style={{
-                borderRadius: "20px", textAlign: "center", cursor: "pointer",
-                padding: "36px 24px", marginBottom: S.gap24,
-                background: dropActive ? "rgba(201,169,110,0.06)" : "var(--surface)",
-                border: `1.5px dashed ${dropActive ? "var(--accent)" : "var(--border)"}`,
-                boxShadow: dropActive ? "0 0 0 4px rgba(201,169,110,0.06)" : "none",
-                transition: "all 0.25s",
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+            {/* Drop zone OU preview du fichier sélectionné */}
+            {pendingFile ? (
+              <div style={{
+                borderRadius: "20px", padding: "24px 24px 20px", marginBottom: S.gap24,
+                background: "rgba(201,169,110,0.04)",
+                border: "1.5px solid var(--accent-dim, rgba(201,169,110,0.4))",
+                animation: "fadeUp 0.25s ease",
+              }}>
+                {/* Nom + taille + durée */}
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: S.gap16, marginBottom: S.gap16, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: S.gap8, marginBottom: "4px" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                      </svg>
+                      <span style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {pendingFile.name}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                      {pendingFile.sizeKb < 1024
+                        ? `${pendingFile.sizeKb} Ko`
+                        : `${(pendingFile.sizeKb / 1024).toFixed(1)} Mo`}
+                      {pendingFile.durationSec != null && ` · ${Math.floor(pendingFile.durationSec / 60)}:${String(pendingFile.durationSec % 60).padStart(2, "0")}`}
+                    </p>
+                  </div>
+                </div>
+                {/* Preview audio player */}
+                <audio controls src={pendingFile.previewUrl} style={{ width: "100%", marginBottom: S.gap16, borderRadius: "8px" }} />
+                {/* Actions */}
+                <div style={{ display: "flex", gap: S.gap8, justifyContent: "flex-end" }}>
+                  <button onClick={cancelPending} style={{
+                    padding: "8px 16px", borderRadius: "10px", fontSize: "13px",
+                    background: "transparent", border: "1px solid var(--border)",
+                    color: "var(--muted)", cursor: "pointer",
+                  }}>
+                    Annuler
+                  </button>
+                  <button onClick={() => run(pendingFile.file)} disabled={step === "processing"} style={{
+                    padding: "8px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 500,
+                    background: "var(--accent)", border: "none", color: "#0c0c0e", cursor: "pointer",
+                  }}>
+                    ▶ Traduire
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+                onClick={() => fileRef.current?.click()}
+                onMouseEnter={() => setIsHoverDrop(true)}
+                onMouseLeave={() => setIsHoverDrop(false)}
                 style={{
-                  color: dropActive ? "var(--accent)" : "var(--muted)",
-                  margin: "0 auto 20px", transition: "color 0.25s",
-                }}>
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-              </svg>
-              <p style={{ fontSize: "15px", fontWeight: 400, color: "var(--foreground)", marginBottom: "6px" }}>
-                Déposez un fichier audio ici
-              </p>
-              <p style={{ fontSize: "13px", color: "var(--muted)" }}>MP3, WAV, M4A, OGG · max 25 Mo</p>
-              <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }}
-                onChange={e => e.target.files?.[0] && run(e.target.files[0])} />
-            </div>
+                  borderRadius: "20px", textAlign: "center", cursor: "pointer",
+                  padding: "36px 24px", marginBottom: S.gap24,
+                  background: dropActive ? "rgba(201,169,110,0.06)" : "var(--surface)",
+                  border: `1.5px dashed ${dropActive ? "var(--accent)" : "var(--border)"}`,
+                  boxShadow: dropActive ? "0 0 0 4px rgba(201,169,110,0.06)" : "none",
+                  transition: "all 0.25s",
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{
+                    color: dropActive ? "var(--accent)" : "var(--muted)",
+                    margin: "0 auto 20px", transition: "color 0.25s",
+                  }}>
+                  <path d="M9 18V5l12-2v13" />
+                  <circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                </svg>
+                <p style={{ fontSize: "15px", fontWeight: 400, color: "var(--foreground)", marginBottom: "6px" }}>
+                  Déposez un fichier audio ici
+                </p>
+                <p style={{ fontSize: "13px", color: "var(--muted)" }}>MP3, WAV, M4A, OGG, WebM, FLAC · max 25 Mo</p>
+                <input ref={fileRef} type="file"
+                  accept=".mp3,.wav,.m4a,.ogg,.opus,.webm,.flac,.aac,.mp4,audio/*"
+                  style={{ display: "none" }}
+                  onChange={e => e.target.files?.[0] && preparePendingFile(e.target.files[0])} />
+              </div>
+            )}
 
             {/* divider */}
             <div style={{ display: "flex", alignItems: "center", gap: S.gap16, marginBottom: S.gap24 }}>
