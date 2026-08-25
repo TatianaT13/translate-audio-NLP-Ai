@@ -525,6 +525,7 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
             boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           }}>
             {[
+              { label: "🎙 Traduction live (bêta)", action: () => router.push("/live"), color: "var(--accent)" },
               { label: "Compte-rendu de réunion", action: () => router.push("/meeting"), color: "var(--accent)" },
               ...(user.is_admin ? [{ label: "Dashboard admin", action: () => router.push("/admin"), color: "var(--accent)" }] : []),
               { label: "Support de soutenance", action: () => { window.open("/soutenance.html", "_blank", "noopener,noreferrer"); setOpen(false); }, color: "var(--accent)" },
@@ -941,8 +942,8 @@ ${result.translation}
         {step === "done" ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap16, flexWrap: "wrap" }}>
             <h1 className="font-serif" style={{ fontSize: "clamp(20px, 3.5vw, 26px)", color: "var(--foreground)", lineHeight: 1.2 }}>
-              Traduisez votre voix.{" "}
-              <em style={{ color: "var(--accent)" }}>Instantanément.</em>
+              Parlez.{" "}
+              <em style={{ color: "var(--accent)" }}>On traduit.</em>
             </h1>
             <div style={{ display: "flex", alignItems: "center", gap: S.gap8 }}>
               <span style={{ fontSize: "11px", color: "var(--muted)", opacity: 0.5, letterSpacing: "0.1em" }}>FR</span>
@@ -973,15 +974,21 @@ ${result.translation}
               fontSize: "clamp(32px, 6vw, 54px)", color: "var(--foreground)",
               lineHeight: 1.1, marginBottom: S.gap16,
             }}>
-              Traduisez votre voix.
+              Parlez.
               <br />
-              <em style={{ color: "var(--accent)" }}>Instantanément.</em>
+              <em style={{ color: "var(--accent)" }}>On traduit.</em>
             </h1>
             <p style={{
-              fontSize: "13px", lineHeight: 1.6, fontWeight: 300,
-              color: "var(--muted)", maxWidth: "42ch", margin: "0 auto",
+              fontSize: "15px", lineHeight: 1.5, fontWeight: 400,
+              color: "var(--foreground)", opacity: 0.9, maxWidth: "42ch", margin: "0 auto",
             }}>
-              Déposez ou enregistrez un audio — transcription, traduction et lecture en {langLabel}.
+              Votre audio, dans la langue de votre choix.
+            </p>
+            <p style={{
+              fontSize: "12px", lineHeight: 1.6, fontWeight: 300,
+              color: "var(--muted)", maxWidth: "56ch", margin: "8px auto 0",
+            }}>
+              Importez ou enregistrez votre audio. Nous le transcrivons, le traduisons et le lisons dans la langue choisie.
             </p>
           </>
         )}

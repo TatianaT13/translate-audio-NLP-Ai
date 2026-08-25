@@ -921,3 +921,55 @@ async def admin_airflow_summary(_: models.User = Depends(get_admin_user)):
     except Exception as exc:
         summary["error"] = str(exc)
     return summary
+
+
+# ── OpenAI Realtime — POC traduction live speech-to-speech ────────────────────
+
+OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
+
+
+@app.post("/realtime/session")
+async def realtime_session(current_user: models.User = Depends(get_current_user)):
+    """Crée un client_secret éphémère OpenAI Realtime (TTL ~60s).
+
+    Le browser l'utilise ensuite en WebRTC direct avec OpenAI. La vraie
+    OPENAI_API_KEY ne sort jamais du serveur. Auth JWT requise pour éviter
+    qu'un anon consomme le quota OpenAI.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY manquante côté serveur")
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/realtime/client_secrets",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type":  "application/json",
+                },
+                json={"session": {"type": "realtime", "model": OPENAI_REALTIME_MODEL}},
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Erreur réseau OpenAI: {exc}")
+
+    if r.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI Realtime {r.status_code}: {r.text[:200]}",
+        )
+
+    data = r.json()
+    # GA format (oct 2025+) : {value: "ek_...", expires_at, session: {id: "sess_...", ...}}
+    secret     = data.get("value") or data.get("client_secret", {}).get("value")
+    expires_at = data.get("expires_at") or data.get("client_secret", {}).get("expires_at")
+    session_id = (data.get("session") or {}).get("id")
+    if not secret:
+        raise HTTPException(status_code=502, detail=f"Réponse OpenAI inattendue: {data}")
+
+    return {
+        "client_secret": secret,
+        "session_id":    session_id,
+        "expires_at":    expires_at,
+        "model":         OPENAI_REALTIME_MODEL,
+    }
