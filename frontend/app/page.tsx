@@ -784,11 +784,13 @@ export default function Home() {
   };
 
   const runDemo = async () => {
+    setError(null); setResult(null); setAudioUrl(null);
     try {
       const res = await fetch("/demo.mp3", { cache: "no-store" });
       if (!res.ok) throw new Error(`Fichier démo introuvable (HTTP ${res.status})`);
       const blob = await res.blob();
-      run(blob);
+      // Passe par le preview pour cohérence UX (l'user voit le fichier avant traduction)
+      preparePendingFile(new File([blob], "demo.mp3", { type: "audio/mpeg" }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Fichier démo non disponible";
       setError(`${msg}. Déposez votre propre audio.`);
@@ -802,20 +804,60 @@ export default function Home() {
     if (f) preparePendingFile(f);
   };
 
+  // ── Enregistrement micro ─────────────────────────────────────────────────
+  const RECORDING_MAX_SEC = 5 * 60;  // 5 min max — safeguard user
+  const [recordingSec, setRecordingSec] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pickRecorderMime = (): string | undefined => {
+    // Ordre de préférence — webm/opus meilleur ratio qualité/taille
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/mpeg"];
+    for (const m of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return undefined; // MediaRecorder utilisera son default
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const mime = pickRecorderMime();
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       chunksRef.current = [];
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        // Utilise le vrai mimeType produit par le browser (pas hardcodé)
+        const realType = mr.mimeType || mime || "audio/webm";
+        const ext = realType.includes("mp4") ? "m4a" : realType.includes("mpeg") ? "mp3" : "webm";
+        const blob = new Blob(chunksRef.current, { type: realType });
         stream.getTracks().forEach(t => t.stop());
-        run(blob);
+
+        // Cleanup timers
+        if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+        if (recordingMaxTimerRef.current) { clearTimeout(recordingMaxTimerRef.current); recordingMaxTimerRef.current = null; }
+        setRecordingSec(0);
+
+        // Passe par le preview (cohérence UX) au lieu de run direct
+        preparePendingFile(new File([blob], `enregistrement.${ext}`, { type: realType }));
       };
-      mr.start(); mediaRef.current = mr; setStep("recording");
+      mr.start();
+      mediaRef.current = mr;
+      setStep("recording");
+      setRecordingSec(0);
+
+      // Timer d'affichage
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSec(s => s + 1);
+      }, 1000);
+      // Safeguard : auto-stop au bout de RECORDING_MAX_SEC
+      recordingMaxTimerRef.current = setTimeout(() => {
+        setToast(`Enregistrement stoppé automatiquement (${RECORDING_MAX_SEC / 60} min max)`);
+        mr.stop();
+      }, RECORDING_MAX_SEC * 1000);
     } catch {
-      setError("Microphone inaccessible."); setStep("error");
+      setError("Microphone inaccessible — vérifiez l'autorisation du navigateur.");
+      setStep("error");
     }
   };
 
@@ -1149,10 +1191,10 @@ ${result.translation}
           </div>
         )}
 
-        {/* ── Recording ── */}
+        {/* ── Recording avec timer + limite visuelle ── */}
         {step === "recording" && (
           <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
-            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "6px", height: "48px", marginBottom: "32px" }}>
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "6px", height: "48px", marginBottom: "24px" }}>
               {[0.0, 0.1, 0.2, 0.3, 0.15, 0.25, 0.2].map((delay, i) => (
                 <div key={i} className="wave-bar" style={{
                   width: "8px", height: "100%", borderRadius: "4px",
@@ -1160,14 +1202,27 @@ ${result.translation}
                 }} />
               ))}
             </div>
-            <p style={{ fontSize: "14px", color: "var(--foreground)", marginBottom: "8px" }}>Enregistrement en cours…</p>
-            <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "32px" }}>Appuyez sur Espace ou cliquez pour arrêter</p>
+            {/* Compteur mm:ss + limite */}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{
+                fontSize: "28px", fontWeight: 300, color: "var(--accent)",
+                fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums",
+              }}>
+                {String(Math.floor(recordingSec / 60)).padStart(2, "0")}:{String(recordingSec % 60).padStart(2, "0")}
+              </span>
+              <span style={{ fontSize: "12px", color: "var(--muted)", opacity: 0.6 }}>
+                / {RECORDING_MAX_SEC / 60}:00 max
+              </span>
+            </div>
+            <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "32px" }}>
+              Parlez, puis cliquez pour arrêter
+            </p>
             <button onClick={stopRecording} style={{
               padding: "12px 32px", borderRadius: "999px", fontSize: "13px",
               fontWeight: 500, cursor: "pointer", transition: "opacity 0.2s",
-              background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)",
+              background: "var(--accent)", border: "none", color: "#0c0c0e",
             }}>
-              Arrêter et traduire
+              ⬛ Arrêter
             </button>
           </div>
         )}
