@@ -1110,26 +1110,46 @@ ${result.translation}
               <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
             </div>
 
-            {/* Mic + Demo buttons */}
-            <div style={{ display: "flex", gap: S.gap12 }}>
-              <button onClick={startRecording} style={{
-                flex: 1, padding: "13px", borderRadius: "14px", cursor: "pointer",
-                fontSize: "14px", fontWeight: 500, letterSpacing: "0.04em",
-                background: "var(--surface)",
-                color: "var(--foreground)", border: "1px solid var(--border)",
-                transition: "border-color 0.2s, color 0.2s",
-              }}>
-                Enregistrer
-                <span style={{ marginLeft: "8px", fontSize: "12px", opacity: 0.5 }}>(Espace)</span>
-              </button>
-              <button onClick={runDemo} style={{
-                padding: "13px 20px", borderRadius: "14px", cursor: "pointer",
-                fontSize: "13px", fontWeight: 500,
-                background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
-                color: "#0c0c0e", border: "none", transition: "opacity 0.2s",
-                whiteSpace: "nowrap",
-              }}>
-                Lancer la démo
+            {/* Micro — action alternative clairement identifiée */}
+            <button onClick={startRecording} title="Enregistrer directement depuis votre micro (raccourci : barre d'espace)" style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+              padding: "14px", borderRadius: "14px", cursor: "pointer",
+              fontSize: "14px", fontWeight: 500, letterSpacing: "0.02em",
+              background: "var(--surface)",
+              color: "var(--foreground)", border: "1px solid var(--border)",
+              transition: "all 0.2s",
+            }}>
+              {/* Icône micro */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: "var(--accent)", flexShrink: 0 }}>
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+              <span>Parler au micro</span>
+              <kbd style={{
+                marginLeft: "6px", padding: "2px 8px", borderRadius: "5px",
+                fontSize: "10px", fontFamily: "ui-monospace, monospace",
+                background: "rgba(201,169,110,0.08)", border: "1px solid var(--border)",
+                color: "var(--muted)", letterSpacing: "0.05em",
+              }}>ESPACE</kbd>
+            </button>
+
+            {/* Lien discret vers la démo — pas un CTA principal */}
+            <div style={{ textAlign: "center", marginTop: S.gap16 }}>
+              <button onClick={runDemo} title="Écouter un exemple préchargé pour tester l'app sans déposer votre propre audio" style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "12px", color: "var(--muted)", opacity: 0.75,
+                textDecoration: "underline", textDecorationStyle: "dotted",
+                textUnderlineOffset: "4px", padding: "4px 8px",
+                transition: "color 0.2s, opacity 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.opacity = "1"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.opacity = "0.75"; }}
+              >
+                Pas d&apos;audio sous la main ?  Écouter un exemple ↗
               </button>
             </div>
           </div>
