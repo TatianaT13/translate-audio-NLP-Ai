@@ -8,6 +8,7 @@ import { getMe, logout, changePassword, deleteAccount, checkPasswordStrength } f
 import type { User } from "@/lib/auth";
 
 type Step = "idle" | "recording" | "processing" | "done" | "error";
+type SubStep = "transcribing" | "translating" | "synthesizing" | null;
 
 const LANGS = [
   { code: "en", label: "Anglais" },
@@ -611,6 +612,8 @@ export default function Home() {
     previewUrl: string;
     durationSec: number | null;
   } | null>(null);
+  const [subStep, setSubStep] = useState<SubStep>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fileRef      = useRef<HTMLInputElement>(null);
   const mediaRef     = useRef<MediaRecorder | null>(null);
@@ -704,9 +707,28 @@ export default function Home() {
       setStep("error");
       return;
     }
+
+    // AbortController pour le bouton "Annuler"
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    // Estimation grossière des durées de chaque étape en secondes :
+    //   STT ~= 0.3s / seconde d'audio (Whisper large-v3 CPU ~0.4x realtime)
+    //   LLM ~= 3s fixe (petit texte flash trafic)
+    //   TTS ~= 4s fixe (Voxtral)
+    const audioSec  = pendingFile?.durationSec ?? Math.max(10, Math.round(file.size / (16 * 1024)));  // fallback via taille
+    const sttMs     = Math.max(3000, audioSec * 300);
+    const llmDelay  = sttMs;
+    const tsDelay   = llmDelay + 3000;
+    const t1 = setTimeout(() => setSubStep("translating"),  llmDelay);
+    const t2 = setTimeout(() => setSubStep("synthesizing"), tsDelay);
+
     setStep("processing");
+    setSubStep("transcribing");
     try {
-      const res = await runPipeline(file, targetLang, llmModel, promptVersion, whisperModel);
+      const res = await runPipeline(file, {
+        targetLang, llmModel, promptVersion, whisperModel, signal: ctrl.signal,
+      });
       setResult(res);
       if (res.audio_b64) {
         const blob = audioFromBase64(res.audio_b64, res.audio_content_type);
@@ -714,15 +736,29 @@ export default function Home() {
         setAudioUrl(URL.createObjectURL(blob));
       }
       setStep("done");
+      setSubStep(null);
       // Nettoyage du preview après succès (libère la mémoire de la URL blob)
       if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
       setPendingFile(null);
       setToast(res.language_prob < 0.7 ? "Confiance faible — vérifiez la transcription" : "Traduction terminée");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStep("error");
+      const msg = e instanceof Error ? e.message : String(e);
+      // PipelineError : préférer userMessage, sinon fallback message brut
+      const isPipelineErr = e instanceof Error && "userMessage" in e;
+      setError(isPipelineErr ? (e as unknown as { userMessage: string }).userMessage : msg);
+      setStep(msg === "Requête annulée" ? "idle" : "error");
+      setSubStep(null);
+    } finally {
+      clearTimeout(t1); clearTimeout(t2);
+      abortRef.current = null;
     }
-  }, [targetLang, llmModel, promptVersion, whisperModel]);
+  }, [targetLang, llmModel, promptVersion, whisperModel, pendingFile]);
+
+  const cancelRun = () => {
+    abortRef.current?.abort();
+    setSubStep(null);
+    setStep("idle");
+  };
 
   const runDemo = async () => {
     try {
@@ -1078,28 +1114,60 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── Processing ── */}
+        {/* ── Processing avec steps progressifs + cancel ── */}
         {step === "processing" && (
-          <div style={{ textAlign: "center", padding: "64px 0", animation: "fadeUp 0.5s ease forwards" }}>
+          <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap12, marginBottom: S.gap24 }}>
-              {["STT", "LLM", "TTS"].map((label, i) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: S.gap12 }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                    <div style={{
-                      width: "10px", height: "10px", borderRadius: "50%",
-                      background: "var(--accent)",
-                      animation: `pulse 1.4s ease-in-out ${i * 0.3}s infinite`,
-                    }} />
-                    <span style={{ fontSize: "11px", letterSpacing: "0.1em", color: "var(--muted)" }}>{label}</span>
+              {([
+                { key: "transcribing",  label: "STT", full: "Transcription (Whisper)" },
+                { key: "translating",   label: "LLM", full: "Traduction (LLM)" },
+                { key: "synthesizing",  label: "TTS", full: "Synthèse vocale (TTS)" },
+              ] as const).map((sw, i, arr) => {
+                const stepOrder = ["transcribing", "translating", "synthesizing"] as const;
+                const currentIdx = subStep ? stepOrder.indexOf(subStep) : -1;
+                const isDone     = currentIdx > i;
+                const isActive   = subStep === sw.key;
+                const isPending  = currentIdx < i;
+                const color = isDone ? "var(--accent)" : isActive ? "var(--accent)" : "var(--muted)";
+                const opacity = isPending ? 0.35 : 1;
+                return (
+                  <div key={sw.key} style={{ display: "flex", alignItems: "center", gap: S.gap12 }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", opacity }}>
+                      {isDone ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      ) : (
+                        <div style={{
+                          width: "10px", height: "10px", borderRadius: "50%",
+                          background: color,
+                          animation: isActive ? "pulse 1.2s ease-in-out infinite" : "none",
+                        }} />
+                      )}
+                      <span style={{ fontSize: "11px", letterSpacing: "0.1em", color, fontWeight: isActive ? 600 : 400 }}>{sw.label}</span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div style={{ width: "32px", height: "1px", background: currentIdx > i ? "var(--accent)" : "var(--border)", marginBottom: "18px" }} />
+                    )}
                   </div>
-                  {i < 2 && <div style={{ width: "32px", height: "1px", background: "var(--border)", marginBottom: "18px" }} />}
-                </div>
-              ))}
+                );
+              })}
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap8 }}>
-              <p style={{ fontSize: "13px", color: "var(--muted)" }}>Traduction en cours…</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap8, marginBottom: S.gap16 }}>
+              <p style={{ fontSize: "13px", color: "var(--muted)" }}>
+                {subStep === "transcribing" && "Transcription en cours…"}
+                {subStep === "translating"  && "Traduction en cours…"}
+                {subStep === "synthesizing" && "Synthèse vocale en cours…"}
+              </p>
               <ProcessingTimer />
             </div>
+            <button onClick={cancelRun} style={{
+              padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+              background: "transparent", border: "1px solid var(--border)",
+              color: "var(--muted)", cursor: "pointer",
+            }}>
+              Annuler
+            </button>
           </div>
         )}
 
