@@ -1472,10 +1472,10 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">Rôle</p>
           <p class="body" style="color:var(--fg-muted);">
-            Reverse proxy HTTPS sur <code>traduction-audio.fr</code>. Certificats Let's Encrypt renouvelés automatiquement via certbot. Basic-auth au niveau edge en fallback.
+            Reverse proxy HTTPS sur <code>traduction-audio.fr</code>. Certificats Let's Encrypt renouvelés automatiquement via certbot.
           </p>
           <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
-            Config découpée : <code>traudio.conf</code> (server + SSL) + <code>traudio-proxy.conf</code> (headers proxy réutilisables).
+            <strong>Un seul port public</strong> (443) : les 14 conteneurs Docker restent bindés sur <code>127.0.0.1</code>, invisibles depuis l'extérieur. Nginx est la seule porte d'entrée.
           </p>
         </div>
         <div>
@@ -1682,7 +1682,7 @@ pipeline = (
           <ul style="list-style:none;padding:0;margin:1vh 0 0 0;">
             <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Services bindés <code>127.0.0.1</code></li>
             <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">HTTPS Let's Encrypt</li>
-            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Basic-auth nginx edge</li>
+            <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Un seul port public (443)</li>
             <li style="padding:0.6vh 0;color:var(--fg-muted);font-size:13px;">Réseau Docker isolé</li>
           </ul>
         </div>
@@ -1727,7 +1727,7 @@ pipeline = (
           <!-- Edge — Nginx (host, pas conteneur Docker) -->
           <rect data-tt="nginx" x="500" y="20" width="200" height="55" fill="var(--surface)" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,2"/>
           <text x="600" y="45" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Nginx</text>
-          <text x="600" y="62" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">host · HTTPS · basic-auth</text>
+          <text x="600" y="62" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">host · HTTPS · un seul port public</text>
 
           <!-- UI row : Meeting | Frontend | Live -->
           <rect data-tt="meeting" class="box-accent" x="270" y="100" width="180" height="55"/>
@@ -2312,7 +2312,7 @@ pipeline = (
     nginx: {
       name: "Nginx (host)",
       desc: "Serveur web reverse-proxy tournant sur l'hôte hermes (pas conteneurisé).",
-      why:  "Terminaison SSL/TLS + basic-auth + routage HTTPS externe vers frontend et gateway. Léger, éprouvé, standard."
+      why:  "Terminaison SSL/TLS + routage HTTPS externe vers frontend et gateway. Un seul port public (443) — les 14 conteneurs restent bindés sur 127.0.0.1, invisibles depuis l'extérieur. Léger, éprouvé, standard."
     },
     frontend: {
       name: "Frontend · Next.js 15",

@@ -1038,7 +1038,7 @@ ${result.translation}
                     { label: "Modèle LLM",    value: llmModel,      setter: setLlmModel,      options: LLM_MODELS },
                     { label: "Version prompt", value: promptVersion, setter: setPromptVersion, options: PROMPT_VERSIONS },
                   ].map(field => (
-                    <div key={field.label} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div key={field.label} style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
                       <label style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                         {field.label}
                       </label>
@@ -1050,6 +1050,8 @@ ${result.translation}
                           borderRadius: "8px", border: "1px solid var(--border)",
                           background: "var(--background)", color: "var(--foreground)",
                           outline: "none", cursor: "pointer",
+                          width: "100%", maxWidth: "100%", minWidth: 0,
+                          textOverflow: "ellipsis",
                         }}>
                         {field.options.map(o => (
                           <option key={o.value} value={o.value}>{o.label}</option>

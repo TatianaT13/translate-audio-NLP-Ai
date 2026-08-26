@@ -320,10 +320,10 @@ CI GitHub Actions lance `tests/unit/` à chaque push (103 tests, ~5s).
 
 ## 9. Contacts & escalation
 
-| Rôle | Personne |
-|------|----------|
-| Owner du code | Tatiana Tarasenko |
-| Admin serveur hermes | Arnaud |
+| Rôle | Contact |
+|------|---------|
+| Owner du code | Maintainer principal du repo |
+| Admin serveur (VPS Hetzner) | Interne |
 | Providers LLM | Groq / OpenAI / Anthropic |
 | DNS + Domaine | OVHcloud |
 
