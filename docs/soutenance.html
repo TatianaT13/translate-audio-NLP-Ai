@@ -310,6 +310,16 @@
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
+    /* Permet à une slide dense (grand schéma, gros tableau) de scroller
+       verticalement au lieu d'être coupée. */
+    overflow-y: auto;
+    min-height: 0;
+  }
+  /* Sur les slides denses, on ancre en haut au lieu du centre pour éviter
+     de sauter au scroll. Détecté par la présence d'un schéma volumineux. */
+  .slide-body:has(.arch-wrap),
+  .slide-body:has(.table-wrap) {
+    justify-content: flex-start;
   }
 
   .split {
@@ -551,12 +561,11 @@
     margin-top: 1.5vh;
     display: flex;
     justify-content: center;
-    overflow: auto;
-    max-height: 82vh;
+    /* Plus de max-height ici : c'est .slide-body qui scroll globalement.
+       Ça évite le "scroll dans scroll" et laisse le SVG prendre sa taille. */
   }
   .arch-wrap svg {
     max-width: 100%;
-    max-height: 82vh;
     height: auto;
     width: auto;
   }
@@ -1769,18 +1778,18 @@ pipeline = (
           <rect data-tt="litellm" class="box-accent" x="560" y="395" width="160" height="35"/>
           <text x="640" y="418" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">LiteLLM router</text>
 
-          <!-- Cloud providers row -->
-          <rect data-tt="groq" class="box" x="370" y="445" width="140" height="45"/>
-          <text x="440" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">GROQ</text>
-          <text x="440" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · rapide + gratuit</text>
+          <!-- Cloud providers row (élargis à 160 pour éviter que le texte déborde) -->
+          <rect data-tt="groq" class="box" x="340" y="445" width="170" height="45"/>
+          <text x="425" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">GROQ</text>
+          <text x="425" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · rapide + gratuit</text>
 
-          <rect data-tt="openai" class="box" x="540" y="445" width="140" height="45"/>
-          <text x="610" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">OpenAI</text>
-          <text x="610" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">GPT-4o mini · prod default</text>
+          <rect data-tt="openai" class="box" x="530" y="445" width="170" height="45"/>
+          <text x="615" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">OpenAI</text>
+          <text x="615" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">GPT-4o mini · prod default</text>
 
-          <rect data-tt="anthropic" class="box" x="710" y="445" width="140" height="45"/>
-          <text x="780" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Anthropic</text>
-          <text x="780" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · fallback qualité</text>
+          <rect data-tt="anthropic" class="box" x="720" y="445" width="170" height="45"/>
+          <text x="805" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Anthropic</text>
+          <text x="805" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · fallback qualité</text>
 
           <!-- Batch group : Airflow (scheduler + webserver + postgres) englobés -->
           <rect x="180" y="525" width="700" height="105" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
@@ -1859,9 +1868,9 @@ pipeline = (
           <!-- LLM → LiteLLM router -->
           <line data-from="llm" data-to="litellm" x1="640" y1="365" x2="640" y2="395" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- LiteLLM → 3 providers cloud -->
-          <line data-from="litellm" data-to="groq" x1="600" y1="430" x2="450" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
-          <line data-from="litellm" data-to="openai" x1="640" y1="430" x2="610" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
-          <line data-from="litellm" data-to="anthropic" x1="680" y1="430" x2="770" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="groq" x1="600" y1="430" x2="425" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="openai" x1="640" y1="430" x2="615" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="anthropic" x1="680" y1="430" x2="805" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
 
           <!-- ═══════════ Watcher → LLM direct (dashed muted) ═══════════ -->
           <line data-from="watcher" data-to="llm" x1="890" y1="260" x2="700" y2="320" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
