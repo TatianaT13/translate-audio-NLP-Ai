@@ -548,15 +548,15 @@
      Architecture SVG diagram
      ──────────────────────────────────────────────────────────── */
   .arch-wrap {
-    margin-top: 2vh;
+    margin-top: 1.5vh;
     display: flex;
     justify-content: center;
     overflow: auto;
-    max-height: 68vh;
+    max-height: 82vh;
   }
   .arch-wrap svg {
     max-width: 100%;
-    max-height: 68vh;
+    max-height: 82vh;
     height: auto;
     width: auto;
   }
@@ -1274,15 +1274,15 @@ pipeline = (
   <section class="slide" data-title="Docker Compose">
     <div class="slide-body">
       <p class="eyebrow">Infrastructure — Container orchestration</p>
-      <h2 class="title">Docker Compose,<br>pour <em>14 services</em>.</h2>
+      <h2 class="title">Docker Compose,<br>pour <em>14 conteneurs</em>.</h2>
       <div class="split">
         <div>
           <p class="eyebrow" style="color:var(--accent);">Rôle</p>
           <p class="body" style="color:var(--fg-muted);">
-            Orchestre 14 conteneurs sur une seule machine : frontend, 6 microservices FastAPI, MLflow, Grafana, Prometheus, Airflow (scheduler + webserver + postgres).
+            Un seul fichier <code>docker-compose.yml</code> orchestre 14 conteneurs sur une machine. <code>docker compose up -d --build</code> déploie tout : dependencies, ordre de boot, healthchecks, réseau isolé, volumes persistants.
           </p>
           <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
-            Réseau Docker interne isolé — services bindés sur <code>127.0.0.1</code>, seul nginx expose le port public.
+            Services bindés sur <code>127.0.0.1</code> — seul nginx expose le port public. Défense en profondeur.
           </p>
         </div>
         <div>
@@ -1293,6 +1293,162 @@ pipeline = (
             <li><span><strong>Nomad (Hashicorp)</strong> peu répandu, moins de tutos</span></li>
             <li><span><strong>Compose</strong> ✓ un fichier YAML, <code>up --build</code>, healthchecks natifs, standard démo</span></li>
           </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Docker · Le manifest détaillé ──────────────────────── -->
+  <section class="slide" data-title="Docker · le manifest">
+    <div class="slide-body">
+      <p class="eyebrow">Docker — le manifest</p>
+      <h2 class="title">14 conteneurs,<br><em>un manifest</em>.</h2>
+      <div class="table-wrap" style="margin-top:2vh;">
+        <table class="data" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th style="width:5%">#</th>
+              <th style="width:16%">Conteneur</th>
+              <th style="width:24%">Image</th>
+              <th style="width:8%">Port</th>
+              <th style="width:22%">Volume</th>
+              <th>Rôle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><strong>frontend</strong></td>
+              <td class="mono">node:22-alpine (multi-stage)</td>
+              <td class="mono">3000</td>
+              <td class="mono">—</td>
+              <td>Next.js standalone SSR</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><strong>gateway</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8004</td>
+              <td class="mono">gateway_data</td>
+              <td>FastAPI · JWT · Admin API</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td><strong>pipeline</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8000</td>
+              <td class="mono">—</td>
+              <td>LangChain LCEL orchestrator</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><strong>stt</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8001</td>
+              <td class="mono">whisper_cache</td>
+              <td>Faster-Whisper large-v3</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td><strong>llm</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8002</td>
+              <td class="mono">—</td>
+              <td>LiteLLM · Groq/OpenAI/Anthropic</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td><strong>tts</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8003</td>
+              <td class="mono">tts_models</td>
+              <td>Voxtral (fr/en/es/de) · MMS-TTS (uk/it)</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td><strong>watcher</strong></td>
+              <td class="mono">python:3.11-slim (build)</td>
+              <td class="mono">8005</td>
+              <td class="mono">watcher_data</td>
+              <td>Poll radio 107.7 · Whisper embarqué</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td><strong>mlflow</strong></td>
+              <td class="mono">custom (monitoring/mlflow)</td>
+              <td class="mono">5050</td>
+              <td class="mono">mlflow_data</td>
+              <td>Model Registry · Experiment tracking</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td><strong>prometheus</strong></td>
+              <td class="mono">prom/prometheus:v2.55.1</td>
+              <td class="mono">9090</td>
+              <td class="mono">prometheus_data</td>
+              <td>Scrape /metrics de tous les services</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td><strong>grafana</strong></td>
+              <td class="mono">grafana/grafana:11.2.0</td>
+              <td class="mono">3001</td>
+              <td class="mono">grafana_data</td>
+              <td>12 panels dashboards</td>
+            </tr>
+            <tr>
+              <td>11</td>
+              <td><strong>airflow-postgres</strong></td>
+              <td class="mono">postgres:16-alpine</td>
+              <td class="mono">5432</td>
+              <td class="mono">airflow_postgres_data</td>
+              <td>DB metadata Airflow</td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td><strong>airflow-init</strong></td>
+              <td class="mono">apache/airflow:2.10.3</td>
+              <td class="mono">—</td>
+              <td class="mono">—</td>
+              <td>Init DB + user admin (éphémère)</td>
+            </tr>
+            <tr>
+              <td>13</td>
+              <td><strong>airflow-webserver</strong></td>
+              <td class="mono">apache/airflow:2.10.3</td>
+              <td class="mono">8080</td>
+              <td class="mono">airflow_logs</td>
+              <td>UI Airflow · monitoring des DAGs</td>
+            </tr>
+            <tr>
+              <td>14</td>
+              <td><strong>airflow-scheduler</strong></td>
+              <td class="mono">apache/airflow:2.10.3</td>
+              <td class="mono">—</td>
+              <td class="mono">airflow_logs</td>
+              <td>Cron des DAGs (nightly + weekly)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="split-3" style="margin-top:3vh;">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Multi-stage build</p>
+          <p class="body" style="color:var(--fg-muted); font-size:12px;">
+            Chaque Dockerfile a un stage <code>builder</code> (avec uv + deps compilés) puis un stage <code>runtime</code> qui ne copie que <code>/opt/venv</code>. Image finale <strong>~4× plus petite</strong>, pas d'outils de build en prod.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Healthchecks</p>
+          <p class="body" style="color:var(--fg-muted); font-size:12px;">
+            Chaque service expose <code>GET /health</code>. Docker teste toutes les 30s. Un service <code>unhealthy</code> est redémarré. <code>depends_on</code> respecte l'ordre de boot (Postgres avant Airflow).
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Volumes persistants</p>
+          <p class="body" style="color:var(--fg-muted); font-size:12px;">
+            9 volumes nommés survivent aux <code>docker compose down</code> : modèles Whisper/TTS mis en cache (évite re-download), users DB, runs MLflow, dashboards Grafana, logs Airflow.
+          </p>
         </div>
       </div>
     </div>
@@ -1549,7 +1705,7 @@ pipeline = (
       <p class="eyebrow">Architecture</p>
       <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
       <div class="arch-wrap">
-        <svg class="arch" viewBox="0 0 1200 780" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
+        <svg class="arch" viewBox="0 0 1200 780" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:82vh; height:auto;">
           <!-- Layer labels -->
           <text class="layer" x="15" y="48">Edge</text>
           <text class="layer" x="15" y="130">UI · Modes</text>
@@ -1767,7 +1923,7 @@ pipeline = (
       <p class="eyebrow">Parcours de la donnée</p>
       <h2 class="title">Deux flux,<br><em>deux parcours différents</em>.</h2>
       <div class="arch-wrap">
-        <svg class="arch" viewBox="0 0 1200 700" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
+        <svg class="arch" viewBox="0 0 1200 700" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:82vh; height:auto;">
           <!-- Layer labels -->
           <text class="layer" x="15" y="48">Flux A · Upload user</text>
           <text class="layer" x="15" y="380">Flux B · Watcher radio 107.7</text>
