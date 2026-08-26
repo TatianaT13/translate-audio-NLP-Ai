@@ -595,6 +595,97 @@
   .arch line.accent, .arch path.accent {
     stroke: var(--accent-dim);
   }
+  /* Blocs interactifs : cursor + highlight au hover */
+  .arch rect[data-tt] {
+    cursor: help;
+    transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+  }
+  .arch rect[data-tt]:hover {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  /* Spotlight : quand un rect est focus, dim tout ce qui n'est pas lié */
+  .arch line, .arch path {
+    transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+  }
+  .arch.has-focus rect[data-tt]:not(.tt-focused):not(.tt-related) {
+    opacity: 0.15;
+  }
+  .arch.has-focus text {
+    opacity: 0.4;
+    transition: opacity 0.15s;
+  }
+  .arch.has-focus line:not(.tt-focused),
+  .arch.has-focus path:not(.tt-focused) {
+    opacity: 0.08;
+  }
+  .arch line.tt-focused, .arch path.tt-focused {
+    stroke: var(--accent) !important;
+    stroke-width: 2 !important;
+    opacity: 1 !important;
+  }
+  .arch rect.tt-related {
+    stroke: var(--accent) !important;
+    stroke-width: 2 !important;
+    opacity: 1 !important;
+  }
+  .arch rect.tt-focused {
+    stroke: var(--accent) !important;
+    stroke-width: 2.5 !important;
+    opacity: 1 !important;
+  }
+  /* Les <text> au-dessus des rects ne doivent PAS capturer les events,
+     sinon closest('rect') ne remonte pas jusqu'au rect (siblings dans le SVG). */
+  .arch text {
+    pointer-events: none;
+  }
+  /* Tooltip flottant — position: fixed pour éviter le clipping par
+     .arch-wrap { overflow: auto } et rester lisible même au scroll. */
+  .arch-wrap {
+    position: relative;
+  }
+  .arch-tt {
+    position: fixed;
+    pointer-events: none;
+    /* Position fixe en haut-droite du viewport : plus de place vide, ne masque jamais le schéma */
+    right: 32px;
+    top: 32px;
+    max-width: 380px;
+    padding: 16px 20px;
+    background: var(--bg);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 20;
+    font-family: var(--font-mono);
+  }
+  .arch-tt.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .arch-tt .tt-name {
+    color: var(--accent);
+    font-family: var(--font-serif);
+    font-size: 14px;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .arch-tt .tt-label {
+    color: var(--fg-muted);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 8px;
+    margin-bottom: 2px;
+  }
+  .arch-tt .tt-text {
+    color: var(--fg);
+    font-size: 12px;
+    line-height: 1.5;
+  }
 
   /* ────────────────────────────────────────────────────────────
      Stack (deployment) diagram
@@ -1536,152 +1627,214 @@ pipeline = (
       <p class="eyebrow">Architecture</p>
       <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
       <div class="arch-wrap">
-        <svg class="arch" viewBox="0 0 1200 680" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
+        <svg class="arch" viewBox="0 0 1200 780" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
           <!-- Layer labels -->
           <text class="layer" x="15" y="48">Edge</text>
-          <text class="layer" x="15" y="130">UI</text>
+          <text class="layer" x="15" y="130">UI · Modes</text>
           <text class="layer" x="15" y="230">Backend</text>
           <text class="layer" x="15" y="335">Modèles</text>
-          <text class="layer" x="15" y="440">Batch</text>
-          <text class="layer" x="15" y="540">Observability</text>
+          <text class="layer" x="15" y="470">Multi-provider LLM</text>
+          <text class="layer" x="15" y="565">Batch</text>
+          <text class="layer" x="15" y="695">Observability</text>
 
           <!-- Edge — Nginx (host, pas conteneur Docker) -->
-          <rect x="500" y="20" width="200" height="55" fill="var(--surface)" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,2"/>
+          <rect data-tt="nginx" x="500" y="20" width="200" height="55" fill="var(--surface)" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,2"/>
           <text x="600" y="45" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Nginx</text>
           <text x="600" y="62" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">host · HTTPS · basic-auth</text>
 
-          <!-- UI — Frontend -->
-          <rect class="box-accent" x="500" y="100" width="200" height="55"/>
+          <!-- UI row : Meeting | Frontend | Live -->
+          <rect data-tt="meeting" class="box-accent" x="270" y="100" width="180" height="55"/>
+          <text x="360" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Meeting</text>
+          <text x="360" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/meeting · STT+summary</text>
+
+          <rect data-tt="frontend" class="box-accent" x="500" y="100" width="200" height="55"/>
           <text x="600" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Frontend</text>
-          <text x="600" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Next.js standalone</text>
+          <text x="600" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Next.js · upload · micro</text>
+
+          <rect data-tt="live" class="box-accent" x="750" y="100" width="180" height="55"/>
+          <text x="840" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Live 🎙</text>
+          <text x="840" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/live · WebRTC OpenAI</text>
 
           <!-- Backend row : Gateway | Pipeline | Watcher -->
-          <rect class="box-accent" x="200" y="195" width="200" height="65"/>
+          <rect data-tt="gateway" class="box-accent" x="200" y="195" width="200" height="65"/>
           <text x="300" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Gateway</text>
-          <text x="300" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">FastAPI · JWT · Admin API</text>
+          <text x="300" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">FastAPI · JWT · Admin</text>
           <text x="300" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8004</text>
 
-          <rect class="box-accent" x="500" y="195" width="200" height="65"/>
+          <rect data-tt="pipeline" class="box-accent" x="500" y="195" width="200" height="65"/>
           <text x="600" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Pipeline</text>
           <text x="600" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL orch.</text>
           <text x="600" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8000</text>
 
-          <rect class="box-accent" x="800" y="195" width="220" height="65"/>
+          <rect data-tt="watcher" class="box-accent" x="800" y="195" width="220" height="65"/>
           <text x="910" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Watcher</text>
           <text x="910" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">poll 107.7 · Whisper embed</text>
           <text x="910" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8005</text>
 
           <!-- Models row : STT | LLM | TTS -->
-          <rect class="box" x="380" y="305" width="160" height="60"/>
+          <rect data-tt="stt" class="box" x="380" y="305" width="160" height="60"/>
           <text x="460" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">STT</text>
           <text x="460" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
           <text x="460" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8001</text>
 
-          <rect class="box" x="560" y="305" width="160" height="60"/>
+          <rect data-tt="llm" class="box" x="560" y="305" width="160" height="60"/>
           <text x="640" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">LLM</text>
-          <text x="640" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM · GPT-4o mini</text>
+          <text x="640" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM · /translate /summarize</text>
           <text x="640" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8002</text>
 
-          <rect class="box" x="740" y="305" width="160" height="60"/>
+          <rect data-tt="tts" class="box" x="740" y="305" width="160" height="60"/>
           <text x="820" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">TTS</text>
           <text x="820" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral / MMS-TTS</text>
           <text x="820" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8003</text>
 
+          <!-- LiteLLM router (petit bloc entre LLM et cloud providers) -->
+          <rect data-tt="litellm" class="box-accent" x="560" y="395" width="160" height="35"/>
+          <text x="640" y="418" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">LiteLLM router</text>
+
+          <!-- Cloud providers row -->
+          <rect data-tt="groq" class="box" x="370" y="445" width="140" height="45"/>
+          <text x="440" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">GROQ</text>
+          <text x="440" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · rapide + gratuit</text>
+
+          <rect data-tt="openai" class="box" x="540" y="445" width="140" height="45"/>
+          <text x="610" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">OpenAI</text>
+          <text x="610" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">GPT-4o mini · prod default</text>
+
+          <rect data-tt="anthropic" class="box" x="710" y="445" width="140" height="45"/>
+          <text x="780" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Anthropic</text>
+          <text x="780" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · fallback qualité</text>
+
           <!-- Batch group : Airflow (scheduler + webserver + postgres) englobés -->
-          <rect x="180" y="400" width="500" height="80" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
-          <text x="200" y="395" fill="var(--accent)" font-size="9" letter-spacing="0.2em" style="text-transform:uppercase; font-weight:500;">Airflow</text>
+          <rect x="180" y="525" width="700" height="105" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
+          <text x="200" y="520" fill="var(--accent)" font-size="9" letter-spacing="0.2em" style="text-transform:uppercase; font-weight:500;">Airflow</text>
 
-          <rect class="box" x="200" y="415" width="140" height="50"/>
-          <text x="270" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Scheduler</text>
-          <text x="270" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAGs cron</text>
+          <rect data-tt="af-scheduler" class="box" x="200" y="540" width="140" height="50"/>
+          <text x="270" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Scheduler</text>
+          <text x="270" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAGs cron</text>
 
-          <rect class="box" x="360" y="415" width="140" height="50"/>
-          <text x="430" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Webserver</text>
-          <text x="430" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">UI :8080</text>
+          <rect data-tt="af-web" class="box" x="360" y="540" width="140" height="50"/>
+          <text x="430" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Webserver</text>
+          <text x="430" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">UI :8080</text>
 
-          <rect class="box" x="520" y="415" width="140" height="50"/>
-          <text x="590" y="438" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Postgres</text>
-          <text x="590" y="454" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">metadata</text>
+          <rect data-tt="af-pg" class="box" x="520" y="540" width="140" height="50"/>
+          <text x="590" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Postgres</text>
+          <text x="590" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">metadata</text>
+
+          <!-- 2 DAGs listés dans le bloc Airflow -->
+          <rect data-tt="dag-nightly" class="box" x="680" y="540" width="180" height="22"/>
+          <text x="770" y="555" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAG · nightly_golden_eval</text>
+
+          <rect data-tt="dag-weekly" class="box" x="680" y="568" width="180" height="22"/>
+          <text x="770" y="583" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAG · weekly_drift_check</text>
+
+          <text x="200" y="612" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.75">
+            → Airflow appelle Pipeline direct (bypass Gateway, pas de rate-limit)
+          </text>
 
           <!-- Observability row -->
-          <rect class="box" x="180" y="510" width="150" height="60"/>
-          <text x="255" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">MLflow</text>
-          <text x="255" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Runs · Registry · Traces</text>
-          <text x="255" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:5050</text>
+          <rect data-tt="mlflow" class="box" x="180" y="655" width="150" height="60"/>
+          <text x="255" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">MLflow</text>
+          <text x="255" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Runs · Registry · 60 exp.</text>
+          <text x="255" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:5050</text>
 
-          <rect class="box" x="350" y="510" width="150" height="60"/>
-          <text x="425" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Prometheus</text>
-          <text x="425" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Scrape /metrics</text>
-          <text x="425" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:9090</text>
+          <rect data-tt="prometheus" class="box" x="350" y="655" width="150" height="60"/>
+          <text x="425" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Prometheus</text>
+          <text x="425" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Scrape /metrics</text>
+          <text x="425" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:9090</text>
 
-          <rect class="box" x="520" y="510" width="150" height="60"/>
-          <text x="595" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Grafana</text>
-          <text x="595" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">12 panels dashboards</text>
-          <text x="595" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:3001</text>
+          <rect data-tt="grafana" class="box" x="520" y="655" width="150" height="60"/>
+          <text x="595" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Grafana</text>
+          <text x="595" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">12 panels dashboards</text>
+          <text x="595" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:3001</text>
 
-          <rect class="box" x="690" y="510" width="160" height="60" stroke-dasharray="4,2"/>
-          <text x="770" y="535" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Langfuse</text>
-          <text x="770" y="552" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">cloud · traces LLM</text>
-          <text x="770" y="565" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">external</text>
+          <rect data-tt="langfuse" class="box" x="690" y="655" width="160" height="60" stroke-dasharray="4,2"/>
+          <text x="770" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Langfuse</text>
+          <text x="770" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">cloud · traces LLM</text>
+          <text x="770" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">external</text>
 
           <!-- ═══════════ Flows métier (accent doré, solide) ═══════════ -->
           <!-- Nginx → Frontend -->
-          <line class="accent" x1="600" y1="75" x2="600" y2="100" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="nginx" data-to="frontend" class="accent" x1="600" y1="75" x2="600" y2="100" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Meeting → Gateway (auth) -->
+          <line data-from="meeting" data-to="gateway" class="accent" x1="360" y1="155" x2="300" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- Frontend → Gateway -->
-          <line class="accent" x1="500" y1="155" x2="300" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="frontend" data-to="gateway" class="accent" x1="550" y1="155" x2="380" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- Frontend → Pipeline -->
-          <line class="accent" x1="600" y1="155" x2="600" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="frontend" data-to="pipeline" class="accent" x1="600" y1="155" x2="600" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- Frontend → Watcher (SSE admin) -->
-          <line class="accent" x1="700" y1="155" x2="910" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="frontend" data-to="watcher" class="accent" x1="670" y1="155" x2="850" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Live → Gateway (ephemeral token OpenAI) -->
+          <line data-from="live" data-to="gateway" class="accent" x1="800" y1="155" x2="400" y2="195" stroke="var(--accent-dim)" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <text x="620" y="180" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">/realtime/session</text>
           <!-- Pipeline → STT -->
-          <line class="accent" x1="580" y1="260" x2="460" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="pipeline" data-to="stt" class="accent" x1="580" y1="260" x2="460" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- Pipeline → LLM -->
-          <line class="accent" x1="620" y1="260" x2="640" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="pipeline" data-to="llm" class="accent" x1="620" y1="260" x2="640" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <!-- Pipeline → TTS -->
-          <line class="accent" x1="660" y1="260" x2="820" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="pipeline" data-to="tts" class="accent" x1="660" y1="260" x2="820" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
 
-          <!-- ═══════════ Watcher → LLM direct (dashed muted, PAS via Pipeline) ═══════════ -->
-          <line x1="890" y1="260" x2="700" y2="320" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+          <!-- Meeting → STT direct (chunks 30s) -->
+          <path data-from="meeting" data-to="stt" class="accent" d="M 360,155 C 380,220 400,270 440,305" stroke="var(--accent-dim)" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+          <!-- Meeting → LLM direct (/summarize) -->
+          <path data-from="meeting" data-to="llm" class="accent" d="M 380,155 C 500,220 580,270 620,305" stroke="var(--accent-dim)" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+
+          <!-- LLM → LiteLLM router -->
+          <line data-from="llm" data-to="litellm" x1="640" y1="365" x2="640" y2="395" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- LiteLLM → 3 providers cloud -->
+          <line data-from="litellm" data-to="groq" x1="600" y1="430" x2="450" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="openai" x1="640" y1="430" x2="610" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="anthropic" x1="680" y1="430" x2="770" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+
+          <!-- ═══════════ Watcher → LLM direct (dashed muted) ═══════════ -->
+          <line data-from="watcher" data-to="llm" x1="890" y1="260" x2="700" y2="320" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
           <text x="810" y="288" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">POST /translate</text>
 
-          <!-- ═══════════ Airflow interne + orchestre le pipeline ═══════════ -->
-          <line x1="340" y1="440" x2="360" y2="440" stroke="var(--fg-dim)" stroke-width="1"/>
-          <line x1="500" y1="440" x2="520" y2="440" stroke="var(--fg-dim)" stroke-width="1"/>
+          <!-- ═══════════ Airflow orchestre le pipeline (batch) ═══════════ -->
           <!-- Airflow-Scheduler → Pipeline (batch nightly_golden_eval) -->
-          <path d="M 270,415 C 350,380 500,300 550,260" stroke="var(--fg-dim)" stroke-width="1" fill="none" stroke-dasharray="6,3"/>
-          <text x="380" y="378" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace">nightly_golden_eval</text>
+          <path data-from="af-scheduler" data-to="pipeline" d="M 270,540 C 300,480 400,380 500,260" stroke="var(--fg-dim)" stroke-width="1" fill="none" stroke-dasharray="6,3"/>
+          <!-- DAG nightly → Pipeline (relation logique via scheduler) -->
+          <path data-from="dag-nightly" data-to="pipeline" d="M 770,540 C 760,450 700,350 650,260" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="4,3" opacity="0"/>
+          <!-- DAG weekly → MLflow (drift check) -->
+          <path data-from="dag-weekly" data-to="mlflow" d="M 770,590 C 550,620 350,640 260,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="4,3" opacity="0"/>
 
-          <!-- ═══════════ Observability (pointillé fin, opacity légère) ═══════════ -->
-          <!-- Prometheus scrape backend (courbe qui remonte) -->
-          <path d="M 425,510 C 425,460 480,340 550,300" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
-          <text x="440" y="395" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.7">scrape /metrics</text>
+          <!-- ═══════════ Observability (pointillé fin) ═══════════ -->
+          <!-- Prometheus scrape ALL backend services -->
+          <path data-from="prometheus" data-to="pipeline" d="M 425,655 C 425,600 480,340 550,300" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <path data-from="prometheus" data-to="gateway"  d="M 400,655 C 350,550 300,400 300,260" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="stt"      d="M 425,655 C 425,550 440,400 440,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="llm"      d="M 425,655 C 500,550 600,400 640,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="tts"      d="M 425,655 C 550,550 750,400 820,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="watcher"  d="M 500,655 C 700,550 850,350 910,260" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <text x="450" y="530" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.7">scrape /metrics</text>
 
           <!-- Grafana ← Prometheus -->
-          <line x1="500" y1="540" x2="520" y2="540" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.6"/>
+          <line data-from="prometheus" data-to="grafana" x1="500" y1="685" x2="520" y2="685" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.6"/>
 
-          <!-- Pipeline → MLflow (tracing + eval) -->
-          <path d="M 550,260 C 400,360 300,450 255,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <!-- Pipeline → MLflow -->
+          <path data-from="pipeline" data-to="mlflow" d="M 550,260 C 400,400 300,550 255,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
 
-          <!-- Pipeline → Langfuse (traces cloud) -->
-          <path d="M 680,260 C 720,360 750,440 770,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <!-- Pipeline → Langfuse -->
+          <path data-from="pipeline" data-to="langfuse" d="M 680,260 C 720,400 750,560 770,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
 
-          <!-- Watcher → Langfuse (traces) -->
-          <path d="M 940,260 C 900,360 850,440 800,510" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <!-- Watcher → Langfuse -->
+          <path data-from="watcher" data-to="langfuse" d="M 940,260 C 900,400 850,560 800,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
 
           <!-- ═══════════ Légende ═══════════ -->
-          <g transform="translate(900, 610)">
+          <g transform="translate(920, 20)">
             <text x="0" y="-6" fill="var(--fg-muted)" font-size="9" letter-spacing="0.15em" style="text-transform:uppercase;">Légende</text>
             <line x1="0" y1="8" x2="24" y2="8" stroke="var(--accent-dim)" stroke-width="1.5"/>
-            <text x="30" y="12" fill="var(--fg-muted)" font-size="10">flow traduction</text>
-            <line x1="0" y1="26" x2="24" y2="26" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
-            <text x="30" y="30" fill="var(--fg-muted)" font-size="10">accès direct · batch</text>
-            <line x1="0" y1="44" x2="24" y2="44" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.7"/>
-            <text x="30" y="48" fill="var(--fg-muted)" font-size="10" opacity="0.8">observability</text>
+            <text x="30" y="12" fill="var(--fg-muted)" font-size="10">flow métier</text>
+            <line x1="0" y1="26" x2="24" y2="26" stroke="var(--accent-dim)" stroke-width="1.2" stroke-dasharray="4,3"/>
+            <text x="30" y="30" fill="var(--fg-muted)" font-size="10">flow direct (bypass)</text>
+            <line x1="0" y1="44" x2="24" y2="44" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+            <text x="30" y="48" fill="var(--fg-muted)" font-size="10">batch · service ↔ service</text>
+            <line x1="0" y1="62" x2="24" y2="62" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.7"/>
+            <text x="30" y="66" fill="var(--fg-muted)" font-size="10" opacity="0.8">observability</text>
           </g>
         </svg>
       </div>
       <p class="caption" style="margin-top:2vh;">
-        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe.
+        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend Next.js + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe. LLM proxifie 3 providers cloud (GROQ, OpenAI, Anthropic) via LiteLLM. Meeting et Live passent en direct par le Gateway (STT + LLM pour Meeting, OpenAI Realtime WebRTC pour Live). Survole chaque bloc pour voir les détails.
       </p>
     </div>
   </section>
@@ -1895,5 +2048,200 @@ pipeline = (
     if (Math.abs(dx) > 50) go(idx + (dx < 0 ? 1 : -1));
     touchX = null;
   }, { passive: true });
+
+  // ── Architecture tooltips ────────────────────────────────────────────────
+  // Contenu par composant : nom / ce que c'est / pourquoi ce choix.
+  const TT = {
+    nginx: {
+      name: "Nginx (host)",
+      desc: "Serveur web reverse-proxy tournant sur l'hôte hermes (pas conteneurisé).",
+      why:  "Terminaison SSL/TLS + basic-auth + routage HTTPS externe vers frontend et gateway. Léger, éprouvé, standard."
+    },
+    frontend: {
+      name: "Frontend · Next.js 15",
+      desc: "App React server components, build standalone. Point d'entrée principal : upload audio + enregistrement micro.",
+      why:  "SSR + hydratation légère, envs NEXT_PUBLIC_* baked au build. Alternative Streamlit écartée : UX/DX trop limité pour un vrai produit."
+    },
+    meeting: {
+      name: "Meeting recorder · /meeting",
+      desc: "Enregistrement long en direct, découpé en chunks de 30s, transcrit à la volée puis résumé (exécutif, détaillé, actions).",
+      why:  "Contourne le Pipeline (STT direct + LLM /summarize), gère les silences et redémarre le MediaRecorder pour éviter les fragments WebM sans header. 5 langues de sortie."
+    },
+    live: {
+      name: "Live speech-to-speech · /live",
+      desc: "Traduction simultanée bidirectionnelle via WebRTC direct navigateur ↔ OpenAI Realtime API (gpt-realtime, GA oct 2025).",
+      why:  "Ephemeral token créé par le Gateway (la vraie clé OpenAI ne sort jamais du serveur). Latence ~500ms. VAD strict + mute auto anti-boucle. 6 langues source × 6 cible."
+    },
+    gateway: {
+      name: "Gateway · FastAPI · :8004",
+      desc: "Point d'entrée unique. 24 routes : /auth/*, /admin/*, /realtime/session.",
+      why:  "JWT (access 15 min + refresh rotatif 7 j), rate-limit, proxy admin. Kong/Nginx écartés : FastAPI reste homogène avec le reste du stack et testable en pytest."
+    },
+    pipeline: {
+      name: "Pipeline · LangChain LCEL · :8000",
+      desc: "Orchestrateur STT → LLM → TTS via Runnable steps composables. Prompt-guard + chunking auto.",
+      why:  "LCEL donne un chaînage typé, traçable Langfuse, retry/circuit-breaker natif. Alternative pipeline maison en dict Python : perte de l'écosystème LangChain."
+    },
+    watcher: {
+      name: "Watcher · :8005",
+      desc: "Service autonome qui poll la radio 107.7 (7 zones autoroutières) et extrait les flash-infos trafic.",
+      why:  "Whisper embarqué + LLM → événements structurés + SSE vers dashboard admin. Cron ne suffit pas : besoin de streaming continu et déduplication."
+    },
+    stt: {
+      name: "STT · Faster-Whisper large-v3 · :8001",
+      desc: "Speech-to-text open-source (CTranslate2). Route POST /transcribe. Cache modèle sur volume dédié.",
+      why:  "Meilleur modèle FR open, 4× plus rapide que whisper.cpp en CPU. API cloud écartée pour éviter la dépendance et le coût par minute."
+    },
+    llm: {
+      name: "LLM · FastAPI · :8002",
+      desc: "Service qui expose /translate et /summarize. Toutes les requêtes passent par le LiteLLM router pour choisir le provider.",
+      why:  "Découplage : le pipeline appelle une seule URL, peu importe le vrai backend (GROQ, OpenAI, Anthropic). Facilite le fallback, le A/B testing de modèles et le changement de provider sans redéploiement du pipeline."
+    },
+    litellm: {
+      name: "LiteLLM router",
+      desc: "Proxy Python qui unifie l'API OpenAI Chat Completions vers 100+ providers cloud. Utilisé comme lib dans le service LLM.",
+      why:  "Un seul format d'API à gérer. Model aliases (Groq deprecated → OpenAI transparent). Retry auto sur erreurs transitoires. Alternative Ollama écartée (VRAM insuffisante sur hermes)."
+    },
+    groq: {
+      name: "GROQ (cloud)",
+      desc: "Provider LLM ultra-rapide (Llama 3.1 8B / 70B). Inference sur puces LPU maison.",
+      why:  "Ex-champion BLEU 51.3 sur nos golden. Retenu comme fallback rapide et gratuit (tier free généreux). Migré vers OpenAI en prod suite deprecation du gpt-oss-20b."
+    },
+    openai: {
+      name: "OpenAI (cloud)",
+      desc: "GPT-4o mini · provider par défaut en production pour /translate et /summarize.",
+      why:  "Meilleur ratio qualité/coût pour la traduction FR↔EN à cette échelle. Aussi utilisé pour l'API Realtime (Live) et Whisper-1 (transcription live)."
+    },
+    anthropic: {
+      name: "Anthropic (cloud)",
+      desc: "Claude · fallback qualité si OpenAI down ou pour tâches longues (résumés meeting complexes).",
+      why:  "Diversifier les providers évite le lock-in et un downtime d'un vendor ne coupe pas le service. Activable en switchant un env var côté LLM service."
+    },
+    "dag-nightly": {
+      name: "DAG · nightly_golden_eval",
+      desc: "Cron 02:00 UTC. Extrait Golden Dataset → appelle Pipeline /process → calcule BLEU/METEOR/WER → log MLflow → alerte Slack si régression.",
+      why:  "Détection de dérive qualitative quotidienne. Airflow appelle Pipeline direct (bypass Gateway) pour éviter le rate-limit sur du batch legitime."
+    },
+    "dag-weekly": {
+      name: "DAG · weekly_drift_check",
+      desc: "Cron dimanche 03:00 UTC. Compare BLEU actuel vs baseline glissante 7 jours. Alerte si chute > seuil.",
+      why:  "Détection de dérive lente (drift progressif que le nightly ne capte pas). Complémentaire à Evidently (roadmap) pour feature-drift plus fin."
+    },
+    tts: {
+      name: "TTS · Voxtral + MMS-TTS · :8003",
+      desc: "Voxtral (Mistral) pour fr/en/es/de, Meta MMS-TTS pour uk/it. Routing par langue.",
+      why:  "Voxtral qualité prod sur langues majeures, MMS couvre les langues rares. XTTS/Coqui écarté (fiabilité inférieure, dépendances lourdes)."
+    },
+    "af-scheduler": {
+      name: "Airflow Scheduler",
+      desc: "Déclenche les DAGs cron : nightly_golden_eval (02:00 UTC) + weekly_drift_check (dim. 03:00).",
+      why:  "Airflow reste standard pour batch. Prefect/Dagster écartés : Airflow suffit à ce volume, écosystème plus mature."
+    },
+    "af-web": {
+      name: "Airflow Webserver · :8080",
+      desc: "UI de monitoring des runs batch, retry manuel, inspection logs.",
+      why:  "Interface prête à l'emploi pour audit + démo devant jury."
+    },
+    "af-pg": {
+      name: "PostgreSQL (Airflow)",
+      desc: "DB metadata Airflow : runs, logs, connections, users.",
+      why:  "Requis par Airflow. La DB users du gateway est séparée (SQLite interne, plus simple pour un mono-instance)."
+    },
+    mlflow: {
+      name: "MLflow · :5050",
+      desc: "Model Registry (Whisper, TTS) + experiment tracking. 60 runs (12 configs × 5 audios), champion tag auto.",
+      why:  "Standard MLOps pour le versioning des modèles. Pilote la sélection Llama 70B (BLEU 51.3) vs 8B (retenu prod : +5 pts pour 10× le coût = non)."
+    },
+    prometheus: {
+      name: "Prometheus · :9090",
+      desc: "TSDB qui scrape /metrics de tous les services FastAPI.",
+      why:  "Standard de facto pour métriques ops. Datadog/Grafana Cloud écartés (coût + self-hosted possible)."
+    },
+    grafana: {
+      name: "Grafana · :3001",
+      desc: "Dashboards de 12 panels : latence p50/p95/p99, erreurs 4xx/5xx, throughput.",
+      why:  "Visualisation Prometheus native. Kibana écarté (surdimensionné, ElasticSearch inutile ici)."
+    },
+    langfuse: {
+      name: "Langfuse (cloud)",
+      desc: "Observabilité LLM spécialisée : prompt versioning, traces waterfall, coût/token/latence.",
+      why:  "Complète Prometheus (ops) sur le versant métier LLM. LangSmith écarté (payant, moins ouvert). Migré v2 → v4 pendant le projet."
+    },
+  };
+
+  const wrap = document.querySelector('.arch-wrap');
+  if (wrap) {
+    const tip = document.createElement('div');
+    tip.className = 'arch-tt';
+    tip.innerHTML = `
+      <div class="tt-name"></div>
+      <div class="tt-label">Ce que c'est</div>
+      <div class="tt-text tt-desc"></div>
+      <div class="tt-label">Pourquoi ce choix</div>
+      <div class="tt-text tt-why"></div>`;
+    // Body-level : évite tout clipping par un parent (overflow, transform, opacity).
+    document.body.appendChild(tip);
+    const nameEl = tip.querySelector('.tt-name');
+    const descEl = tip.querySelector('.tt-desc');
+    const whyEl  = tip.querySelector('.tt-why');
+
+    const show = (rect) => {
+      const key = rect.getAttribute('data-tt');
+      const data = TT[key];
+      if (!data) { console.warn('[tt] no data for key:', key); return; }
+      nameEl.textContent = data.name;
+      descEl.textContent = data.desc;
+      whyEl.textContent  = data.why;
+      // Position fixe en bas-droite (via CSS) — pas de calcul dynamique.
+      tip.classList.add('visible');
+    };
+    const hide = () => tip.classList.remove('visible');
+
+    // Attach listeners directly on each rect + spotlight logic
+    const svg   = document.querySelector('svg.arch');
+    const rects = document.querySelectorAll('svg.arch rect[data-tt]');
+    console.log('[tt] init — wrap:', !!wrap, '· rects found:', rects.length, '· tip in body:', document.body.contains(tip));
+
+    // Spotlight : au hover d'un rect, illumine les lines/paths reliés + les rects à l'autre bout.
+    const focusOn = (key) => {
+      if (!svg) return;
+      svg.classList.add('has-focus');
+      const rect = svg.querySelector(`rect[data-tt="${key}"]`);
+      if (rect) rect.classList.add('tt-focused');
+      const links = svg.querySelectorAll(`[data-from="${key}"], [data-to="${key}"]`);
+      const related = new Set();
+      links.forEach(l => {
+        l.classList.add('tt-focused');
+        const f = l.getAttribute('data-from');
+        const t = l.getAttribute('data-to');
+        if (f && f !== key) related.add(f);
+        if (t && t !== key) related.add(t);
+      });
+      related.forEach(k => {
+        const r = svg.querySelector(`rect[data-tt="${k}"]`);
+        if (r) r.classList.add('tt-related');
+      });
+    };
+    const focusOff = () => {
+      if (!svg) return;
+      svg.classList.remove('has-focus');
+      svg.querySelectorAll('.tt-focused, .tt-related').forEach(el => {
+        el.classList.remove('tt-focused', 'tt-related');
+      });
+    };
+
+    rects.forEach(r => {
+      r.addEventListener('mouseenter', () => {
+        show(r);
+        focusOn(r.getAttribute('data-tt'));
+      });
+      r.addEventListener('mouseleave', () => {
+        hide();
+        focusOff();
+      });
+    });
+  } else {
+    console.warn('[tt] .arch-wrap NOT FOUND in DOM');
+  }
 })();
 </script>

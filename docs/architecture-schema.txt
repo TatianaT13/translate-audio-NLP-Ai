@@ -1,0 +1,236 @@
+════════════════════════════════════════════════════════════════════════════════
+  traudio  ·  Architecture LLMOps  ·  traduction-audio.fr
+  14 conteneurs Docker  ·  Orchestration LangChain LCEL  ·  Multi-provider LLM
+════════════════════════════════════════════════════════════════════════════════
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                    CLIENT                                    │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                     Frontend  ·  Next.js 15  ·  :3000                  │  │
+│  │                                                                        │  │
+│  │   Pages publiques :  /login  /register  /forgot-password               │  │
+│  │                      /reset-password                                   │  │
+│  │                                                                        │  │
+│  │   Pages user :       /           (upload audio · micro · démo)         │  │
+│  │                      /meeting    (enregistrement long + résumé)        │  │
+│  │                      /live       (speech-to-speech WebRTC live)        │  │
+│  │                                                                        │  │
+│  │   Page admin :       /admin      (stats · users · trafic SSE ·        │  │
+│  │                                   MLflow · Airflow · Langfuse)         │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                              HTTPS  ·  REST · SSE · WebRTC
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│              NGINX (host, hermes)  ·  TLS · reverse-proxy · basic-auth       │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                     API GATEWAY  ·  FastAPI  ·  :8004                        │
+│                                                                              │
+│  Auth :          POST /auth/{register, login, logout, refresh}               │
+│                  GET  /auth/me     DELETE /auth/account                      │
+│                  POST /auth/{change,forgot,reset}-password                   │
+│                                                                              │
+│  Admin :         GET  /admin/{stats, users, experiments}                     │
+│                  PATCH/DELETE /admin/users/{id}                              │
+│                  GET  /admin/traffic/events + /admin/traffic/stream (SSE)    │
+│                  GET  /admin/{mlflow, airflow, services}/summary             │
+│                  GET  /admin/langfuse/metrics                                │
+│                  POST /admin/tts   (re-génération TTS admin)                 │
+│                                                                              │
+│  Live :          POST /realtime/session  (proxy ephemeral OpenAI)            │
+│                                                                              │
+│  • JWT (access 15 min · refresh rotatif 7 j)   • bcrypt password             │
+│  • CORS strict  ·  Rate-limit  ·  Prometheus /metrics                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                              Interne  ·  Docker Network
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│              PIPELINE SERVICE  ·  Orchestrateur LangChain  ·  :8000          │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                        FastAPI  +  LangChain LCEL                      │  │
+│  │                                                                        │  │
+│  │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                │  │
+│  │   │  Runnable   │───▶│  Runnable   │───▶│  Runnable   │                │  │
+│  │   │   STEP 1    │    │   STEP 2    │    │   STEP 3    │                │  │
+│  │   │   invoke()  │    │   invoke()  │    │   invoke()  │                │  │
+│  │   │  Call STT   │    │  Call LLM   │    │  Call TTS   │                │  │
+│  │   └─────────────┘    └─────────────┘    └─────────────┘                │  │
+│  │                                                                        │  │
+│  │  • Route :  POST /process                                              │  │
+│  │  • Chunking automatique (long audios > 5 000 chars)                    │  │
+│  │  • Prompt-guard (anti-injection + anti-hallucination)                  │  │
+│  │  • Retry auto + circuit breaker  ·  Traces Langfuse bout-en-bout       │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+              │                       │                       │
+              │ POST /transcribe      │ POST /translate       │ POST /synthesize
+              ▼                       ▼                       ▼
+      ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+      │  STT Service  │       │  LLM Service  │       │  TTS Service  │
+      │     :8001     │       │     :8002     │       │     :8003     │
+      │               │       │               │       │               │
+      │ Faster-       │       │  LiteLLM      │       │ Voxtral       │
+      │ Whisper       │       │  (multi-      │       │ (fr en es de) │
+      │ large-v3      │       │   provider)   │       │ MMS-TTS       │
+      │               │       │               │       │ (uk it)       │
+      │  volume :     │       │  routes :     │       │  volume :     │
+      │  whisper_     │       │  /translate   │       │  tts_models   │
+      │  cache        │       │  /summarize   │       │               │
+      └───────────────┘       └───────┬───────┘       └───────────────┘
+                                      │
+                              (routing LiteLLM)
+                                      ▼
+                    ┌───────────────────────────────────┐
+                    │      Load balancer + fallback     │
+                    └───────────────────────────────────┘
+                            │           │           │
+                            ▼           ▼           ▼
+                      ┌─────────┐ ┌─────────┐ ┌───────────┐
+                      │  GROQ   │ │ OpenAI  │ │ Anthropic │
+                      │ (cloud) │ │ (cloud) │ │  (cloud)  │
+                      └─────────┘ └─────────┘ └───────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                    SERVICES SATELLITES  (bypass pipeline)
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────┐  ┌──────────────────────────────┐  ┌────────────┐
+│  MEETING RECORDER            │  │  WATCHER SERVICE  ·  :8005   │  │  LIVE      │
+│                              │  │                              │  │ (WebRTC)   │
+│  Frontend  /meeting          │  │  • Poll radio 107.7 (7 zones)│  │            │
+│    │                         │  │  • Faster-Whisper embarqué   │  │  Frontend  │
+│    ├─▶ STT /transcribe       │  │  • Extract flash-infos       │  │  /live     │
+│    │   (par chunk 30 s)      │  │  • Persist DB + push SSE     │  │    │       │
+│    │                         │  │                              │  │    ├─ token│
+│    └─▶ LLM /summarize        │  │  Routes :                    │  │    │  éph. │
+│        (compte-rendu final)  │  │  GET  /events                │  │    │  via  │
+│                              │  │  GET  /stream  (SSE admin)   │  │    │ gate. │
+│  Format libre :              │  │                              │  │    │       │
+│  synthèse · détaillé ·       │  │  volume : watcher_data       │  │    └─ SDP  │
+│  actions  ·  5 langues       │  │                              │  │      direct│
+│                              │  │                              │  │      OpenAI│
+└──────────────────────────────┘  └──────────────────────────────┘  └────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                           REGISTRES & STOCKAGE
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────┐  ┌──────────────────────────┐  ┌────────────────┐
+│   MLflow  ·  :5050       │  │   Langfuse (cloud)       │  │  PostgreSQL    │
+│                          │  │                          │  │                │
+│  • Model Registry        │  │  • Prompt versions       │  │  • Airflow     │
+│    (Whisper · TTS)       │  │    (v1.0, v1.1, v1.2)    │  │    metadata    │
+│  • 60 runs expériences   │  │  • Traces LLM waterfall  │  │  • Users DB    │
+│    (12 configs × 5 aud.) │  │  • Coût · tokens · lat.  │  │    (SQLite     │
+│  • Champion tag auto     │  │  • Feedback utilisateur  │  │    interne     │
+│  • Artifacts + eval CSV  │  │  • Sync via              │  │    gateway)    │
+│                          │  │    import_metrics_to_    │  │                │
+│  volume : mlflow_data    │  │    langfuse.py           │  │  volume :      │
+│                          │  │                          │  │  gateway_data  │
+└──────────────────────────┘  └──────────────────────────┘  └────────────────┘
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                       STOCKAGE FICHIER LOCAL                                │
+│                                                                             │
+│   ./data/golden/             ─ audios de référence + traductions humaines   │
+│   ./outputs/experiments/     ─ results.csv des 60 runs                      │
+│   ./airflow/dags/            ─ DAGs Python                                  │
+│   whisper_cache (volume)     ─ modèles Whisper téléchargés                  │
+│   tts_models (volume)        ─ modèles TTS (Voxtral · MMS)                  │
+└────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                        OBSERVABILITÉ  (temps réel)
+════════════════════════════════════════════════════════════════════════════════
+
+┌────────────────────────────┐  ┌─────────────────────────────────────────────┐
+│  Prometheus  ·  :9090      │  │  Grafana  ·  :3001                          │
+│                            │  │                                             │
+│  • Scrape /metrics de      │  │  • 12 panels dashboards                     │
+│    tous les services       │──▶  • Latence p50 / p95 / p99 par service      │
+│  • Latence · req/s ·       │  │  • Erreurs 4xx / 5xx · throughput           │
+│    erreurs · tokens        │  │  • Ressources (RAM · CPU)                   │
+│  volume : prometheus_data  │  │  volume : grafana_data                      │
+└────────────────────────────┘  └─────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                    BATCH LAYER  ·  Airflow 2.10  (hors temps réel)
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Airflow  ·  :8080  ·  Scheduler + Webserver + Postgres                      │
+│                                                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐   │
+│  │  DAG 1 :  nightly_golden_eval        (cron 02:00 UTC)                 │   │
+│  │                                                                       │   │
+│  │  Extract Golden ─▶ Pipeline /process ─▶ Evaluate BLEU/METEOR/WER      │   │
+│  │  ─▶ Log MLflow ─▶ Alert Slack si régression                           │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐   │
+│  │  DAG 2 :  weekly_drift_check         (cron dimanche 03:00 UTC)        │   │
+│  │                                                                       │   │
+│  │  Comparaison BLEU actuel vs baseline (rolling 7 j) ─▶ Alert           │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  Règle d'or : Airflow appelle Pipeline DIRECT — jamais via Gateway           │
+│  Objectif : éviter le rate limiting sur du batch legitime                    │
+│                                                                              │
+│  volumes : airflow_postgres_data · airflow_logs                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                    SCRIPTS MÉTIER  (setup + outils)
+════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  scripts/                                                                    │
+│                                                                              │
+│  • deploy.sh                     Deploy hermes : pull → build --no-cache     │
+│                                  → force-recreate → healthcheck              │
+│                                                                              │
+│  • eval_golden.py                Lance les 60 runs (12 configs × 5 aud.)     │
+│  • mlflow_register.py            Enregistre modèles Whisper/TTS + tags       │
+│  • import_metrics_to_langfuse.py Sync scores MLflow → Langfuse               │
+│  • patch_metrics.py              Recompute BLEU/METEOR sur anciens runs      │
+│                                                                              │
+│  • fetch_flashes.py              Boot watcher : fetch initial flash-infos    │
+│  • transcribe_batch_whisper.py   Batch STT hors ligne                        │
+│  • live_transcribe.py            Micro live dev (debug STT streaming)        │
+│                                                                              │
+│  • scan_events.py                Analyse événements trafic historiques       │
+│  • run_pipeline.py               CLI dev : appel pipeline sans front         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+                    CI / CD  ·  GitHub Actions
+════════════════════════════════════════════════════════════════════════════════
+
+  • Sur push main :  pytest tests/unit/  (172 tests — JWT · chunking · TTS ·   │
+                                          model aliases · prompt guard · auth) │
+  • Sur push main :  pytest tests/integration/  (23 tests e2e)                 │
+  • JUnit report en artefact  ·  Failure = merge bloqué                        │
+  • Deploy hermes via ./scripts/deploy.sh                                      │
+
+
+════════════════════════════════════════════════════════════════════════════════
+  Correspondance méthodologie prof  ·  ~90 %  ·  Roadmap post-défense :
+  · MinIO             (stockage S3-like multi-instance)
+  · Ragas             (métriques LLM avancées — pertinent en RAG, moins ici)
+  · Evidently         (drift feature-level)
+════════════════════════════════════════════════════════════════════════════════
