@@ -1061,84 +1061,6 @@
     </div>
   </section>
 
-  <!-- ─── 8 · Schéma de la donnée ────────────────────────────── -->
-  <section class="slide" data-title="Flow de la donnée">
-    <div class="slide-body">
-      <p class="eyebrow">Flow de la donnée</p>
-      <h2 class="title">De <em>l'audio FR</em><br>à <em>l'audio traduit</em>.</h2>
-      <div class="arch-wrap">
-        <svg viewBox="0 0 1100 260" width="1100" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:55vh; height:auto;">
-          <!-- Layer labels -->
-          <text class="layer" x="20" y="30" style="font-size:9px; fill:var(--accent); letter-spacing:0.2em; text-transform:uppercase;">Étapes</text>
-
-          <!-- Input -->
-          <rect x="30" y="90" width="120" height="60" rx="0" fill="var(--surface-2)" stroke="var(--accent-dim)" stroke-width="1"/>
-          <text x="90" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Audio FR</text>
-          <text x="90" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">.mp3 / .wav</text>
-
-          <!-- Arrow 1 -->
-          <line x1="150" y1="120" x2="200" y2="120" stroke="var(--accent-dim)" stroke-width="1" marker-end="url(#arr)"/>
-
-          <!-- STT -->
-          <rect x="200" y="90" width="140" height="60" fill="var(--surface)" stroke="var(--divider)" stroke-width="1"/>
-          <text x="270" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Whisper STT</text>
-          <text x="270" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">large-v3</text>
-
-          <!-- Arrow 2 -->
-          <line x1="340" y1="120" x2="390" y2="120" stroke="var(--accent-dim)" stroke-width="1" marker-end="url(#arr)"/>
-
-          <!-- Text FR -->
-          <rect x="390" y="90" width="140" height="60" fill="var(--surface-2)" stroke="var(--accent-dim)" stroke-width="1"/>
-          <text x="460" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Texte FR</text>
-          <text x="460" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">+ language_prob</text>
-
-          <!-- Arrow 3 -->
-          <line x1="530" y1="120" x2="580" y2="120" stroke="var(--accent-dim)" stroke-width="1" marker-end="url(#arr)"/>
-
-          <!-- LLM -->
-          <rect x="580" y="90" width="140" height="60" fill="var(--surface)" stroke="var(--divider)" stroke-width="1"/>
-          <text x="650" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">LLM traduction</text>
-          <text x="650" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">GPT-4o mini</text>
-
-          <!-- Arrow 4 -->
-          <line x1="720" y1="120" x2="770" y2="120" stroke="var(--accent-dim)" stroke-width="1" marker-end="url(#arr)"/>
-
-          <!-- Text EN -->
-          <rect x="770" y="90" width="140" height="60" fill="var(--surface-2)" stroke="var(--accent-dim)" stroke-width="1"/>
-          <text x="840" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Texte EN/UK/…</text>
-          <text x="840" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">+ coût $ + tokens</text>
-
-          <!-- Arrow 5 -->
-          <line x1="910" y1="120" x2="960" y2="120" stroke="var(--accent-dim)" stroke-width="1" marker-end="url(#arr)"/>
-
-          <!-- Output -->
-          <rect x="960" y="90" width="120" height="60" fill="var(--surface-2)" stroke="var(--accent-dim)" stroke-width="1"/>
-          <text x="1020" y="115" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Audio cible</text>
-          <text x="1020" y="132" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral / MMS</text>
-
-          <!-- Guards labels -->
-          <rect x="390" y="180" width="140" height="40" fill="none" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4,2"/>
-          <text x="460" y="200" text-anchor="middle" fill="var(--warn)" font-size="10" font-family="ui-monospace">Prompt guard</text>
-          <text x="460" y="213" text-anchor="middle" fill="var(--fg-muted)" font-size="9">check_input (anti-injection)</text>
-
-          <rect x="770" y="180" width="140" height="40" fill="none" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4,2"/>
-          <text x="840" y="200" text-anchor="middle" fill="var(--warn)" font-size="10" font-family="ui-monospace">Prompt guard</text>
-          <text x="840" y="213" text-anchor="middle" fill="var(--fg-muted)" font-size="9">check_output (anti-halluc.)</text>
-
-          <!-- Arrows definition -->
-          <defs>
-            <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-              <path d="M0,0 L8,4 L0,8 z" fill="var(--accent-dim)"/>
-            </marker>
-          </defs>
-        </svg>
-      </div>
-      <p class="caption" style="margin-top:3vh;">
-        Chaque étape est instrumentée : latence, tokens, coût $, tracing MLflow + Langfuse. Deux garde-fous sécurité : anti-injection sur l'entrée, anti-hallucination sur la sortie.
-      </p>
-    </div>
-  </section>
-
   <!-- ─── Frontend — Next.js ──────────────────────────────────── -->
   <section class="slide" data-title="Next.js">
     <div class="slide-body">
@@ -1839,6 +1761,176 @@ pipeline = (
     </div>
   </section>
 
+  <!-- ─── Parcours de la donnée ──────────────────────────────── -->
+  <section class="slide" data-title="Parcours données">
+    <div class="slide-body">
+      <p class="eyebrow">Parcours de la donnée</p>
+      <h2 class="title">Deux flux,<br><em>deux parcours différents</em>.</h2>
+      <div class="arch-wrap">
+        <svg class="arch" viewBox="0 0 1200 700" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:72vh; height:auto;">
+          <!-- Layer labels -->
+          <text class="layer" x="15" y="48">Flux A · Upload user</text>
+          <text class="layer" x="15" y="380">Flux B · Watcher radio 107.7</text>
+
+          <!-- ═══════════ FLUX A : Upload / Traduction on-demand ═══════════ -->
+          <!-- Step 1 : User uploads -->
+          <rect data-tt="fA-user" class="box-accent" x="30" y="80" width="130" height="55"/>
+          <text x="95" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">1 · User</text>
+          <text x="95" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">upload MP3/WAV</text>
+
+          <!-- Step 2 : Frontend -->
+          <rect data-tt="fA-frontend" class="box-accent" x="200" y="80" width="130" height="55"/>
+          <text x="265" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">2 · Frontend</text>
+          <text x="265" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">POST /process</text>
+
+          <!-- Step 3 : Gateway JWT check -->
+          <rect data-tt="fA-gateway" class="box-accent" x="370" y="80" width="130" height="55"/>
+          <text x="435" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Gateway</text>
+          <text x="435" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">JWT check</text>
+
+          <!-- Step 4 : Pipeline LCEL orchestrator -->
+          <rect data-tt="fA-pipeline" class="box-accent" x="540" y="80" width="150" height="55"/>
+          <text x="615" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · Pipeline</text>
+          <text x="615" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL</text>
+
+          <!-- Step 5 : STT -->
+          <rect data-tt="fA-stt" class="box" x="80" y="180" width="130" height="60"/>
+          <text x="145" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · STT</text>
+          <text x="145" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
+          <text x="145" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte FR</text>
+
+          <!-- Step 6 : Prompt-guard IN -->
+          <rect data-tt="fA-guard-in" class="box" x="240" y="180" width="130" height="60"/>
+          <text x="305" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · Guard IN</text>
+          <text x="305" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-injection</text>
+          <text x="305" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte safe</text>
+
+          <!-- Step 7 : LLM translate -->
+          <rect data-tt="fA-llm" class="box" x="400" y="180" width="130" height="60"/>
+          <text x="465" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · LLM</text>
+          <text x="465" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM → OpenAI</text>
+          <text x="465" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte EN</text>
+
+          <!-- Step 8 : Prompt-guard OUT -->
+          <rect data-tt="fA-guard-out" class="box" x="560" y="180" width="130" height="60"/>
+          <text x="625" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · Guard OUT</text>
+          <text x="625" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-hallucination</text>
+          <text x="625" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ vérif ratio</text>
+
+          <!-- Step 9 : TTS -->
+          <rect data-tt="fA-tts" class="box" x="720" y="180" width="130" height="60"/>
+          <text x="785" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">9 · TTS</text>
+          <text x="785" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral EN</text>
+          <text x="785" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ audio MP3</text>
+
+          <!-- Step 10 : back to User -->
+          <rect data-tt="fA-return" class="box-accent" x="880" y="180" width="140" height="60"/>
+          <text x="950" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">10 · Frontend</text>
+          <text x="950" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">audio + texte</text>
+          <text x="950" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ affiche user</text>
+
+          <!-- Observability async pour Flux A -->
+          <rect data-tt="fA-obs" class="box" x="1030" y="130" width="150" height="60" stroke-dasharray="4,2"/>
+          <text x="1105" y="155" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Async</text>
+          <text x="1105" y="172" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Langfuse traces</text>
+          <text x="1105" y="185" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">MLflow tracing</text>
+
+          <!-- Flèches Flux A -->
+          <line data-from="fA-user" data-to="fA-frontend" class="accent" x1="160" y1="107" x2="200" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-frontend" data-to="fA-gateway" class="accent" x1="330" y1="107" x2="370" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-gateway" data-to="fA-pipeline" class="accent" x1="500" y1="107" x2="540" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <path data-from="fA-pipeline" data-to="fA-stt" class="accent" d="M 615,135 C 615,160 200,150 145,180" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
+          <line data-from="fA-stt" data-to="fA-guard-in" class="accent" x1="210" y1="210" x2="240" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-guard-in" data-to="fA-llm" class="accent" x1="370" y1="210" x2="400" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-llm" data-to="fA-guard-out" class="accent" x1="530" y1="210" x2="560" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-guard-out" data-to="fA-tts" class="accent" x1="690" y1="210" x2="720" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-tts" data-to="fA-return" class="accent" x1="850" y1="210" x2="880" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → Async (observability) -->
+          <path data-from="fA-pipeline" data-to="fA-obs" d="M 690,110 C 900,110 1000,140 1030,160" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Séparateur horizontal entre flux A et B -->
+          <line x1="30" y1="330" x2="1170" y2="330" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+
+          <!-- ═══════════ FLUX B : Watcher radio 107.7 ═══════════ -->
+          <!-- Step 1 : Cron interne -->
+          <rect data-tt="fB-cron" class="box-accent" x="30" y="410" width="130" height="55"/>
+          <text x="95" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">1 · Cron</text>
+          <text x="95" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">poll toutes N min</text>
+
+          <!-- Step 2 : HTTP GET radio.stream -->
+          <rect data-tt="fB-fetch" class="box-accent" x="200" y="410" width="150" height="55"/>
+          <text x="275" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">2 · HTTP GET</text>
+          <text x="275" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">radio 107.7 stream</text>
+
+          <!-- Step 3 : Watcher container (Whisper embarqué) -->
+          <rect data-tt="fB-whisper" class="box-accent" x="390" y="410" width="160" height="55"/>
+          <text x="470" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Whisper embarqué</text>
+          <text x="470" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">(pas le STT dédié !)</text>
+
+          <!-- Step 4 : Extraction événements -->
+          <rect data-tt="fB-extract" class="box" x="80" y="510" width="150" height="60"/>
+          <text x="155" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · Extract</text>
+          <text x="155" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">regex + heuristics</text>
+          <text x="155" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ événements bruts</text>
+
+          <!-- Step 5 : LLM /translate direct (bypass pipeline) -->
+          <rect data-tt="fB-llm" class="box" x="260" y="510" width="150" height="60"/>
+          <text x="335" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · LLM direct</text>
+          <text x="335" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">POST /translate</text>
+          <text x="335" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ structuré JSON</text>
+
+          <!-- Step 6 : DB persist -->
+          <rect data-tt="fB-db" class="box" x="440" y="510" width="150" height="60"/>
+          <text x="515" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · DB</text>
+          <text x="515" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">watcher_data volume</text>
+          <text x="515" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ persist événements</text>
+
+          <!-- Step 7 : SSE push -->
+          <rect data-tt="fB-sse" class="box" x="620" y="510" width="150" height="60"/>
+          <text x="695" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · SSE stream</text>
+          <text x="695" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/stream endpoint</text>
+          <text x="695" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ push admin</text>
+
+          <!-- Step 8 : Admin dashboard -->
+          <rect data-tt="fB-admin" class="box-accent" x="800" y="510" width="180" height="60"/>
+          <text x="890" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · Admin Dashboard</text>
+          <text x="890" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/admin/traffic</text>
+          <text x="890" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ affiche live</text>
+
+          <!-- Note : pas de TTS, pas de Pipeline, pas d'auth -->
+          <rect data-tt="fB-note" class="box" x="1030" y="460" width="150" height="80" stroke-dasharray="4,2"/>
+          <text x="1105" y="482" text-anchor="middle" fill="var(--warn)" font-size="11" font-weight="500">Différences</text>
+          <text x="1105" y="500" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de TTS</text>
+          <text x="1105" y="514" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de Pipeline</text>
+          <text x="1105" y="528" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de Gateway</text>
+
+          <!-- Flèches Flux B -->
+          <line data-from="fB-cron" data-to="fB-fetch" class="accent" x1="160" y1="437" x2="200" y2="437" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-fetch" data-to="fB-whisper" class="accent" x1="350" y1="437" x2="390" y2="437" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <path data-from="fB-whisper" data-to="fB-extract" class="accent" d="M 470,465 C 350,485 200,500 155,510" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
+          <line data-from="fB-extract" data-to="fB-llm" class="accent" x1="230" y1="540" x2="260" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-llm" data-to="fB-db" class="accent" x1="410" y1="540" x2="440" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-db" data-to="fB-sse" class="accent" x1="590" y1="540" x2="620" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-sse" data-to="fB-admin" class="accent" x1="770" y1="540" x2="800" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+
+          <!-- Légende -->
+          <g transform="translate(30, 620)">
+            <text x="0" y="0" fill="var(--fg-muted)" font-size="10" letter-spacing="0.1em" style="text-transform:uppercase;">
+              Survole une étape pour voir sa description et son rôle. Le spotlight révèle les liens du flux.
+            </text>
+            <text x="0" y="20" fill="var(--fg-muted)" font-size="10" letter-spacing="0.05em">
+              <tspan fill="var(--accent)">Flux A</tspan> = passe par Gateway + Pipeline LCEL, appelle STT dédié, produit un audio.
+              <tspan fill="var(--warn)"> Flux B</tspan> = code Watcher direct, Whisper embarqué, pas de TTS, alimente le dashboard.
+            </text>
+          </g>
+        </svg>
+      </div>
+      <p class="caption" style="margin-top:2vh;">
+        Même stack, deux parcours très différents. Le <strong>Flux A</strong> est synchrone bloquant (user attend son audio). Le <strong>Flux B</strong> est asynchrone continu (background, alimente le dashboard admin). Le Watcher n'appelle ni le Pipeline ni le service STT — il a son propre Whisper embarqué et parle direct au LLM.
+      </p>
+    </div>
+  </section>
+
   <!-- ─── Démo — 2 use cases ─────────────────────────────────── -->
   <section class="slide" data-title="Démo">
     <div class="slide-body">
@@ -2126,6 +2218,110 @@ pipeline = (
       name: "DAG · weekly_drift_check",
       desc: "Cron dimanche 03:00 UTC. Compare BLEU actuel vs baseline glissante 7 jours. Alerte si chute > seuil.",
       why:  "Détection de dérive lente (drift progressif que le nightly ne capte pas). Complémentaire à Evidently (roadmap) pour feature-drift plus fin."
+    },
+
+    // ── Flux A : Upload / Traduction on-demand ──────────────────────────────
+    "fA-user": {
+      name: "1 · Utilisateur",
+      desc: "Chauffeur, agent, journaliste — quelqu'un qui a besoin de comprendre un audio dans sa langue.",
+      why:  "Point de départ. La contrainte : il uploade un fichier ou parle au micro, il attend sa réponse en < 10 secondes."
+    },
+    "fA-frontend": {
+      name: "2 · Frontend Next.js",
+      desc: "Reçoit le fichier ou le blob micro. Envoie POST /pipeline/process en multipart form-data, avec le JWT en header.",
+      why:  "Toute la validation UX (format, taille) se fait ici avant l'appel réseau. Erreurs 415/413 gérées en amont."
+    },
+    "fA-gateway": {
+      name: "3 · Gateway JWT check",
+      desc: "Décode le JWT HS256, vérifie exp + type=access, retrouve l'user en DB. Puis forward la requête au Pipeline (Docker network interne).",
+      why:  "Séparation stricte : le Pipeline ne connaît pas les users. Si compromis, il ne peut rien faire sans le Gateway. Défense en profondeur."
+    },
+    "fA-pipeline": {
+      name: "4 · Pipeline · LangChain LCEL",
+      desc: "Le chef d'orchestre. Instancie une chaîne Runnable STT → LLM → TTS composée avec l'opérateur | de LCEL.",
+      why:  "Chaînage typé, testable, chaque étape peut être moquée en unit test. Retry + circuit-breaker natifs. Chunking auto pour les audios longs (>5000 chars)."
+    },
+    "fA-stt": {
+      name: "5 · STT · Faster-Whisper large-v3",
+      desc: "Reçoit audio_bytes, écrit en tempfile, appelle ffmpeg pour normaliser (WAV 16kHz mono), puis transcribe. Retourne texte + langue détectée + confidence.",
+      why:  "large-v3 = meilleure qualité FR open-source. Faster-Whisper (CTranslate2) = 4× plus rapide que whisper.cpp en CPU."
+    },
+    "fA-guard-in": {
+      name: "6 · Prompt-guard IN",
+      desc: "Vérifie que le texte transcrit ne contient pas d'injection de prompt (regex patterns FR + EN : 'ignore previous', 'you are now', 'jailbreak'…). Sanitize les balises XML.",
+      why:  "Sécurité LLM01 OWASP : un audio peut contenir des instructions cachées pour pirater le prompt système. Bloque en amont, jamais atteint le LLM."
+    },
+    "fA-llm": {
+      name: "7 · LLM · LiteLLM → OpenAI",
+      desc: "Compose le prompt (persona traducteur + user_text sandwich <user_text>). Appelle LiteLLM qui route vers OpenAI GPT-4o mini. Reçoit texte traduit.",
+      why:  "GPT-4o mini = meilleur ratio qualité/coût pour la traduction FR↔EN. Fallback GROQ/Anthropic possible sans changer le code du Pipeline."
+    },
+    "fA-guard-out": {
+      name: "8 · Prompt-guard OUT",
+      desc: "Vérifie que le texte traduit n'est pas une hallucination : ratio longueur input/output < 4×, absence de leaks ('I am an AI', 'system prompt')…",
+      why:  "Le LLM peut halluciner (générer 500 mots à partir de 3 mots d'input). Le guard OUT filtre ces cas et retourne une erreur 422 propre au user."
+    },
+    "fA-tts": {
+      name: "9 · TTS · Voxtral / MMS-TTS",
+      desc: "Route par langue cible : Voxtral (fr/en/es/de) ou MMS-TTS (uk/it/…). Chunking si texte long. Retourne audio bytes.",
+      why:  "Voxtral (Mistral) = qualité prod sur langues majeures. MMS-TTS (Meta) = couvre 1100+ langues rares. Routing = pas d'API unique qui fait tout bien."
+    },
+    "fA-return": {
+      name: "10 · Retour Frontend",
+      desc: "Le Pipeline agrège : source_text, translation, audio_b64, latency_stt/llm/tts, coût. Retourne en JSON. Frontend affiche audio player + texte + métriques.",
+      why:  "Réponse riche : le user voit la transcription (contrôle), écoute la traduction (usage), et l'admin voit les métriques (observabilité)."
+    },
+    "fA-obs": {
+      name: "Async · Observability",
+      desc: "En PARALLÈLE de la requête user (non bloquant) : le Pipeline envoie une trace Langfuse (waterfall STT+LLM+TTS) et MLflow (spans hiérarchiques).",
+      why:  "Async = pas d'impact latence sur le user. Langfuse = observabilité métier LLM (coût, tokens). MLflow = expérimentation (BLEU sur runs). Ces 2 outils sont complémentaires."
+    },
+
+    // ── Flux B : Watcher radio 107.7 ─────────────────────────────────────────
+    "fB-cron": {
+      name: "1 · Cron interne",
+      desc: "Boucle Python asyncio dans le container Watcher. Wake up toutes les N minutes (configurable env var).",
+      why:  "Airflow serait overkill pour ce polling simple + haute fréquence. Cron interne = 0 dépendance, réactif."
+    },
+    "fB-fetch": {
+      name: "2 · Fetch stream radio",
+      desc: "HTTP GET vers l'URL de streaming de la radio autoroutière 107.7 (7 zones géographiques : Nord, Sud, Est, Ouest, Île-de-France…).",
+      why:  "Radio publique = source stable. Contenu structuré (flashs infos toutes les 5 min). Idéal pour extraire des événements trafic en temps quasi-réel."
+    },
+    "fB-whisper": {
+      name: "3 · Whisper EMBARQUÉ",
+      desc: "Le Watcher a sa propre instance faster-whisper (pas d'appel HTTP au service STT :8001). Traite le chunk audio en local.",
+      why:  "Éviter un aller-retour HTTP inutile pour un traitement continu. Whisper embarqué = latence réduite. Cache modèle sur volume watcher_data."
+    },
+    "fB-extract": {
+      name: "4 · Extract events",
+      desc: "Parse le texte transcrit avec regex + heuristiques (zones autoroutières, types d'événements : bouchon/accident/travaux). Sortie : liste d'événements structurés.",
+      why:  "Extraction locale (pas LLM) pour économie coût + latence. Le LLM n'entre en jeu qu'à l'étape suivante pour la traduction."
+    },
+    "fB-llm": {
+      name: "5 · LLM /translate DIRECT",
+      desc: "POST direct à llm:8002/translate (bypass Pipeline). Traduit chaque événement pour affichage multilingue admin (FR + EN + ES…).",
+      why:  "Bypass Pipeline légitime : pas besoin de STT (déjà fait) ni TTS (pas d'audio en sortie). Le Pipeline serait un détour inutile."
+    },
+    "fB-db": {
+      name: "6 · Persist événements",
+      desc: "Stocke les événements en JSON dans le volume Docker watcher_data. Rotation par jour, déduplication par hash.",
+      why:  "Historique consultable, base pour analytics futures (heures de pointe, patterns saisonniers). Volume persistant survit aux restart du container."
+    },
+    "fB-sse": {
+      name: "7 · SSE stream",
+      desc: "Endpoint GET /stream expose les nouveaux événements en Server-Sent Events. Consommé par l'admin dashboard.",
+      why:  "SSE = plus simple que WebSocket pour du push unidirectionnel. Reconnexion auto par le navigateur. Idéal pour un dashboard temps réel."
+    },
+    "fB-admin": {
+      name: "8 · Admin Dashboard",
+      desc: "Page /admin dans le frontend Next.js. Affiche les événements par zone (Nord/Sud/Est/Ouest), avec traduction, timestamp, sévérité.",
+      why:  "Interface de surveillance pour opérateur (ex : centre de gestion autoroutière). Utile aussi pour la démo devant le jury."
+    },
+    "fB-note": {
+      name: "Différences avec Flux A",
+      desc: "Watcher ne passe PAS par : Gateway (pas d'auth externe), Pipeline (pas d'orchestration LCEL), service STT (Whisper embarqué), TTS (pas de sortie audio).",
+      why:  "Cas d'usage différent = architecture différente. Le Pipeline est pour du synchrone user-facing. Le Watcher est pour du batch continu background."
     },
     tts: {
       name: "TTS · Voxtral + MMS-TTS · :8003",
