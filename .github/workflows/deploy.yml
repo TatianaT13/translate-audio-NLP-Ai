@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  CD — Deploy vers hermes après CI success.
+#
+#  Se déclenche automatiquement sur push main SEULEMENT si tests OK.
+#  Utilise SSH pour se connecter à hermes et exécuter scripts/deploy.sh.
+#
+#  ⚠ Secrets GitHub requis (Settings → Secrets and variables → Actions) :
+#    - HERMES_HOST           : IP ou domaine du serveur (ex: hermes.example.com)
+#    - HERMES_USER           : user SSH (ex: tanya)
+#    - HERMES_SSH_KEY        : clé privée SSH complète (contenu de ~/.ssh/id_rsa)
+#    - HERMES_KNOWN_HOSTS    : output de "ssh-keyscan -H hermes" (anti MITM)
+#
+#  Déclencheur manuel possible via workflow_dispatch (choisir le/les services).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CD
+
+on:
+  # Auto : après CI success sur main
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+  # Manuel : bouton "Run workflow" dans l'UI GitHub Actions
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services à redeployer (vide = tous ; ex: 'frontend gateway')"
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    # Auto : ne rejoue que si le CI a réussi.
+    # Manuel : toujours autorisé (workflow_dispatch).
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HERMES_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.HERMES_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy sur hermes
+        env:
+          HERMES_HOST: ${{ secrets.HERMES_HOST }}
+          HERMES_USER: ${{ secrets.HERMES_USER }}
+          SERVICES: ${{ github.event.inputs.services }}
+        run: |
+          # Priorité au trigger manuel (services optionnels), sinon tout par défaut.
+          ssh -o BatchMode=yes "$HERMES_USER@$HERMES_HOST" \
+            "cd ~/traudio && git fetch --all && git reset --hard origin/main && ./scripts/deploy.sh $SERVICES"
+
+      - name: Vérification post-deploy
+        env:
+          HERMES_HOST: ${{ secrets.HERMES_HOST }}
+          HERMES_USER: ${{ secrets.HERMES_USER }}
+        run: |
+          # Récupère l'état des healthchecks pour être sûr que tout tourne.
+          ssh -o BatchMode=yes "$HERMES_USER@$HERMES_HOST" \
+            "cd ~/traudio && docker compose ps"
+
+      - name: Nettoyage SSH key
+        if: always()
+        run: shred -u ~/.ssh/id_rsa 2>/dev/null || rm -f ~/.ssh/id_rsa
