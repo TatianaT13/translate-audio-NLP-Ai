@@ -918,7 +918,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
             <li><span><strong>Transcription</strong> automatique (Faster-Whisper large-v3)</span></li>
             <li><span><strong>Traduction</strong> vers EN, ES, DE, IT, UK</span></li>
             <li><span><strong>Restitution vocale</strong> synthétisée (Voxtral · MMS-TTS)</span></li>
-            <li><span><strong>Latence</strong> end-to-end 2–3 s · coût &lt; 0,001 $ / requête</span></li>
+            <li><span><strong>Latence</strong> et <strong>coût</strong> — ordres de grandeur observés en production (à confirmer par la campagne de rebenchmark)</span></li>
           </ul>
         </div>
         <div>
@@ -975,7 +975,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
   <section class="slide" data-title="Architecture">
     <div class="slide-body">
       <p class="eyebrow">Architecture</p>
-      <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
+      <h2 class="title"><em>14 conteneurs Docker</em>,<br>6 microservices FastAPI.</h2>
       <div class="arch-wrap">
         <svg class="arch" viewBox="0 0 1200 780" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:82vh; height:auto;">
           <!-- Layer labels -->
@@ -1438,7 +1438,7 @@ pipeline = (
             12 runs agrégés (1 par configuration).<br>
             Model Registry (Whisper, TTS).<br>
             Tag <code>champion</code> automatique.<br>
-            <code>mlflow.evaluate()</code> natif : BLEU, ROUGE, METEOR, WER.
+            Métriques BLEU, METEOR, WER loggées dans MLflow.
           </p>
         </div>
         <div>
@@ -1581,13 +1581,6 @@ pipeline = (
     </div>
   </section>
 
-  <!-- ─── 14 · Merci ─────────────────────────────────────────── -->
-  <section class="slide thanks" data-title="Merci">
-    <h2 class="display">Merci<em>.</em></h2>
-    <div class="signature">
-      traduction-audio.fr · Tetyana Tarasenko
-    </div>
-  </section>
 
 </div>
 
@@ -1701,18 +1694,18 @@ pipeline = (
     },
     gateway: {
       name: "Gateway · FastAPI · :8004",
-      desc: "Point d'entrée unique. 24 routes : /auth/*, /admin/*, /realtime/session.",
-      why:  "JWT (access 15 min + refresh rotatif 7 j), rate-limit, proxy admin. Kong/Nginx écartés : FastAPI reste homogène avec le reste du stack et testable en pytest."
+      desc: "Centralise l'authentification JWT et les routes d'administration. 24 routes : /auth/*, /admin/*, /realtime/session.",
+      why:  "JWT (access 15 min + refresh rotatif 7 j). Kong/Nginx écartés : FastAPI reste homogène avec le reste du stack et testable en pytest. Note : le frontend accède encore directement au Pipeline dans l'implémentation actuelle. Centralisation complète du trafic prévue."
     },
     pipeline: {
       name: "Pipeline · LangChain LCEL · :8000",
       desc: "Orchestrateur STT → LLM → TTS via Runnable steps composables. Prompt-guard + chunking auto.",
-      why:  "LCEL donne un chaînage typé, traçable Langfuse, retry/circuit-breaker natif. Alternative pipeline maison en dict Python : perte de l'écosystème LangChain."
+      why:  "LCEL facilite la composition typée et l'instrumentation (tracing Langfuse). Alternative pipeline maison en dict Python : perte de l'écosystème LangChain."
     },
     watcher: {
       name: "Watcher · :8005",
-      desc: "Service autonome qui poll la radio 107.7 (7 zones autoroutières) et extrait les flash-infos trafic.",
-      why:  "Whisper embarqué + LLM → événements structurés + SSE vers dashboard admin. Cron ne suffit pas : besoin de streaming continu et déduplication."
+      desc: "Service autonome qui poll la radio 107.7 et extrait les flash-infos trafic (accidents, bouchons, fermetures).",
+      why:  "Whisper embarqué + LLM → événements structurés + SSE vers dashboard admin. Traitement continu, sans passer par le Pipeline ni par le service STT dédié."
     },
     stt: {
       name: "STT · Faster-Whisper large-v3 · :8001",
@@ -1731,13 +1724,13 @@ pipeline = (
     },
     groq: {
       name: "GROQ (cloud)",
-      desc: "Provider LLM ultra-rapide (Llama 3.1 8B / 70B). Inference sur puces LPU maison.",
-      why:  "Champion BLEU 49.64 sur nos 7 audios golden (config large-v3 + Llama 70B + v1.1). Retenu comme fallback rapide et gratuit (tier free généreux). Migré vers OpenAI en prod suite deprecation du modèle Groq utilisé."
+      desc: "Provider LLM (Llama 3.1 8B / 70B). Inference sur puces LPU.",
+      why:  "Champion BLEU 49.64 sur nos 7 audios golden (config large-v3 + Llama 70B + v1.1). Retiré de la production suite à la dépréciation du modèle utilisé. Reste configurable via LiteLLM."
     },
     openai: {
       name: "OpenAI (cloud)",
       desc: "GPT-4o mini · provider par défaut en production pour /translate et /summarize.",
-      why:  "Meilleur ratio qualité/coût pour la traduction FR↔EN à cette échelle. Aussi utilisé pour l'API Realtime (Live) et Whisper-1 (transcription live)."
+      why:  "Provider actuel de production, choisi après la dépréciation du modèle Groq utilisé. Rebenchmark sur le même protocole que la campagne initiale prévu. Aussi utilisé pour l'API Realtime (Live)."
     },
     anthropic: {
       name: "Anthropic (cloud)",
@@ -1746,13 +1739,13 @@ pipeline = (
     },
     "dag-nightly": {
       name: "DAG · nightly_golden_eval",
-      desc: "Cron 02:00 UTC. Extrait Golden Dataset → appelle Pipeline /process → calcule BLEU/METEOR/WER → log MLflow → alerte Slack si régression.",
-      why:  "Détection de dérive qualitative quotidienne. Airflow appelle Pipeline direct (bypass Gateway) pour éviter le rate-limit sur du batch legitime."
+      desc: "Cron 02:00 UTC. Ping le pipeline, relance les 7 audios golden, agrège succès/échecs, latence et coût. Alerte si trop d'échecs.",
+      why:  "Vérifie la disponibilité et la santé du pipeline quotidiennement. Airflow appelle Pipeline direct (bypass Gateway) pour éviter le rate-limit. Intégration automatique BLEU/METEOR + alerting Slack : prochain incrément."
     },
     "dag-weekly": {
       name: "DAG · weekly_drift_check",
-      desc: "Cron dimanche 03:00 UTC. Compare BLEU actuel vs baseline glissante 7 jours. Alerte si chute > seuil.",
-      why:  "Détection de dérive lente (drift progressif que le nightly ne capte pas). Complémentaire à Evidently (roadmap) pour feature-drift plus fin."
+      desc: "Cron dimanche 03:00 UTC. Interroge Langfuse pour comparer la semaine N à la semaine N-1 sur latence, coût, BLEU et probabilité de langue.",
+      why:  "Détection de variations avec un seuil de 10 %. Complémentaire au nightly qui vérifie la disponibilité immédiate."
     },
 
     // ── Flux A : Upload / Traduction on-demand ──────────────────────────────
@@ -1880,7 +1873,7 @@ pipeline = (
     },
     mlflow: {
       name: "MLflow · :5050",
-      desc: "Model Registry (Whisper, TTS) + experiment tracking. 12 runs agrégés (1 par config, métriques moyennées sur 7 audios golden). 84 évaluations individuelles importées dans Langfuse pour drill-down.",
+      desc: "Model Registry (Whisper, TTS) + experiment tracking. 12 runs agrégés (1 par config, métriques moyennées sur les 7 audios golden). Métriques BLEU, METEOR, WER loggées dans MLflow depuis les scripts d'évaluation. 84 évaluations individuelles importées dans Langfuse pour drill-down.",
       why:  "Standard MLOps pour le versioning des modèles. Pilote la sélection : champion 70B (BLEU 49.64) vs 8B (compromis coût/perf, historiquement retenu). Prod actuelle : GPT-4o mini via LiteLLM, rebenchmark prévu."
     },
     prometheus: {
