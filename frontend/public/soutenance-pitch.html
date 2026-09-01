@@ -1,0 +1,1976 @@
+<title>traduction-audio — soutenance (pitch)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:         #0A0A0C;
+    --surface:    #141419;
+    --surface-2:  #1B1B22;
+    --fg:         #EEEBE2;
+    --fg-muted:   #8A8578;
+    --fg-dim:     #55524B;
+    --accent:     #C9A961;
+    --accent-dim: #6B5D3E;
+    --divider:    #26262E;
+    --ok:         #7BA05B;
+    --warn:       #C67B4A;
+
+    /* Typographie : univers broadcast / presse écrite — cohérent flash-infos radio */
+    --font-serif: "Special Elite", "Courier Prime", "Courier New", ui-monospace, monospace;
+    --font-sans:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --font-mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Deck container
+     ──────────────────────────────────────────────────────────── */
+  .deck {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 400ms ease;
+    background: var(--bg);
+  }
+
+  .slide.is-active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Typographic scale — editorial
+     ──────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--fg-muted);
+    margin: 0 0 3vh 0;
+  }
+
+  .display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(2.5rem, 6vw, 5.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    color: var(--fg);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .display em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 400;
+  }
+
+  h2.title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(1.8rem, 3.2vw, 2.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin: 0 0 4vh 0;
+    text-wrap: balance;
+    max-width: 22ch;
+  }
+
+  h2.title em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .lede {
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+    line-height: 1.55;
+    color: var(--fg);
+    max-width: 42ch;
+    margin: 0;
+  }
+
+  .body {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--fg);
+    max-width: 60ch;
+  }
+
+  .caption {
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.02em;
+    font-style: italic;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Chrome — navigation, counter, brand
+     ──────────────────────────────────────────────────────────── */
+  .chrome-top {
+    position: fixed;
+    top: 3vh;
+    left: 8vw;
+    right: 8vw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .chrome-top .brand {
+    font-family: var(--font-serif);
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+    color: var(--fg-muted);
+    font-size: 13px;
+    text-decoration: none;
+    pointer-events: auto;
+    transition: color 200ms ease;
+  }
+  .chrome-top .brand:hover {
+    color: var(--accent);
+  }
+  .chrome-top .back-to-app {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    text-decoration: none;
+    pointer-events: auto;
+    padding: 4px 10px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    transition: color 200ms ease, border-color 200ms ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chrome-top .back-to-app:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+  .chrome-top .right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .chrome-bottom {
+    position: fixed;
+    bottom: 3vh;
+    left: 8vw;
+    right: 8vw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+  }
+
+  .counter {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .counter .sep { color: var(--fg-dim); margin: 0 0.5em; }
+  .counter .current { color: var(--fg); }
+
+  .dots {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dots button {
+    background: transparent;
+    border: none;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .dots button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--fg-dim);
+    transition: background 200ms;
+  }
+
+  .dots button:hover::after { background: var(--fg-muted); }
+  .dots button.is-active::after { background: var(--accent); }
+
+  .nav-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .nav-hint kbd {
+    font-family: var(--font-mono);
+    padding: 1px 5px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    color: var(--fg-muted);
+    background: var(--surface);
+    font-size: 9px;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Cover slide
+     ──────────────────────────────────────────────────────────── */
+  .cover {
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .cover .display {
+    font-size: clamp(4rem, 12vw, 10rem);
+    line-height: 0.95;
+    margin-bottom: 2vh;
+  }
+  .cover .tagline {
+    font-family: var(--font-serif);
+    font-size: clamp(1.2rem, 2vw, 1.6rem);
+    color: var(--fg-muted);
+    font-style: italic;
+    margin: 0 0 6vh 0;
+    letter-spacing: 0;
+  }
+  .cover .signature {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.05em;
+  }
+  .cover .signature strong {
+    color: var(--fg);
+    font-weight: 400;
+    font-family: var(--font-serif);
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Content slide layouts
+     ──────────────────────────────────────────────────────────── */
+  .slide-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    /* Permet à une slide dense (grand schéma, gros tableau) de scroller
+       verticalement au lieu d'être coupée. */
+    overflow-y: auto;
+    min-height: 0;
+  }
+  /* Sur les slides denses, on ancre en haut au lieu du centre pour éviter
+     de sauter au scroll. Détecté par la présence d'un schéma volumineux. */
+  .slide-body:has(.arch-wrap),
+  .slide-body:has(.table-wrap) {
+    justify-content: flex-start;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6vw;
+    align-items: start;
+  }
+
+  .split-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4vw;
+    align-items: start;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Cards & lists
+     ──────────────────────────────────────────────────────────── */
+  .card {
+    padding: 3vh 2.5vw;
+    border-top: 1px solid var(--divider);
+  }
+
+  .card .card-eyebrow {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.5vh 0;
+    font-weight: 500;
+  }
+
+  .card h3 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: 1.35rem;
+    margin: 0 0 1.5vh 0;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+
+  .card p, .card ul {
+    font-size: 14px;
+    color: var(--fg-muted);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  ul.editorial {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  ul.editorial li {
+    padding: 1.6vh 0;
+    border-bottom: 1px solid var(--divider);
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+  ul.editorial li:last-child { border-bottom: none; }
+  ul.editorial li::before {
+    content: '·';
+    color: var(--accent);
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+  ul.editorial li strong {
+    font-weight: 500;
+    color: var(--fg);
+  }
+  ul.editorial li span {
+    color: var(--fg-muted);
+    margin-left: 0.6em;
+    font-size: 0.95em;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Tables
+     ──────────────────────────────────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 2vh;
+  }
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th,
+  table.data td {
+    padding: 1.4vh 1vw;
+    text-align: left;
+    border-bottom: 1px solid var(--divider);
+  }
+  table.data th {
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--fg-muted);
+  }
+  table.data td {
+    color: var(--fg);
+  }
+  table.data td.mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  table.data td.accent { color: var(--accent); }
+  table.data tr.champion td {
+    color: var(--fg);
+    font-weight: 500;
+  }
+  table.data tr.champion td.mono { color: var(--accent); }
+
+  /* ────────────────────────────────────────────────────────────
+     Code block
+     ──────────────────────────────────────────────────────────── */
+  pre.code {
+    background: var(--surface);
+    border-left: 2px solid var(--accent);
+    padding: 3vh 2.5vw;
+    margin: 3vh 0 0 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--fg);
+    overflow-x: auto;
+    letter-spacing: 0;
+  }
+  pre.code .kw { color: var(--accent); }
+  pre.code .cm { color: var(--fg-dim); font-style: italic; }
+  pre.code .st { color: var(--fg-muted); }
+
+  /* ────────────────────────────────────────────────────────────
+     Big number stats
+     ──────────────────────────────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4vw;
+    margin-top: 4vh;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1vh;
+    border-top: 1px solid var(--divider);
+    padding-top: 3vh;
+  }
+  .stat .value {
+    font-family: var(--font-serif);
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    line-height: 1;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .value em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .stat .value .unit {
+    font-family: var(--font-sans);
+    font-size: 0.35em;
+    color: var(--fg-muted);
+    letter-spacing: 0;
+    margin-left: 0.15em;
+    font-style: normal;
+  }
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--fg-muted);
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     BLEU chart bars
+     ──────────────────────────────────────────────────────────── */
+  .chart {
+    margin-top: 4vh;
+    display: flex;
+    flex-direction: column;
+    gap: 2.2vh;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 18ch 1fr 6ch;
+    align-items: center;
+    gap: 2vw;
+  }
+  .bar-row .name {
+    font-size: 13px;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+  }
+  .bar-row .name .champ {
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-left: 0.8em;
+  }
+  .bar-track {
+    height: 6px;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--fg-dim);
+    transition: transform 800ms ease;
+    transform-origin: left;
+  }
+  .bar-row.is-champion .bar-fill { background: var(--accent); }
+  .bar-row.is-expensive .bar-fill { background: var(--warn); }
+  .bar-value {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-row.is-champion .bar-value { color: var(--accent); }
+
+  /* ────────────────────────────────────────────────────────────
+     Architecture SVG diagram
+     ──────────────────────────────────────────────────────────── */
+  .arch-wrap {
+    margin-top: 1.5vh;
+    display: flex;
+    justify-content: center;
+    /* Plus de max-height ici : c'est .slide-body qui scroll globalement.
+       Ça évite le "scroll dans scroll" et laisse le SVG prendre sa taille. */
+  }
+  .arch-wrap svg {
+    max-width: 100%;
+    height: auto;
+    width: auto;
+  }
+  .arch text {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    fill: var(--fg);
+  }
+  .arch text.tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--fg-muted);
+  }
+  .arch text.layer {
+    font-size: 9px;
+    fill: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .arch rect.box {
+    fill: var(--surface);
+    stroke: var(--divider);
+    stroke-width: 1;
+  }
+  .arch rect.box-accent {
+    fill: var(--surface-2);
+    stroke: var(--accent-dim);
+    stroke-width: 1;
+  }
+  .arch line, .arch path.link {
+    stroke: var(--fg-dim);
+    stroke-width: 1;
+    fill: none;
+  }
+  .arch line.accent, .arch path.accent {
+    stroke: var(--accent-dim);
+  }
+  /* Blocs interactifs : cursor + highlight au hover */
+  .arch rect[data-tt] {
+    cursor: help;
+    transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+  }
+  .arch rect[data-tt]:hover {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  /* Spotlight : quand un rect est focus, dim tout ce qui n'est pas lié */
+  .arch line, .arch path {
+    transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+  }
+  .arch.has-focus rect[data-tt]:not(.tt-focused):not(.tt-related) {
+    opacity: 0.15;
+  }
+  .arch.has-focus text {
+    opacity: 0.4;
+    transition: opacity 0.15s;
+  }
+  .arch.has-focus line:not(.tt-focused),
+  .arch.has-focus path:not(.tt-focused) {
+    opacity: 0.08;
+  }
+  .arch line.tt-focused, .arch path.tt-focused {
+    stroke: var(--accent) !important;
+    stroke-width: 2 !important;
+    opacity: 1 !important;
+  }
+  .arch rect.tt-related {
+    stroke: var(--accent) !important;
+    stroke-width: 2 !important;
+    opacity: 1 !important;
+  }
+  .arch rect.tt-focused {
+    stroke: var(--accent) !important;
+    stroke-width: 2.5 !important;
+    opacity: 1 !important;
+  }
+  /* Les <text> au-dessus des rects ne doivent PAS capturer les events,
+     sinon closest('rect') ne remonte pas jusqu'au rect (siblings dans le SVG). */
+  .arch text {
+    pointer-events: none;
+  }
+  /* Tooltip flottant — position: fixed pour éviter le clipping par
+     .arch-wrap { overflow: auto } et rester lisible même au scroll. */
+  .arch-wrap {
+    position: relative;
+  }
+  .arch-tt {
+    position: fixed;
+    pointer-events: none;
+    /* Position fixe en haut-droite du viewport : plus de place vide, ne masque jamais le schéma */
+    right: 32px;
+    top: 32px;
+    max-width: 380px;
+    padding: 16px 20px;
+    background: var(--bg);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 20;
+    font-family: var(--font-mono);
+  }
+  .arch-tt.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .arch-tt .tt-name {
+    color: var(--accent);
+    font-family: var(--font-serif);
+    font-size: 14px;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .arch-tt .tt-label {
+    color: var(--fg-muted);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 8px;
+    margin-bottom: 2px;
+  }
+  .arch-tt .tt-text {
+    color: var(--fg);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Stack (deployment) diagram
+     ──────────────────────────────────────────────────────────── */
+  .stack {
+    margin-top: 4vh;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 44rem;
+    gap: 0;
+  }
+  .stack-layer {
+    padding: 2.4vh 2vw;
+    border-top: 1px solid var(--divider);
+    display: grid;
+    grid-template-columns: 12rem 1fr;
+    gap: 2rem;
+    align-items: baseline;
+  }
+  .stack-layer:last-child { border-bottom: 1px solid var(--divider); }
+  .stack-layer .layer-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .stack-layer .layer-name {
+    font-family: var(--font-serif);
+    font-size: 1.1rem;
+    color: var(--fg);
+  }
+  .stack-layer .layer-name .detail {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-left: 0.8em;
+    font-style: italic;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Demo slide
+     ──────────────────────────────────────────────────────────── */
+  .demo {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .demo .display {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .demo .url {
+    font-family: var(--font-mono);
+    color: var(--fg-muted);
+    font-size: 14px;
+    margin-top: 4vh;
+    letter-spacing: 0.08em;
+  }
+  .demo .switch-hint {
+    margin-top: 8vh;
+    font-size: 11px;
+    color: var(--fg-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .demo .switch-hint kbd {
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    color: var(--fg-muted);
+    background: var(--surface);
+    font-size: 10px;
+    margin: 0 0.2em;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Section divider slides
+     ──────────────────────────────────────────────────────────── */
+  .section-divider {
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .section-divider .section-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.25em;
+    margin: 0 0 4vh 0;
+  }
+  .section-divider .display {
+    max-width: 20ch;
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     Thanks slide
+     ──────────────────────────────────────────────────────────── */
+  .thanks {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .thanks .display { font-size: clamp(4rem, 10vw, 8rem); }
+  .thanks .display em { display: block; margin-top: 0.4em; font-size: 0.7em; }
+  .thanks .signature {
+    margin-top: 8vh;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* Small helpers */
+  .divider-h {
+    height: 1px;
+    background: var(--divider);
+    margin: 4vh 0;
+  }
+  .row {
+    display: flex;
+    gap: 2rem;
+    align-items: baseline;
+  }
+  .key {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--fg-muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    min-width: 8rem;
+  }
+  .val {
+    color: var(--fg);
+    font-size: 14px;
+  }
+
+  /* Hide chrome on cover for cleaner look? No — keep for navigation clarity */
+
+  @media (max-width: 900px) {
+    .split, .split-3 { grid-template-columns: 1fr; gap: 3vh; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .slide { padding: 4vh 6vw; }
+    .chrome-top, .chrome-bottom { left: 6vw; right: 6vw; }
+    .bar-row { grid-template-columns: 12ch 1fr 5ch; }
+  }
+</style>
+
+<div class="deck" id="deck">
+
+  <!-- ─── Chrome (persistent) ─────────────────────────────────── -->
+  <div class="chrome-top">
+    <a href="/" class="brand" title="Retour à l'application">traduction-audio</a>
+    <div class="right">
+      <span>Soutenance · 03.09.2026</span>
+      <a href="/" class="back-to-app" title="Retour à l'application">← app</a>
+    </div>
+  </div>
+
+  <div class="chrome-bottom">
+    <div class="counter">
+      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">15</span>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="nav-hint">
+      <kbd>←</kbd><kbd>→</kbd> naviguer
+    </div>
+  </div>
+
+  <!-- ─── 1 · Cover ───────────────────────────────────────────── -->
+  <section class="slide cover is-active" data-title="Ouverture">
+    <p class="eyebrow">Plateforme LLMOps · Traduction audio</p>
+    <h1 class="display">Traduction<br>audio<em>.</em></h1>
+    <p class="tagline">Rendre l'information trafic accessible, sans barrière de langue.</p>
+    <div class="signature">
+      <strong>Tetyana Tarasenko</strong>
+      <span>traduction-audio.fr · soutenance du 3 septembre 2026</span>
+    </div>
+  </section>
+
+  <!-- ─── 2 · Le problème ─────────────────────────────────────── -->
+  <section class="slide" data-title="Le problème">
+    <div class="slide-body">
+      <p class="eyebrow">Contexte &amp; solution</p>
+      <h2 class="title">Rendre l'info-trafic <em>107.7</em><br>accessible aux conducteurs étrangers.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Problème</p>
+          <p class="body" style="color:var(--fg-muted);">
+            La radio autoroutière <strong>107.7</strong> diffuse les alertes trafic (accidents, bouchons, fermetures) <strong>uniquement en français</strong>. Pour un conducteur étranger, cette information peut être difficile à comprendre au moment où elle est utile.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Solution</p>
+          <p class="body" style="color:var(--fg-muted);">
+            Une plateforme qui prend un audio français, le <strong>transcrit</strong>, le <strong>traduit</strong> dans la langue cible, et restitue la traduction en <strong>audio synthétisé</strong>.
+          </p>
+          <pre class="code" style="margin-top:2vh; font-size:13px; padding:2vh 1.5vw;"><span class="cm"># Chaîne d'inférence</span>
+Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <span class="kw">TTS</span> → Audio langue cible</pre>
+        </div>
+      </div>
+      <p class="caption" style="margin-top:3vh;">
+        Le défi n'est pas d'appeler trois modèles, c'est d'<strong>industrialiser</strong> la chaîne : évaluation, orchestration, déploiement, observabilité, sécurité. C'est un projet <strong>LLMOps</strong>, pas seulement une application IA.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── 3 · Solution + valeur ───────────────────────────────── -->
+  <section class="slide" data-title="Solution + valeur">
+    <div class="slide-body">
+      <p class="eyebrow">Ce que la plateforme apporte</p>
+      <h2 class="title">Un socle <em>réutilisable</em>,<br>déployé en production.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Cas d'usage principal</p>
+          <ul class="editorial">
+            <li><span><strong>Upload audio FR</strong> — MP3 / WAV ou enregistrement micro direct</span></li>
+            <li><span><strong>Transcription</strong> automatique (Faster-Whisper large-v3)</span></li>
+            <li><span><strong>Traduction</strong> vers EN, ES, DE, IT, UK</span></li>
+            <li><span><strong>Restitution vocale</strong> synthétisée (Voxtral · MMS-TTS)</span></li>
+            <li><span><strong>Latence</strong> end-to-end 2–3 s · coût &lt; 0,001 $ / requête</span></li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Valeur apportée</p>
+          <ul class="editorial">
+            <li><span><strong>Sécurité routière</strong> — prévention accidents secondaires</span></li>
+            <li><span><strong>Multilingue</strong> à coût maîtrisé — 5 langues cibles</span></li>
+            <li><span><strong>Architecture réutilisable</strong> — même socle pour d'autres cas d'usage audio</span></li>
+            <li><span><strong>Observable</strong> — chaque requête tracée, coût suivi en temps réel</span></li>
+          </ul>
+          <p class="caption" style="margin-top:2vh;">
+            Extensions du socle : <strong>Meeting Recorder</strong> · <strong>Live speech-to-speech</strong>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 4 · Deux use cases ──────────────────────────────────── -->
+  <section class="slide" data-title="2 use cases">
+    <div class="slide-body">
+      <p class="eyebrow">Deux cas d'usage</p>
+      <h2 class="title">Le socle,<br><em>et sa réutilisation</em>.</h2>
+      <div class="split">
+        <div class="card" style="border-color:var(--accent-dim); border:1px solid var(--accent-dim); border-radius:6px; padding:3vh 2vw;">
+          <p class="card-eyebrow" style="color:var(--accent);">Use case 1 — cœur du projet</p>
+          <h3>Information trafic multilingue</h3>
+          <p style="margin-top:1.5vh;">
+            Flash radio 107.7 ou enregistrement audio du conducteur →
+            transcription → traduction → synthèse vocale dans la langue de l'usager.
+          </p>
+          <p style="margin-top:2vh; color:var(--fg-dim); font-size:12px;">
+            → C'est ce cas qui a piloté la conception du pipeline complet.
+          </p>
+        </div>
+        <div class="card" style="padding:3vh 2vw;">
+          <p class="card-eyebrow">Use case 2 — réutilisation du socle</p>
+          <h3>Compte-rendu de réunion multilingue</h3>
+          <p style="margin-top:1.5vh;">
+            Enregistrement micro long en réunion → transcription continue chunked → génération d'un résumé structuré via LLM (synthétique, détaillé, actions).
+          </p>
+          <p style="margin-top:2vh; color:var(--accent); font-size:12px;">
+            💡 Démontre la réutilisabilité du socle sur un nouveau domaine (piste SaaS).
+          </p>
+        </div>
+      </div>
+      <p class="caption" style="margin-top:3vh; text-align:center;">
+        Extension supplémentaire : <strong>Live speech-to-speech</strong> via WebRTC direct navigateur ↔ OpenAI Realtime.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── Architecture globale ───────────────────────────────── -->
+  <section class="slide" data-title="Architecture">
+    <div class="slide-body">
+      <p class="eyebrow">Architecture</p>
+      <h2 class="title"><em>14 microservices</em>,<br>un seul réseau.</h2>
+      <div class="arch-wrap">
+        <svg class="arch" viewBox="0 0 1200 780" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:82vh; height:auto;">
+          <!-- Layer labels -->
+          <text class="layer" x="15" y="48">Edge</text>
+          <text class="layer" x="15" y="130">UI · Modes</text>
+          <text class="layer" x="15" y="230">Backend</text>
+          <text class="layer" x="15" y="335">Modèles</text>
+          <text class="layer" x="15" y="470">Multi-provider LLM</text>
+          <text class="layer" x="15" y="565">Batch</text>
+          <text class="layer" x="15" y="695">Observability</text>
+
+          <!-- Edge — Nginx (host, pas conteneur Docker) -->
+          <rect data-tt="nginx" x="500" y="20" width="200" height="55" fill="var(--surface)" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="600" y="45" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Nginx</text>
+          <text x="600" y="62" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">host · HTTPS · un seul port public</text>
+
+          <!-- UI row : Meeting | Frontend | Live -->
+          <rect data-tt="meeting" class="box-accent" x="270" y="100" width="180" height="55"/>
+          <text x="360" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Meeting</text>
+          <text x="360" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/meeting · STT+summary</text>
+
+          <rect data-tt="frontend" class="box-accent" x="500" y="100" width="200" height="55"/>
+          <text x="600" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Frontend</text>
+          <text x="600" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Next.js · upload · micro</text>
+
+          <rect data-tt="live" class="box-accent" x="750" y="100" width="180" height="55"/>
+          <text x="840" y="125" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Live 🎙</text>
+          <text x="840" y="142" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/live · WebRTC OpenAI</text>
+
+          <!-- Backend row : Gateway | Pipeline | Watcher -->
+          <rect data-tt="gateway" class="box-accent" x="200" y="195" width="200" height="65"/>
+          <text x="300" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Gateway</text>
+          <text x="300" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">FastAPI · JWT · Admin</text>
+          <text x="300" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8004</text>
+
+          <rect data-tt="pipeline" class="box-accent" x="500" y="195" width="200" height="65"/>
+          <text x="600" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Pipeline</text>
+          <text x="600" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL orch.</text>
+          <text x="600" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8000</text>
+
+          <rect data-tt="watcher" class="box-accent" x="800" y="195" width="220" height="65"/>
+          <text x="910" y="220" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Watcher</text>
+          <text x="910" y="237" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">poll 107.7 · Whisper embed</text>
+          <text x="910" y="252" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8005</text>
+
+          <!-- Models row : STT | LLM | TTS -->
+          <rect data-tt="stt" class="box" x="380" y="305" width="160" height="60"/>
+          <text x="460" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">STT</text>
+          <text x="460" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
+          <text x="460" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8001</text>
+
+          <rect data-tt="llm" class="box" x="560" y="305" width="160" height="60"/>
+          <text x="640" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">LLM</text>
+          <text x="640" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM · /translate /summarize</text>
+          <text x="640" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8002</text>
+
+          <rect data-tt="tts" class="box" x="740" y="305" width="160" height="60"/>
+          <text x="820" y="330" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">TTS</text>
+          <text x="820" y="347" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral / MMS-TTS</text>
+          <text x="820" y="360" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:8003</text>
+
+          <!-- LiteLLM router (petit bloc entre LLM et cloud providers) -->
+          <rect data-tt="litellm" class="box-accent" x="560" y="395" width="160" height="35"/>
+          <text x="640" y="418" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">LiteLLM router</text>
+
+          <!-- Cloud providers row (élargis à 160 pour éviter que le texte déborde) -->
+          <rect data-tt="groq" class="box" x="340" y="445" width="170" height="45"/>
+          <text x="425" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">GROQ</text>
+          <text x="425" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · rapide + gratuit</text>
+
+          <rect data-tt="openai" class="box" x="530" y="445" width="170" height="45"/>
+          <text x="615" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">OpenAI</text>
+          <text x="615" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">GPT-4o mini · prod default</text>
+
+          <rect data-tt="anthropic" class="box" x="720" y="445" width="170" height="45"/>
+          <text x="805" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Anthropic</text>
+          <text x="805" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · fallback qualité</text>
+
+          <!-- Batch group : Airflow (scheduler + webserver + postgres) englobés -->
+          <rect x="180" y="525" width="700" height="105" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
+          <text x="200" y="520" fill="var(--accent)" font-size="9" letter-spacing="0.2em" style="text-transform:uppercase; font-weight:500;">Airflow</text>
+
+          <rect data-tt="af-scheduler" class="box" x="200" y="540" width="140" height="50"/>
+          <text x="270" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Scheduler</text>
+          <text x="270" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAGs cron</text>
+
+          <rect data-tt="af-web" class="box" x="360" y="540" width="140" height="50"/>
+          <text x="430" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Webserver</text>
+          <text x="430" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">UI :8080</text>
+
+          <rect data-tt="af-pg" class="box" x="520" y="540" width="140" height="50"/>
+          <text x="590" y="563" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Postgres</text>
+          <text x="590" y="579" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">metadata</text>
+
+          <!-- 2 DAGs listés dans le bloc Airflow -->
+          <rect data-tt="dag-nightly" class="box" x="680" y="540" width="180" height="22"/>
+          <text x="770" y="555" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAG · nightly_golden_eval</text>
+
+          <rect data-tt="dag-weekly" class="box" x="680" y="568" width="180" height="22"/>
+          <text x="770" y="583" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">DAG · weekly_drift_check</text>
+
+          <text x="200" y="612" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.75">
+            → Airflow appelle Pipeline direct (bypass Gateway, pas de rate-limit)
+          </text>
+
+          <!-- Observability row -->
+          <rect data-tt="mlflow" class="box" x="180" y="655" width="150" height="60"/>
+          <text x="255" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">MLflow</text>
+          <text x="255" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Runs · Registry · 60 exp.</text>
+          <text x="255" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:5050</text>
+
+          <rect data-tt="prometheus" class="box" x="350" y="655" width="150" height="60"/>
+          <text x="425" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Prometheus</text>
+          <text x="425" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Scrape /metrics</text>
+          <text x="425" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:9090</text>
+
+          <rect data-tt="grafana" class="box" x="520" y="655" width="150" height="60"/>
+          <text x="595" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Grafana</text>
+          <text x="595" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">12 panels dashboards</text>
+          <text x="595" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:3001</text>
+
+          <rect data-tt="langfuse" class="box" x="690" y="655" width="160" height="60" stroke-dasharray="4,2"/>
+          <text x="770" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">Langfuse</text>
+          <text x="770" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">cloud · traces LLM</text>
+          <text x="770" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">external</text>
+
+          <!-- ═══════════ Flows métier (accent doré, solide) ═══════════ -->
+          <!-- Nginx → Frontend -->
+          <line data-from="nginx" data-to="frontend" class="accent" x1="600" y1="75" x2="600" y2="100" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Meeting → Gateway (auth) -->
+          <line data-from="meeting" data-to="gateway" class="accent" x1="360" y1="155" x2="300" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Gateway -->
+          <line data-from="frontend" data-to="gateway" class="accent" x1="550" y1="155" x2="380" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Pipeline -->
+          <line data-from="frontend" data-to="pipeline" class="accent" x1="600" y1="155" x2="600" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Frontend → Watcher (SSE admin) -->
+          <line data-from="frontend" data-to="watcher" class="accent" x1="670" y1="155" x2="850" y2="195" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Live → Gateway (ephemeral token OpenAI) -->
+          <line data-from="live" data-to="gateway" class="accent" x1="800" y1="155" x2="400" y2="195" stroke="var(--accent-dim)" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <text x="620" y="180" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">/realtime/session</text>
+          <!-- Pipeline → STT -->
+          <line data-from="pipeline" data-to="stt" class="accent" x1="580" y1="260" x2="460" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → LLM -->
+          <line data-from="pipeline" data-to="llm" class="accent" x1="620" y1="260" x2="640" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → TTS -->
+          <line data-from="pipeline" data-to="tts" class="accent" x1="660" y1="260" x2="820" y2="305" stroke="var(--accent-dim)" stroke-width="1.5"/>
+
+          <!-- Meeting → STT direct (chunks 30s) -->
+          <path data-from="meeting" data-to="stt" class="accent" d="M 360,155 C 380,220 400,270 440,305" stroke="var(--accent-dim)" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+          <!-- Meeting → LLM direct (/summarize) -->
+          <path data-from="meeting" data-to="llm" class="accent" d="M 380,155 C 500,220 580,270 620,305" stroke="var(--accent-dim)" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+
+          <!-- LLM → LiteLLM router -->
+          <line data-from="llm" data-to="litellm" x1="640" y1="365" x2="640" y2="395" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- LiteLLM → 3 providers cloud -->
+          <line data-from="litellm" data-to="groq" x1="600" y1="430" x2="425" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="openai" x1="640" y1="430" x2="615" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+          <line data-from="litellm" data-to="anthropic" x1="680" y1="430" x2="805" y2="445" stroke="var(--accent-dim)" stroke-width="1.2"/>
+
+          <!-- ═══════════ Watcher → LLM direct (dashed muted) ═══════════ -->
+          <line data-from="watcher" data-to="llm" x1="890" y1="260" x2="700" y2="320" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+          <text x="810" y="288" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">POST /translate</text>
+
+          <!-- ═══════════ Airflow orchestre le pipeline (batch) ═══════════ -->
+          <!-- Airflow-Scheduler → Pipeline (batch nightly_golden_eval) -->
+          <path data-from="af-scheduler" data-to="pipeline" d="M 270,540 C 300,480 400,380 500,260" stroke="var(--fg-dim)" stroke-width="1" fill="none" stroke-dasharray="6,3"/>
+          <!-- DAG nightly → Pipeline (relation logique via scheduler) -->
+          <path data-from="dag-nightly" data-to="pipeline" d="M 770,540 C 760,450 700,350 650,260" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="4,3" opacity="0"/>
+          <!-- DAG weekly → MLflow (drift check) -->
+          <path data-from="dag-weekly" data-to="mlflow" d="M 770,590 C 550,620 350,640 260,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="4,3" opacity="0"/>
+
+          <!-- ═══════════ Observability (pointillé fin) ═══════════ -->
+          <!-- Prometheus scrape ALL backend services -->
+          <path data-from="prometheus" data-to="pipeline" d="M 425,655 C 425,600 480,340 550,300" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+          <path data-from="prometheus" data-to="gateway"  d="M 400,655 C 350,550 300,400 300,260" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="stt"      d="M 425,655 C 425,550 440,400 440,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="llm"      d="M 425,655 C 500,550 600,400 640,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="tts"      d="M 425,655 C 550,550 750,400 820,365" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <path data-from="prometheus" data-to="watcher"  d="M 500,655 C 700,550 850,350 910,260" stroke="var(--fg-dim)" stroke-width="0.6" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <text x="450" y="530" fill="var(--fg-dim)" font-size="9" font-family="ui-monospace" opacity="0.7">scrape /metrics</text>
+
+          <!-- Grafana ← Prometheus -->
+          <line data-from="prometheus" data-to="grafana" x1="500" y1="685" x2="520" y2="685" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.6"/>
+
+          <!-- Pipeline → MLflow -->
+          <path data-from="pipeline" data-to="mlflow" d="M 550,260 C 400,400 300,550 255,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Pipeline → Langfuse -->
+          <path data-from="pipeline" data-to="langfuse" d="M 680,260 C 720,400 750,560 770,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Watcher → Langfuse -->
+          <path data-from="watcher" data-to="langfuse" d="M 940,260 C 900,400 850,560 800,655" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- ═══════════ Légende ═══════════ -->
+          <g transform="translate(920, 20)">
+            <text x="0" y="-6" fill="var(--fg-muted)" font-size="9" letter-spacing="0.15em" style="text-transform:uppercase;">Légende</text>
+            <line x1="0" y1="8" x2="24" y2="8" stroke="var(--accent-dim)" stroke-width="1.5"/>
+            <text x="30" y="12" fill="var(--fg-muted)" font-size="10">flow métier</text>
+            <line x1="0" y1="26" x2="24" y2="26" stroke="var(--accent-dim)" stroke-width="1.2" stroke-dasharray="4,3"/>
+            <text x="30" y="30" fill="var(--fg-muted)" font-size="10">flow direct (bypass)</text>
+            <line x1="0" y1="44" x2="24" y2="44" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="6,3"/>
+            <text x="30" y="48" fill="var(--fg-muted)" font-size="10">batch · service ↔ service</text>
+            <line x1="0" y1="62" x2="24" y2="62" stroke="var(--fg-dim)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.7"/>
+            <text x="30" y="66" fill="var(--fg-muted)" font-size="10" opacity="0.8">observability</text>
+          </g>
+        </svg>
+      </div>
+      <p class="caption" style="margin-top:2vh;">
+        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend Next.js + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe. LLM proxifie 3 providers cloud (GROQ, OpenAI, Anthropic) via LiteLLM. Meeting et Live passent en direct par le Gateway (STT + LLM pour Meeting, OpenAI Realtime WebRTC pour Live). Survole chaque bloc pour voir les détails.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── Parcours de la donnée ──────────────────────────────── -->
+  <section class="slide" data-title="Parcours données">
+    <div class="slide-body">
+      <p class="eyebrow">Parcours de la donnée</p>
+      <h2 class="title">Deux flux,<br><em>deux parcours différents</em>.</h2>
+      <div class="arch-wrap">
+        <svg class="arch" viewBox="0 0 1200 700" width="1200" preserveAspectRatio="xMidYMid meet" style="max-width:100%; max-height:82vh; height:auto;">
+          <!-- Layer labels -->
+          <text class="layer" x="15" y="48">Flux A · Upload user</text>
+          <text class="layer" x="15" y="380">Flux B · Watcher radio 107.7</text>
+
+          <!-- ═══════════ FLUX A : Upload / Traduction on-demand ═══════════ -->
+          <!-- Step 1 : User uploads -->
+          <rect data-tt="fA-user" class="box-accent" x="30" y="80" width="130" height="55"/>
+          <text x="95" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">1 · User</text>
+          <text x="95" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">upload MP3/WAV</text>
+
+          <!-- Step 2 : Frontend -->
+          <rect data-tt="fA-frontend" class="box-accent" x="200" y="80" width="130" height="55"/>
+          <text x="265" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">2 · Frontend</text>
+          <text x="265" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">POST /process</text>
+
+          <!-- Step 3 : Gateway JWT check -->
+          <rect data-tt="fA-gateway" class="box-accent" x="370" y="80" width="130" height="55"/>
+          <text x="435" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Gateway</text>
+          <text x="435" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">JWT check</text>
+
+          <!-- Step 4 : Pipeline LCEL orchestrator -->
+          <rect data-tt="fA-pipeline" class="box-accent" x="540" y="80" width="150" height="55"/>
+          <text x="615" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · Pipeline</text>
+          <text x="615" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL</text>
+
+          <!-- Step 5 : STT -->
+          <rect data-tt="fA-stt" class="box" x="80" y="180" width="130" height="60"/>
+          <text x="145" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · STT</text>
+          <text x="145" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
+          <text x="145" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte FR</text>
+
+          <!-- Step 6 : Prompt-guard IN -->
+          <rect data-tt="fA-guard-in" class="box" x="240" y="180" width="130" height="60"/>
+          <text x="305" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · Guard IN</text>
+          <text x="305" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-injection</text>
+          <text x="305" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte safe</text>
+
+          <!-- Step 7 : LLM translate -->
+          <rect data-tt="fA-llm" class="box" x="400" y="180" width="130" height="60"/>
+          <text x="465" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · LLM</text>
+          <text x="465" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM → OpenAI</text>
+          <text x="465" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte EN</text>
+
+          <!-- Step 8 : Prompt-guard OUT -->
+          <rect data-tt="fA-guard-out" class="box" x="560" y="180" width="130" height="60"/>
+          <text x="625" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · Guard OUT</text>
+          <text x="625" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-hallucination</text>
+          <text x="625" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ vérif ratio</text>
+
+          <!-- Step 9 : TTS -->
+          <rect data-tt="fA-tts" class="box" x="720" y="180" width="130" height="60"/>
+          <text x="785" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">9 · TTS</text>
+          <text x="785" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral EN</text>
+          <text x="785" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ audio MP3</text>
+
+          <!-- Step 10 : back to User -->
+          <rect data-tt="fA-return" class="box-accent" x="880" y="180" width="140" height="60"/>
+          <text x="950" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">10 · Frontend</text>
+          <text x="950" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">audio + texte</text>
+          <text x="950" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ affiche user</text>
+
+          <!-- Observability async pour Flux A -->
+          <rect data-tt="fA-obs" class="box" x="1030" y="130" width="150" height="60" stroke-dasharray="4,2"/>
+          <text x="1105" y="155" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Async</text>
+          <text x="1105" y="172" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Langfuse traces</text>
+          <text x="1105" y="185" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">MLflow tracing</text>
+
+          <!-- Flèches Flux A -->
+          <line data-from="fA-user" data-to="fA-frontend" class="accent" x1="160" y1="107" x2="200" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-frontend" data-to="fA-gateway" class="accent" x1="330" y1="107" x2="370" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-gateway" data-to="fA-pipeline" class="accent" x1="500" y1="107" x2="540" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <path data-from="fA-pipeline" data-to="fA-stt" class="accent" d="M 615,135 C 615,160 200,150 145,180" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
+          <line data-from="fA-stt" data-to="fA-guard-in" class="accent" x1="210" y1="210" x2="240" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-guard-in" data-to="fA-llm" class="accent" x1="370" y1="210" x2="400" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-llm" data-to="fA-guard-out" class="accent" x1="530" y1="210" x2="560" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-guard-out" data-to="fA-tts" class="accent" x1="690" y1="210" x2="720" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fA-tts" data-to="fA-return" class="accent" x1="850" y1="210" x2="880" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Pipeline → Async (observability) -->
+          <path data-from="fA-pipeline" data-to="fA-obs" d="M 690,110 C 900,110 1000,140 1030,160" stroke="var(--fg-dim)" stroke-width="0.8" fill="none" stroke-dasharray="3,3" opacity="0.55"/>
+
+          <!-- Séparateur horizontal entre flux A et B -->
+          <line x1="30" y1="330" x2="1170" y2="330" stroke="var(--divider)" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+
+          <!-- ═══════════ FLUX B : Watcher radio 107.7 ═══════════ -->
+          <!-- Step 1 : Cron interne -->
+          <rect data-tt="fB-cron" class="box-accent" x="30" y="410" width="130" height="55"/>
+          <text x="95" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">1 · Cron</text>
+          <text x="95" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">poll toutes N min</text>
+
+          <!-- Step 2 : HTTP GET radio.stream -->
+          <rect data-tt="fB-fetch" class="box-accent" x="200" y="410" width="150" height="55"/>
+          <text x="275" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">2 · HTTP GET</text>
+          <text x="275" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">radio 107.7 stream</text>
+
+          <!-- Step 3 : Watcher container (Whisper embarqué) -->
+          <rect data-tt="fB-whisper" class="box-accent" x="390" y="410" width="160" height="55"/>
+          <text x="470" y="435" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Whisper embarqué</text>
+          <text x="470" y="452" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">(pas le STT dédié !)</text>
+
+          <!-- Step 4 : Extraction événements -->
+          <rect data-tt="fB-extract" class="box" x="80" y="510" width="150" height="60"/>
+          <text x="155" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · Extract</text>
+          <text x="155" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">regex + heuristics</text>
+          <text x="155" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ événements bruts</text>
+
+          <!-- Step 5 : LLM /translate direct (bypass pipeline) -->
+          <rect data-tt="fB-llm" class="box" x="260" y="510" width="150" height="60"/>
+          <text x="335" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · LLM direct</text>
+          <text x="335" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">POST /translate</text>
+          <text x="335" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ structuré JSON</text>
+
+          <!-- Step 6 : DB persist -->
+          <rect data-tt="fB-db" class="box" x="440" y="510" width="150" height="60"/>
+          <text x="515" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · DB</text>
+          <text x="515" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">watcher_data volume</text>
+          <text x="515" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ persist événements</text>
+
+          <!-- Step 7 : SSE push -->
+          <rect data-tt="fB-sse" class="box" x="620" y="510" width="150" height="60"/>
+          <text x="695" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · SSE stream</text>
+          <text x="695" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/stream endpoint</text>
+          <text x="695" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ push admin</text>
+
+          <!-- Step 8 : Admin dashboard -->
+          <rect data-tt="fB-admin" class="box-accent" x="800" y="510" width="180" height="60"/>
+          <text x="890" y="535" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · Admin Dashboard</text>
+          <text x="890" y="550" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">/admin/traffic</text>
+          <text x="890" y="565" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ affiche live</text>
+
+          <!-- Note : pas de TTS, pas de Pipeline, pas d'auth -->
+          <rect data-tt="fB-note" class="box" x="1030" y="460" width="150" height="80" stroke-dasharray="4,2"/>
+          <text x="1105" y="482" text-anchor="middle" fill="var(--warn)" font-size="11" font-weight="500">Différences</text>
+          <text x="1105" y="500" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de TTS</text>
+          <text x="1105" y="514" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de Pipeline</text>
+          <text x="1105" y="528" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">❌ pas de Gateway</text>
+
+          <!-- Flèches Flux B -->
+          <line data-from="fB-cron" data-to="fB-fetch" class="accent" x1="160" y1="437" x2="200" y2="437" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-fetch" data-to="fB-whisper" class="accent" x1="350" y1="437" x2="390" y2="437" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <path data-from="fB-whisper" data-to="fB-extract" class="accent" d="M 470,465 C 350,485 200,500 155,510" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
+          <line data-from="fB-extract" data-to="fB-llm" class="accent" x1="230" y1="540" x2="260" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-llm" data-to="fB-db" class="accent" x1="410" y1="540" x2="440" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-db" data-to="fB-sse" class="accent" x1="590" y1="540" x2="620" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <line data-from="fB-sse" data-to="fB-admin" class="accent" x1="770" y1="540" x2="800" y2="540" stroke="var(--accent-dim)" stroke-width="1.5"/>
+
+          <!-- Légende -->
+          <g transform="translate(30, 620)">
+            <text x="0" y="0" fill="var(--fg-muted)" font-size="10" letter-spacing="0.1em" style="text-transform:uppercase;">
+              Survole une étape pour voir sa description et son rôle. Le spotlight révèle les liens du flux.
+            </text>
+            <text x="0" y="20" fill="var(--fg-muted)" font-size="10" letter-spacing="0.05em">
+              <tspan fill="var(--accent)">Flux A</tspan> = passe par Gateway + Pipeline LCEL, appelle STT dédié, produit un audio.
+              <tspan fill="var(--warn)"> Flux B</tspan> = code Watcher direct, Whisper embarqué, pas de TTS, alimente le dashboard.
+            </text>
+          </g>
+        </svg>
+      </div>
+      <p class="caption" style="margin-top:2vh;">
+        Même stack, deux parcours très différents. Le <strong>Flux A</strong> est synchrone bloquant (user attend son audio). Le <strong>Flux B</strong> est asynchrone continu (background, alimente le dashboard admin). Le Watcher n'appelle ni le Pipeline ni le service STT — il a son propre Whisper embarqué et parle direct au LLM.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── 7 · Pipeline STT→LLM→TTS + 3 orchestrations ─────────── -->
+  <section class="slide" data-title="Pipeline & orchestration">
+    <div class="slide-body">
+      <p class="eyebrow">Orchestration d'une requête</p>
+      <h2 class="title">Pipeline <em>LangChain LCEL</em>,<br>trois niveaux d'orchestration.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Chaîne STT → LLM → TTS</p>
+          <p class="body" style="color:var(--fg-muted); font-size:14px;">
+            LCEL compose les trois étapes avec l'opérateur <code>|</code>. Chaque étape est un <code>Runnable</code> typé, testable et instrumenté. Le tracing Langfuse est natif.
+          </p>
+          <pre class="code" style="margin-top:1.5vh; font-size:13px;"><span class="cm"># LCEL — 3 étapes composées</span>
+pipeline = (
+    <span class="kw">RunnableLambda</span>(_stt_step)
+    | <span class="kw">RunnableLambda</span>(_llm_step)
+    | <span class="kw">RunnableLambda</span>(_tts_step)
+)</pre>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">3 niveaux d'orchestration</p>
+          <ul class="editorial">
+            <li><span><strong>Docker Compose</strong> — cycle de vie des 14 conteneurs (infrastructure)</span></li>
+            <li><span><strong>LangChain LCEL</strong> — chaîne d'une requête IA (temps réel)</span></li>
+            <li><span><strong>Airflow</strong> — traitements batch planifiés (nightly / weekly)</span></li>
+          </ul>
+          <p class="caption" style="margin-top:2vh;">
+            Airflow n'intervient <strong>pas</strong> dans le chemin temps réel de l'utilisateur. Séparation stricte des responsabilités.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 8 · Expérimentation & choix modèles ─────────────────── -->
+  <section class="slide" data-title="Expérimentation">
+    <div class="slide-body">
+      <p class="eyebrow">Choix des modèles</p>
+      <h2 class="title">Une décision <em>mesurée</em>,<br>pas une impression.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Protocole d'évaluation</p>
+          <div style="margin-top:2vh; font-size:20px; line-height:1.6; color:var(--fg);">
+            <strong>12 configurations</strong> × <strong>7 audios golden</strong><br>
+            = <strong>84 évaluations individuelles</strong> (Langfuse)<br>
+            → <strong>12 runs agrégés</strong> (MLflow)
+          </div>
+          <p class="body" style="color:var(--fg-muted); font-size:13px; margin-top:2vh;">
+            <strong>2 Whisper × 2 LLM × 3 prompts.</strong> Métriques : BLEU (sacrebleu), METEOR (nltk), WER (jiwer), latence, coût.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Résultats et décision</p>
+          <div class="chart" style="margin-top:1vh;">
+            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ" style="color:var(--fg-muted);">historique</span></div><div class="bar-track"><div class="bar-fill" style="width:44%"></div></div><div class="bar-value">44.0</div></div>
+            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 70B · v1.1 <span class="champ">champion</span></div><div class="bar-track"><div class="bar-fill" style="width:50%"></div></div><div class="bar-value">49.64</div></div>
+          </div>
+          <p class="caption" style="margin-top:2vh;">
+            <strong>Champion expérimental</strong> : large-v3 + Llama 70B + v1.1 (BLEU 49.64 · METEOR 0.713).<br>
+            <strong>Historiquement retenu</strong> : 8B pour compromis coût / qualité.<br>
+            <strong>Prod actuelle</strong> : GPT-4o mini via LiteLLM (post-dépréciation Groq, rebenchmark prévu).
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 9 · Boucle LLMOps ───────────────────────────────────── -->
+  <section class="slide" data-title="Boucle LLMOps">
+    <div class="slide-body">
+      <p class="eyebrow">Industrialisation LLMOps</p>
+      <h2 class="title">Expérimenter,<br>observer, <em>surveiller</em>.</h2>
+      <div class="split-3">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Expérimenter</p>
+          <h3 class="font-serif" style="font-size:1.35rem; color:var(--fg); margin:1.5vh 0;">MLflow</h3>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            12 runs agrégés (1 par configuration).<br>
+            Model Registry (Whisper, TTS).<br>
+            Tag <code>champion</code> automatique.<br>
+            <code>mlflow.evaluate()</code> natif : BLEU, ROUGE, METEOR, WER.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Observer</p>
+          <h3 class="font-serif" style="font-size:1.35rem; color:var(--fg); margin:1.5vh 0;">Langfuse</h3>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            84 évaluations individuelles importées.<br>
+            Traces waterfall STT + LLM + TTS.<br>
+            Versionnage des prompts (v1.0 / v1.1 / v1.2).<br>
+            Coût, tokens, latence par requête.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Surveiller</p>
+          <h3 class="font-serif" style="font-size:1.35rem; color:var(--fg); margin:1.5vh 0;">Airflow</h3>
+          <p class="body" style="color:var(--fg-muted); font-size:13px;">
+            DAG <code>nightly_golden_eval</code> à 02:00 UTC.<br>
+            DAG <code>weekly_drift_check</code> dimanche 03:00.<br>
+            Bypass Gateway (batch legitime).<br>
+            BLEU/METEOR automatique et alerting Slack : prochain incrément.
+          </p>
+        </div>
+      </div>
+      <p class="caption" style="margin-top:4vh; text-align:center; font-size:14px;">
+        <strong>Observabilité à trois niveaux</strong> : applicative (MLflow), LLM (Langfuse), et infrastructure (Prometheus + Grafana, slide suivante).
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── 10 · Monitoring & sécurité ──────────────────────────── -->
+  <section class="slide" data-title="Monitoring &amp; sécurité">
+    <div class="slide-body">
+      <p class="eyebrow">Production-ready</p>
+      <h2 class="title">Surveiller,<br><em>protéger</em>.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Monitoring infrastructure</p>
+          <p class="body" style="color:var(--fg-muted); font-size:14px;">
+            <strong>Prometheus</strong> scrape <code>/metrics</code> sur les 6 services FastAPI toutes les 15 s. <strong>Grafana</strong> affiche latence p50/p95/p99, throughput, erreurs 4xx/5xx, coût cumulé. Dashboards versionnés en Git.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Sécurité, 3 couches</p>
+          <ul class="editorial" style="margin-top:0;">
+            <li><span><strong>Réseau</strong> — un seul port public (443), 14 conteneurs bindés <code>127.0.0.1</code>, HTTPS Let's Encrypt</span></li>
+            <li><span><strong>Auth applicative</strong> — JWT HS256 15 min + refresh 7j rotatif SHA-256, bcrypt password, 25 tests unitaires</span></li>
+            <li><span><strong>LLM</strong> — prompt-guard : pre-check regex FR/EN, séparation structurée <code>&lt;user_text&gt;</code>, post-check ratio + leak detection (inspiré OWASP LLM01)</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 11 · Déploiement + CI/CD ─────────────────────────────── -->
+  <section class="slide" data-title="Déploiement + CI/CD">
+    <div class="slide-body">
+      <p class="eyebrow">Du Git à la production</p>
+      <h2 class="title"><em>14 conteneurs</em>,<br>déploiement automatisé.</h2>
+      <div class="split">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Infrastructure Docker</p>
+          <p class="body" style="color:var(--fg-muted); font-size:14px;">
+            <strong>14 conteneurs</strong> = 6 microservices FastAPI + 1 frontend Next.js + 7 conteneurs d'infrastructure (MLflow, Prometheus, Grafana, 3 Airflow + init).
+          </p>
+          <p class="body" style="color:var(--fg-muted); font-size:14px; margin-top:2vh;">
+            Un fichier <code>docker-compose.yml</code>, healthchecks natifs, volumes persistants, réseau Docker isolé. VPS Hetzner + Nginx + Let's Encrypt.
+          </p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">CI / CD GitHub Actions</p>
+          <ul class="editorial" style="margin-top:0;">
+            <li><span><strong>CI</strong> — sur push/PR sur <code>main</code>, exécute <code>pytest tests/unit/</code> et publie le rapport JUnit</span></li>
+            <li><span><strong>Tests intégration</strong> — 23 tests (nécessitent Docker), exécutés séparément</span></li>
+            <li><span><strong>CD</strong> — sur succès CI : SSH vers hermes → git pull → <code>./scripts/deploy.sh</code> → <code>docker compose ps</code></span></li>
+            <li><span><strong>Déclenchement manuel</strong> possible service par service</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 12 · Démo ───────────────────────────────────────────── -->
+  <section class="slide demo" data-title="Démo">
+    <p class="eyebrow">Démonstration</p>
+    <h1 class="display">Démonstration<em>.</em></h1>
+    <p class="url" style="margin-top:2vh;">traduction-audio.fr</p>
+    <div style="margin-top:6vh; display:flex; flex-direction:column; gap:2vh; text-align:left; max-width:640px; font-size:14px; color:var(--fg-muted); font-family:var(--font-mono);">
+      <div style="display:grid; grid-template-columns:2rem 6ch 1fr; gap:1rem; align-items:baseline;">
+        <span style="color:var(--accent);">1</span><span>~2 min</span><span>Upload flash-info FR → transcription → traduction anglais → audio synthétisé.</span>
+      </div>
+      <div style="display:grid; grid-template-columns:2rem 6ch 1fr; gap:1rem; align-items:baseline;">
+        <span style="color:var(--accent);">2</span><span>~1 min</span><span>Dashboard admin : événements watcher 107.7 en temps réel, traces Langfuse, coûts.</span>
+      </div>
+      <div style="display:grid; grid-template-columns:2rem 6ch 1fr; gap:1rem; align-items:baseline;">
+        <span style="color:var(--accent);">3</span><span>~1 min</span><span>Live speech-to-speech (WebRTC OpenAI Realtime) : je parle FR, réponse EN instantanée.</span>
+      </div>
+    </div>
+    <p class="switch-hint">Retour aux slides · <kbd>Cmd</kbd> + <kbd>Tab</kbd></p>
+  </section>
+
+  <!-- ─── 13 · Résultats + limites + roadmap ──────────────────── -->
+  <section class="slide" data-title="Résultats + roadmap">
+    <div class="slide-body">
+      <p class="eyebrow">Bilan &amp; perspectives</p>
+      <h2 class="title">Ce qui est livré,<br><em>ce qui vient</em>.</h2>
+      <div class="split-3">
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Aujourd'hui</p>
+          <ul class="editorial" style="margin-top:0;">
+            <li><span>Pipeline STT → LLM → TTS en production</span></li>
+            <li><span>Expérimentation reproductible (84 évaluations)</span></li>
+            <li><span>Observabilité 3 niveaux (Prometheus, MLflow, Langfuse)</span></li>
+            <li><span>CI + CD automatisés (GitHub Actions → hermes)</span></li>
+            <li><span>14 conteneurs, HTTPS, JWT, prompt-guard</span></li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Limites assumées</p>
+          <ul class="editorial" style="margin-top:0;">
+            <li><span>Golden dataset limité à 7 audios</span></li>
+            <li><span>GPT-4o mini pas encore rebenchmarké sur protocole identique</span></li>
+            <li><span>Gateway pas encore centralisée à 100 % (frontend a des accès directs)</span></li>
+            <li><span>Nightly Airflow : disponibilité + latence, BLEU/METEOR non intégrés</span></li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="color:var(--accent);">Priorités +3 mois</p>
+          <ul class="editorial" style="margin-top:0;">
+            <li><span>Golden dataset 7 → 50+ audios</span></li>
+            <li><span>Benchmark GPT-4o mini sur protocole identique</span></li>
+            <li><span>BLEU/METEOR + alerting Slack dans le DAG nightly</span></li>
+            <li><span>Centralisation complète Gateway (durcissement)</span></li>
+            <li><span>Speaker diarization pour Meeting Recorder</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="caption" style="margin-top:3vh;">
+        La priorité n'est pas d'ajouter davantage de technologies, mais de <strong>renforcer la robustesse de l'évaluation</strong> et de <strong>fermer complètement la boucle LLMOps</strong>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── 14 · Merci ─────────────────────────────────────────── -->
+  <section class="slide thanks" data-title="Merci">
+    <h2 class="display">Merci<em>. Questions.</em></h2>
+    <div class="signature">
+      traduction-audio.fr · Tetyana Tarasenko
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dots   = document.getElementById('dots');
+  const cur    = document.getElementById('counter-current');
+  const tot    = document.getElementById('counter-total');
+  let idx = 0;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', `Aller à la slide ${i + 1}`);
+    b.addEventListener('click', () => go(i));
+    dots.appendChild(b);
+  });
+  const dotBtns = Array.from(dots.querySelectorAll('button'));
+
+  const pad = n => String(n).padStart(2, '0');
+  tot.textContent = pad(slides.length);
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    slides[idx].classList.remove('is-active');
+    dotBtns[idx].classList.remove('is-active');
+    idx = n;
+    slides[idx].classList.add('is-active');
+    dotBtns[idx].classList.add('is-active');
+    cur.textContent = pad(idx + 1);
+    // update URL hash for direct linking / demo mode
+    if (history.replaceState) {
+      history.replaceState(null, '', '#' + (idx + 1));
+    }
+    // scroll active slide's inner content to top (in case content overflows)
+    const inner = slides[idx].querySelector('.slide-body');
+    if (inner) inner.scrollTop = 0;
+  }
+
+  // Init from hash
+  const h = parseInt(location.hash.replace('#', ''), 10);
+  if (!isNaN(h) && h >= 1 && h <= slides.length) {
+    go(h - 1);
+  } else {
+    dotBtns[0].classList.add('is-active');
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    // Ignore if typing in a form field
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        e.preventDefault();
+        go(idx + 1);
+        break;
+      case 'ArrowLeft':
+      case 'PageUp':
+        e.preventDefault();
+        go(idx - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(slides.length - 1);
+        break;
+    }
+  });
+
+  // Touch / swipe (rudimentary)
+  let touchX = null;
+  document.addEventListener('touchstart', e => {
+    touchX = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) go(idx + (dx < 0 ? 1 : -1));
+    touchX = null;
+  }, { passive: true });
+
+  // ── Architecture tooltips ────────────────────────────────────────────────
+  // Contenu par composant : nom / ce que c'est / pourquoi ce choix.
+  const TT = {
+    nginx: {
+      name: "Nginx (host)",
+      desc: "Serveur web reverse-proxy tournant sur l'hôte hermes (pas conteneurisé).",
+      why:  "Terminaison SSL/TLS + routage HTTPS externe vers frontend et gateway. Un seul port public (443) — les 14 conteneurs restent bindés sur 127.0.0.1, invisibles depuis l'extérieur. Léger, éprouvé, standard."
+    },
+    frontend: {
+      name: "Frontend · Next.js 15",
+      desc: "App React server components, build standalone. Point d'entrée principal : upload audio + enregistrement micro.",
+      why:  "SSR + hydratation légère, envs NEXT_PUBLIC_* baked au build. Alternative Streamlit écartée : UX/DX trop limité pour un vrai produit."
+    },
+    meeting: {
+      name: "Meeting recorder · /meeting",
+      desc: "Enregistrement long en direct, découpé en chunks de 30s, transcrit à la volée puis résumé (exécutif, détaillé, actions).",
+      why:  "Contourne le Pipeline (STT direct + LLM /summarize), gère les silences et redémarre le MediaRecorder pour éviter les fragments WebM sans header. 5 langues de sortie."
+    },
+    live: {
+      name: "Live speech-to-speech · /live",
+      desc: "Traduction simultanée bidirectionnelle via WebRTC direct navigateur ↔ OpenAI Realtime API (gpt-realtime, GA oct 2025).",
+      why:  "Ephemeral token créé par le Gateway (la vraie clé OpenAI ne sort jamais du serveur). Latence ~500ms. VAD strict + mute auto anti-boucle. 6 langues source × 6 cible."
+    },
+    gateway: {
+      name: "Gateway · FastAPI · :8004",
+      desc: "Point d'entrée unique. 24 routes : /auth/*, /admin/*, /realtime/session.",
+      why:  "JWT (access 15 min + refresh rotatif 7 j), rate-limit, proxy admin. Kong/Nginx écartés : FastAPI reste homogène avec le reste du stack et testable en pytest."
+    },
+    pipeline: {
+      name: "Pipeline · LangChain LCEL · :8000",
+      desc: "Orchestrateur STT → LLM → TTS via Runnable steps composables. Prompt-guard + chunking auto.",
+      why:  "LCEL donne un chaînage typé, traçable Langfuse, retry/circuit-breaker natif. Alternative pipeline maison en dict Python : perte de l'écosystème LangChain."
+    },
+    watcher: {
+      name: "Watcher · :8005",
+      desc: "Service autonome qui poll la radio 107.7 (7 zones autoroutières) et extrait les flash-infos trafic.",
+      why:  "Whisper embarqué + LLM → événements structurés + SSE vers dashboard admin. Cron ne suffit pas : besoin de streaming continu et déduplication."
+    },
+    stt: {
+      name: "STT · Faster-Whisper large-v3 · :8001",
+      desc: "Speech-to-text open-source (CTranslate2). Route POST /transcribe. Cache modèle sur volume dédié.",
+      why:  "Meilleur modèle FR open, 4× plus rapide que whisper.cpp en CPU. API cloud écartée pour éviter la dépendance et le coût par minute."
+    },
+    llm: {
+      name: "LLM · FastAPI · :8002",
+      desc: "Service qui expose /translate et /summarize. Toutes les requêtes passent par le LiteLLM router pour choisir le provider.",
+      why:  "Découplage : le pipeline appelle une seule URL, peu importe le vrai backend (GROQ, OpenAI, Anthropic). Facilite le fallback, le A/B testing de modèles et le changement de provider sans redéploiement du pipeline."
+    },
+    litellm: {
+      name: "LiteLLM router",
+      desc: "Proxy Python qui unifie l'API OpenAI Chat Completions vers 100+ providers cloud. Utilisé comme lib dans le service LLM.",
+      why:  "Un seul format d'API à gérer. Model aliases (Groq deprecated → OpenAI transparent). Retry auto sur erreurs transitoires. Alternative Ollama écartée (VRAM insuffisante sur hermes)."
+    },
+    groq: {
+      name: "GROQ (cloud)",
+      desc: "Provider LLM ultra-rapide (Llama 3.1 8B / 70B). Inference sur puces LPU maison.",
+      why:  "Champion BLEU 49.64 sur nos 7 audios golden (config large-v3 + Llama 70B + v1.1). Retenu comme fallback rapide et gratuit (tier free généreux). Migré vers OpenAI en prod suite deprecation du modèle Groq utilisé."
+    },
+    openai: {
+      name: "OpenAI (cloud)",
+      desc: "GPT-4o mini · provider par défaut en production pour /translate et /summarize.",
+      why:  "Meilleur ratio qualité/coût pour la traduction FR↔EN à cette échelle. Aussi utilisé pour l'API Realtime (Live) et Whisper-1 (transcription live)."
+    },
+    anthropic: {
+      name: "Anthropic (cloud)",
+      desc: "Claude · fallback qualité si OpenAI down ou pour tâches longues (résumés meeting complexes).",
+      why:  "Diversifier les providers évite le lock-in et un downtime d'un vendor ne coupe pas le service. Activable en switchant un env var côté LLM service."
+    },
+    "dag-nightly": {
+      name: "DAG · nightly_golden_eval",
+      desc: "Cron 02:00 UTC. Extrait Golden Dataset → appelle Pipeline /process → calcule BLEU/METEOR/WER → log MLflow → alerte Slack si régression.",
+      why:  "Détection de dérive qualitative quotidienne. Airflow appelle Pipeline direct (bypass Gateway) pour éviter le rate-limit sur du batch legitime."
+    },
+    "dag-weekly": {
+      name: "DAG · weekly_drift_check",
+      desc: "Cron dimanche 03:00 UTC. Compare BLEU actuel vs baseline glissante 7 jours. Alerte si chute > seuil.",
+      why:  "Détection de dérive lente (drift progressif que le nightly ne capte pas). Complémentaire à Evidently (roadmap) pour feature-drift plus fin."
+    },
+
+    // ── Flux A : Upload / Traduction on-demand ──────────────────────────────
+    "fA-user": {
+      name: "1 · Utilisateur",
+      desc: "Chauffeur, agent, journaliste — quelqu'un qui a besoin de comprendre un audio dans sa langue.",
+      why:  "Point de départ. La contrainte : il uploade un fichier ou parle au micro, il attend sa réponse en < 10 secondes."
+    },
+    "fA-frontend": {
+      name: "2 · Frontend Next.js",
+      desc: "Reçoit le fichier ou le blob micro. Envoie POST /pipeline/process en multipart form-data, avec le JWT en header.",
+      why:  "Toute la validation UX (format, taille) se fait ici avant l'appel réseau. Erreurs 415/413 gérées en amont."
+    },
+    "fA-gateway": {
+      name: "3 · Gateway JWT check",
+      desc: "Décode le JWT HS256, vérifie exp + type=access, retrouve l'user en DB. Puis forward la requête au Pipeline (Docker network interne).",
+      why:  "Séparation stricte : le Pipeline ne connaît pas les users. Si compromis, il ne peut rien faire sans le Gateway. Défense en profondeur."
+    },
+    "fA-pipeline": {
+      name: "4 · Pipeline · LangChain LCEL",
+      desc: "Le chef d'orchestre. Instancie une chaîne Runnable STT → LLM → TTS composée avec l'opérateur | de LCEL.",
+      why:  "Chaînage typé, testable, chaque étape peut être moquée en unit test. Retry + circuit-breaker natifs. Chunking auto pour les audios longs (>5000 chars)."
+    },
+    "fA-stt": {
+      name: "5 · STT · Faster-Whisper large-v3",
+      desc: "Reçoit audio_bytes, écrit en tempfile, appelle ffmpeg pour normaliser (WAV 16kHz mono), puis transcribe. Retourne texte + langue détectée + confidence.",
+      why:  "large-v3 = meilleure qualité FR open-source. Faster-Whisper (CTranslate2) = 4× plus rapide que whisper.cpp en CPU."
+    },
+    "fA-guard-in": {
+      name: "6 · Prompt-guard IN",
+      desc: "Vérifie que le texte transcrit ne contient pas d'injection de prompt (regex patterns FR + EN : 'ignore previous', 'you are now', 'jailbreak'…). Sanitize les balises XML.",
+      why:  "Sécurité LLM01 OWASP : un audio peut contenir des instructions cachées pour pirater le prompt système. Bloque en amont, jamais atteint le LLM."
+    },
+    "fA-llm": {
+      name: "7 · LLM · LiteLLM → OpenAI",
+      desc: "Compose le prompt (persona traducteur + user_text sandwich <user_text>). Appelle LiteLLM qui route vers OpenAI GPT-4o mini. Reçoit texte traduit.",
+      why:  "GPT-4o mini = meilleur ratio qualité/coût pour la traduction FR↔EN. Fallback GROQ/Anthropic possible sans changer le code du Pipeline."
+    },
+    "fA-guard-out": {
+      name: "8 · Prompt-guard OUT",
+      desc: "Vérifie que le texte traduit n'est pas une hallucination : ratio longueur input/output < 4×, absence de leaks ('I am an AI', 'system prompt')…",
+      why:  "Le LLM peut halluciner (générer 500 mots à partir de 3 mots d'input). Le guard OUT filtre ces cas et retourne une erreur 422 propre au user."
+    },
+    "fA-tts": {
+      name: "9 · TTS · Voxtral / MMS-TTS",
+      desc: "Route par langue cible : Voxtral (fr/en/es/de) ou MMS-TTS (uk/it/…). Chunking si texte long. Retourne audio bytes.",
+      why:  "Voxtral (Mistral) = qualité prod sur langues majeures. MMS-TTS (Meta) = couvre 1100+ langues rares. Routing = pas d'API unique qui fait tout bien."
+    },
+    "fA-return": {
+      name: "10 · Retour Frontend",
+      desc: "Le Pipeline agrège : source_text, translation, audio_b64, latency_stt/llm/tts, coût. Retourne en JSON. Frontend affiche audio player + texte + métriques.",
+      why:  "Réponse riche : le user voit la transcription (contrôle), écoute la traduction (usage), et l'admin voit les métriques (observabilité)."
+    },
+    "fA-obs": {
+      name: "Async · Observability",
+      desc: "En PARALLÈLE de la requête user (non bloquant) : le Pipeline envoie une trace Langfuse (waterfall STT+LLM+TTS) et MLflow (spans hiérarchiques).",
+      why:  "Async = pas d'impact latence sur le user. Langfuse = observabilité métier LLM (coût, tokens). MLflow = expérimentation (BLEU sur runs). Ces 2 outils sont complémentaires."
+    },
+
+    // ── Flux B : Watcher radio 107.7 ─────────────────────────────────────────
+    "fB-cron": {
+      name: "1 · Cron interne",
+      desc: "Boucle Python asyncio dans le container Watcher. Wake up toutes les N minutes (configurable env var).",
+      why:  "Airflow serait overkill pour ce polling simple + haute fréquence. Cron interne = 0 dépendance, réactif."
+    },
+    "fB-fetch": {
+      name: "2 · Fetch stream radio",
+      desc: "HTTP GET vers l'URL de streaming de la radio autoroutière 107.7 (7 zones géographiques : Nord, Sud, Est, Ouest, Île-de-France…).",
+      why:  "Radio publique = source stable. Contenu structuré (flashs infos toutes les 5 min). Idéal pour extraire des événements trafic en temps quasi-réel."
+    },
+    "fB-whisper": {
+      name: "3 · Whisper EMBARQUÉ",
+      desc: "Le Watcher a sa propre instance faster-whisper (pas d'appel HTTP au service STT :8001). Traite le chunk audio en local.",
+      why:  "Éviter un aller-retour HTTP inutile pour un traitement continu. Whisper embarqué = latence réduite. Cache modèle sur volume watcher_data."
+    },
+    "fB-extract": {
+      name: "4 · Extract events",
+      desc: "Parse le texte transcrit avec regex + heuristiques (zones autoroutières, types d'événements : bouchon/accident/travaux). Sortie : liste d'événements structurés.",
+      why:  "Extraction locale (pas LLM) pour économie coût + latence. Le LLM n'entre en jeu qu'à l'étape suivante pour la traduction."
+    },
+    "fB-llm": {
+      name: "5 · LLM /translate DIRECT",
+      desc: "POST direct à llm:8002/translate (bypass Pipeline). Traduit chaque événement pour affichage multilingue admin (FR + EN + ES…).",
+      why:  "Bypass Pipeline légitime : pas besoin de STT (déjà fait) ni TTS (pas d'audio en sortie). Le Pipeline serait un détour inutile."
+    },
+    "fB-db": {
+      name: "6 · Persist événements",
+      desc: "Stocke les événements en JSON dans le volume Docker watcher_data. Rotation par jour, déduplication par hash.",
+      why:  "Historique consultable, base pour analytics futures (heures de pointe, patterns saisonniers). Volume persistant survit aux restart du container."
+    },
+    "fB-sse": {
+      name: "7 · SSE stream",
+      desc: "Endpoint GET /stream expose les nouveaux événements en Server-Sent Events. Consommé par l'admin dashboard.",
+      why:  "SSE = plus simple que WebSocket pour du push unidirectionnel. Reconnexion auto par le navigateur. Idéal pour un dashboard temps réel."
+    },
+    "fB-admin": {
+      name: "8 · Admin Dashboard",
+      desc: "Page /admin dans le frontend Next.js. Affiche les événements par zone (Nord/Sud/Est/Ouest), avec traduction, timestamp, sévérité.",
+      why:  "Interface de surveillance pour opérateur (ex : centre de gestion autoroutière). Utile aussi pour la démo devant le jury."
+    },
+    "fB-note": {
+      name: "Différences avec Flux A",
+      desc: "Watcher ne passe PAS par : Gateway (pas d'auth externe), Pipeline (pas d'orchestration LCEL), service STT (Whisper embarqué), TTS (pas de sortie audio).",
+      why:  "Cas d'usage différent = architecture différente. Le Pipeline est pour du synchrone user-facing. Le Watcher est pour du batch continu background."
+    },
+    tts: {
+      name: "TTS · Voxtral + MMS-TTS · :8003",
+      desc: "Voxtral (Mistral) pour fr/en/es/de, Meta MMS-TTS pour uk/it. Routing par langue.",
+      why:  "Voxtral qualité prod sur langues majeures, MMS couvre les langues rares. XTTS/Coqui écarté (fiabilité inférieure, dépendances lourdes)."
+    },
+    "af-scheduler": {
+      name: "Airflow Scheduler",
+      desc: "Déclenche les DAGs cron : nightly_golden_eval (02:00 UTC) + weekly_drift_check (dim. 03:00).",
+      why:  "Airflow reste standard pour batch. Prefect/Dagster écartés : Airflow suffit à ce volume, écosystème plus mature."
+    },
+    "af-web": {
+      name: "Airflow Webserver · :8080",
+      desc: "UI de monitoring des runs batch, retry manuel, inspection logs.",
+      why:  "Interface prête à l'emploi pour audit + démo devant jury."
+    },
+    "af-pg": {
+      name: "PostgreSQL (Airflow)",
+      desc: "DB metadata Airflow : runs, logs, connections, users.",
+      why:  "Requis par Airflow. La DB users du gateway est séparée (SQLite interne, plus simple pour un mono-instance)."
+    },
+    mlflow: {
+      name: "MLflow · :5050",
+      desc: "Model Registry (Whisper, TTS) + experiment tracking. 12 runs agrégés (1 par config, métriques moyennées sur 7 audios golden). 84 évaluations individuelles importées dans Langfuse pour drill-down.",
+      why:  "Standard MLOps pour le versioning des modèles. Pilote la sélection : champion 70B (BLEU 49.64) vs 8B (compromis coût/perf, historiquement retenu). Prod actuelle : GPT-4o mini via LiteLLM, rebenchmark prévu."
+    },
+    prometheus: {
+      name: "Prometheus · :9090",
+      desc: "TSDB qui scrape /metrics de tous les services FastAPI.",
+      why:  "Standard de facto pour métriques ops. Datadog/Grafana Cloud écartés (coût + self-hosted possible)."
+    },
+    grafana: {
+      name: "Grafana · :3001",
+      desc: "Dashboards de 12 panels : latence p50/p95/p99, erreurs 4xx/5xx, throughput.",
+      why:  "Visualisation Prometheus native. Kibana écarté (surdimensionné, ElasticSearch inutile ici)."
+    },
+    langfuse: {
+      name: "Langfuse (cloud)",
+      desc: "Observabilité LLM spécialisée : prompt versioning, traces waterfall, coût/token/latence.",
+      why:  "Complète Prometheus (ops) sur le versant métier LLM. LangSmith écarté (payant, moins ouvert). Migré v2 → v4 pendant le projet."
+    },
+  };
+
+  const wrap = document.querySelector('.arch-wrap');
+  if (wrap) {
+    const tip = document.createElement('div');
+    tip.className = 'arch-tt';
+    tip.innerHTML = `
+      <div class="tt-name"></div>
+      <div class="tt-label">Ce que c'est</div>
+      <div class="tt-text tt-desc"></div>
+      <div class="tt-label">Pourquoi ce choix</div>
+      <div class="tt-text tt-why"></div>`;
+    // Body-level : évite tout clipping par un parent (overflow, transform, opacity).
+    document.body.appendChild(tip);
+    const nameEl = tip.querySelector('.tt-name');
+    const descEl = tip.querySelector('.tt-desc');
+    const whyEl  = tip.querySelector('.tt-why');
+
+    const show = (rect) => {
+      const key = rect.getAttribute('data-tt');
+      const data = TT[key];
+      if (!data) { console.warn('[tt] no data for key:', key); return; }
+      nameEl.textContent = data.name;
+      descEl.textContent = data.desc;
+      whyEl.textContent  = data.why;
+      // Position fixe en bas-droite (via CSS) — pas de calcul dynamique.
+      tip.classList.add('visible');
+    };
+    const hide = () => tip.classList.remove('visible');
+
+    // Attach listeners directly on each rect + spotlight logic
+    const svg   = document.querySelector('svg.arch');
+    const rects = document.querySelectorAll('svg.arch rect[data-tt]');
+    console.log('[tt] init — wrap:', !!wrap, '· rects found:', rects.length, '· tip in body:', document.body.contains(tip));
+
+    // Spotlight : au hover d'un rect, illumine les lines/paths reliés + les rects à l'autre bout.
+    const focusOn = (key) => {
+      if (!svg) return;
+      svg.classList.add('has-focus');
+      const rect = svg.querySelector(`rect[data-tt="${key}"]`);
+      if (rect) rect.classList.add('tt-focused');
+      const links = svg.querySelectorAll(`[data-from="${key}"], [data-to="${key}"]`);
+      const related = new Set();
+      links.forEach(l => {
+        l.classList.add('tt-focused');
+        const f = l.getAttribute('data-from');
+        const t = l.getAttribute('data-to');
+        if (f && f !== key) related.add(f);
+        if (t && t !== key) related.add(t);
+      });
+      related.forEach(k => {
+        const r = svg.querySelector(`rect[data-tt="${k}"]`);
+        if (r) r.classList.add('tt-related');
+      });
+    };
+    const focusOff = () => {
+      if (!svg) return;
+      svg.classList.remove('has-focus');
+      svg.querySelectorAll('.tt-focused, .tt-related').forEach(el => {
+        el.classList.remove('tt-focused', 'tt-related');
+      });
+    };
+
+    rects.forEach(r => {
+      r.addEventListener('mouseenter', () => {
+        show(r);
+        focusOn(r.getAttribute('data-tt'));
+      });
+      r.addEventListener('mouseleave', () => {
+        hide();
+        focusOff();
+      });
+    });
+  } else {
+    console.warn('[tt] .arch-wrap NOT FOUND in DOM');
+  }
+})();
+</script>
