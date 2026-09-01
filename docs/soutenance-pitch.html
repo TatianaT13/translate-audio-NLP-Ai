@@ -1052,7 +1052,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
 
           <rect data-tt="anthropic" class="box" x="720" y="445" width="170" height="45"/>
           <text x="805" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">Anthropic</text>
-          <text x="805" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · fallback qualité</text>
+          <text x="805" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Claude · configurable LiteLLM</text>
 
           <!-- Batch group : Airflow (scheduler + webserver + postgres) englobés -->
           <rect x="180" y="525" width="700" height="105" fill="none" stroke="var(--accent-dim)" stroke-width="1" stroke-dasharray="6,3" rx="4"/>
@@ -1184,7 +1184,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
         </svg>
       </div>
       <p class="caption" style="margin-top:2vh;">
-        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend Next.js + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe. LLM proxifie 3 providers cloud (GROQ, OpenAI, Anthropic) via LiteLLM. Meeting et Live passent en direct par le Gateway (STT + LLM pour Meeting, OpenAI Realtime WebRTC pour Live). Survole chaque bloc pour voir les détails.
+        <strong>14 conteneurs Docker</strong> — 6 microservices FastAPI (Gateway, Pipeline, STT, LLM, TTS, Watcher) + Frontend Next.js + MLflow + Prometheus + Grafana + 3 conteneurs Airflow (Scheduler, Webserver, Postgres) + Airflow-init (éphémère). Nginx sur le host, Langfuse en cloud externe. Le service LLM route vers GROQ, OpenAI et Anthropic via LiteLLM. <strong>Meeting</strong> appelle directement STT et LLM. <strong>Live</strong> utilise la Gateway uniquement pour obtenir le token éphémère OpenAI Realtime, puis WebRTC direct navigateur ↔ OpenAI. Survole chaque bloc pour voir les détails.
       </p>
     </div>
   </section>
@@ -1221,39 +1221,39 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
           <text x="635" y="105" text-anchor="middle" fill="var(--fg-muted)" font-size="12" font-weight="500">Auth (Gateway)</text>
           <text x="635" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">JWT · admin · realtime</text>
 
-          <!-- Step 5 : STT -->
+          <!-- Step 4 : STT -->
           <rect data-tt="fA-stt" class="box" x="80" y="180" width="130" height="60"/>
-          <text x="145" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · STT</text>
+          <text x="145" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · STT</text>
           <text x="145" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Whisper large-v3</text>
           <text x="145" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte FR</text>
 
-          <!-- Step 6 : Prompt-guard IN -->
+          <!-- Step 5 : Prompt-guard IN -->
           <rect data-tt="fA-guard-in" class="box" x="240" y="180" width="130" height="60"/>
-          <text x="305" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · Guard IN</text>
+          <text x="305" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">5 · Guard IN</text>
           <text x="305" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-injection</text>
           <text x="305" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte safe</text>
 
-          <!-- Step 7 : LLM translate -->
+          <!-- Step 6 : LLM translate -->
           <rect data-tt="fA-llm" class="box" x="400" y="180" width="130" height="60"/>
-          <text x="465" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · LLM</text>
+          <text x="465" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">6 · LLM</text>
           <text x="465" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LiteLLM → OpenAI</text>
           <text x="465" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ texte EN</text>
 
-          <!-- Step 8 : Prompt-guard OUT -->
+          <!-- Step 7 : Prompt-guard OUT -->
           <rect data-tt="fA-guard-out" class="box" x="560" y="180" width="130" height="60"/>
-          <text x="625" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · Guard OUT</text>
+          <text x="625" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">7 · Guard OUT</text>
           <text x="625" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">anti-hallucination</text>
           <text x="625" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ vérif ratio</text>
 
-          <!-- Step 9 : TTS -->
+          <!-- Step 8 : TTS -->
           <rect data-tt="fA-tts" class="box" x="720" y="180" width="130" height="60"/>
-          <text x="785" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">9 · TTS</text>
+          <text x="785" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">8 · TTS</text>
           <text x="785" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Voxtral EN</text>
           <text x="785" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ audio MP3</text>
 
-          <!-- Step 10 : back to User -->
+          <!-- Step 9 : back to User -->
           <rect data-tt="fA-return" class="box-accent" x="880" y="180" width="140" height="60"/>
-          <text x="950" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">10 · Frontend</text>
+          <text x="950" y="205" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">9 · Frontend</text>
           <text x="950" y="220" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">audio + texte</text>
           <text x="950" y="235" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="ui-monospace">→ affiche user</text>
 
@@ -1349,8 +1349,10 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
               Survole une étape pour voir sa description et son rôle. Le spotlight révèle les liens du flux.
             </text>
             <text x="0" y="20" fill="var(--fg-muted)" font-size="10" letter-spacing="0.05em">
-              <tspan fill="var(--accent)">Flux A</tspan> = passe par Gateway + Pipeline LCEL, appelle STT dédié, produit un audio.
-              <tspan fill="var(--warn)"> Flux B</tspan> = code Watcher direct, Whisper embarqué, pas de TTS, alimente le dashboard.
+              <tspan fill="var(--accent)">Flux A</tspan> = Frontend → Pipeline direct pour /process ; Gateway utilisée séparément pour auth, admin et realtime.
+            </text>
+            <text x="0" y="36" fill="var(--fg-muted)" font-size="10" letter-spacing="0.05em">
+              <tspan fill="var(--warn)">Flux B</tspan> = code Watcher direct, Whisper embarqué, pas de TTS, alimente le dashboard admin.
             </text>
           </g>
         </svg>
@@ -1736,8 +1738,8 @@ pipeline = (
     },
     anthropic: {
       name: "Anthropic (cloud)",
-      desc: "Claude · fallback qualité si OpenAI down ou pour tâches longues (résumés meeting complexes).",
-      why:  "Diversifier les providers évite le lock-in et un downtime d'un vendor ne coupe pas le service. Activable en switchant un env var côté LLM service."
+      desc: "Claude · provider additionnel configurable via LiteLLM.",
+      why:  "Diversifier les providers évite le lock-in. Activable en switchant un env var côté LLM service. Pas de fallback automatique configuré actuellement — bascule manuelle."
     },
     "dag-nightly": {
       name: "DAG · nightly_golden_eval",
@@ -1772,32 +1774,32 @@ pipeline = (
       why:  "Chaînage composable, testable et instrumentable ; chaque étape peut être moquée en unit test. Chunking auto pour les audios longs (>5000 chars)."
     },
     "fA-stt": {
-      name: "5 · STT · Faster-Whisper large-v3",
+      name: "4 · STT · Faster-Whisper large-v3",
       desc: "Reçoit audio_bytes, écrit en tempfile, appelle ffmpeg pour normaliser (WAV 16kHz mono), puis transcribe. Retourne texte + langue détectée + confidence.",
-      why:  "large-v3 = meilleure qualité FR open-source. Faster-Whisper (CTranslate2) = 4× plus rapide que whisper.cpp en CPU."
+      why:  "Auto-hébergé, 99 langues supportées, contrôle sur la version du modèle. Cache modèle sur volume dédié."
     },
     "fA-guard-in": {
-      name: "6 · Prompt-guard IN",
+      name: "5 · Prompt-guard IN",
       desc: "Vérifie que le texte transcrit ne contient pas d'injection de prompt (regex patterns FR + EN : 'ignore previous', 'you are now', 'jailbreak'…). Sanitize les balises XML.",
       why:  "Sécurité LLM01 OWASP : un audio peut contenir des instructions cachées pour pirater le prompt système. Bloque en amont, jamais atteint le LLM."
     },
     "fA-llm": {
-      name: "7 · LLM · LiteLLM → OpenAI",
+      name: "6 · LLM · LiteLLM → OpenAI",
       desc: "Compose le prompt (persona traducteur + user_text sandwich <user_text>). Appelle LiteLLM qui route vers OpenAI GPT-4o mini. Reçoit texte traduit.",
-      why:  "GPT-4o mini = provider actuel de production. Rebenchmark prévu avec le protocole golden. Fallback GROQ/Anthropic possible sans changer le code du Pipeline."
+      why:  "GPT-4o mini = provider actuel de production. Rebenchmark prévu avec le protocole golden. Autres providers configurables via LiteLLM."
     },
     "fA-guard-out": {
-      name: "8 · Prompt-guard OUT",
+      name: "7 · Prompt-guard OUT",
       desc: "Vérifie que le texte traduit n'est pas une hallucination : ratio longueur input/output < 4×, absence de leaks ('I am an AI', 'system prompt')…",
       why:  "Le LLM peut halluciner (générer 500 mots à partir de 3 mots d'input). Le guard OUT filtre ces cas et retourne une erreur 422 propre au user."
     },
     "fA-tts": {
-      name: "9 · TTS · Voxtral / MMS-TTS",
+      name: "8 · TTS · Voxtral / MMS-TTS",
       desc: "Route par langue cible : Voxtral (fr/en/es/de) ou MMS-TTS (uk/it/…). Chunking si texte long. Retourne audio bytes.",
-      why:  "Voxtral (Mistral) = qualité prod sur langues majeures. MMS-TTS (Meta) = couvre 1100+ langues rares. Routing = pas d'API unique qui fait tout bien."
+      why:  "Voxtral (Mistral) couvre les langues majeures. MMS-TTS (Meta) couvre les langues rares (dont l'ukrainien). Routing hybride pour combiner les deux."
     },
     "fA-return": {
-      name: "10 · Retour Frontend",
+      name: "9 · Retour Frontend",
       desc: "Le Pipeline agrège : source_text, translation, audio_b64, latency_stt/llm/tts, coût. Retourne en JSON. Frontend affiche audio player + texte + métriques.",
       why:  "Réponse riche : le user voit la transcription (contrôle), écoute la traduction (usage), et l'admin voit les métriques (observabilité)."
     },
