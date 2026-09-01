@@ -859,7 +859,7 @@
 
   <div class="chrome-bottom">
     <div class="counter">
-      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">15</span>
+      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">13</span>
     </div>
     <div class="dots" id="dots"></div>
     <div class="nav-hint">
@@ -1044,7 +1044,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
           <!-- Cloud providers row (élargis à 160 pour éviter que le texte déborde) -->
           <rect data-tt="groq" class="box" x="340" y="445" width="170" height="45"/>
           <text x="425" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">GROQ</text>
-          <text x="425" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · rapide + gratuit</text>
+          <text x="425" y="482" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">Llama · champion expérimental</text>
 
           <rect data-tt="openai" class="box" x="530" y="445" width="170" height="45"/>
           <text x="615" y="467" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">OpenAI</text>
@@ -1084,7 +1084,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
           <!-- Observability row -->
           <rect data-tt="mlflow" class="box" x="180" y="655" width="150" height="60"/>
           <text x="255" y="680" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="500">MLflow</text>
-          <text x="255" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">Runs · Registry · 60 exp.</text>
+          <text x="255" y="697" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">12 runs · Registry</text>
           <text x="255" y="710" text-anchor="middle" fill="var(--fg-muted)" font-size="9" font-family="ui-monospace">:5050</text>
 
           <rect data-tt="prometheus" class="box" x="350" y="655" width="150" height="60"/>
@@ -1211,15 +1211,15 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
           <text x="265" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">2 · Frontend</text>
           <text x="265" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">POST /process</text>
 
-          <!-- Step 3 : Gateway JWT check -->
-          <rect data-tt="fA-gateway" class="box-accent" x="370" y="80" width="130" height="55"/>
-          <text x="435" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Gateway</text>
-          <text x="435" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">JWT check</text>
+          <!-- Step 3 : Pipeline LCEL orchestrator (le frontend appelle direct Pipeline) -->
+          <rect data-tt="fA-pipeline" class="box-accent" x="370" y="80" width="150" height="55"/>
+          <text x="445" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">3 · Pipeline</text>
+          <text x="445" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL</text>
 
-          <!-- Step 4 : Pipeline LCEL orchestrator -->
-          <rect data-tt="fA-pipeline" class="box-accent" x="540" y="80" width="150" height="55"/>
-          <text x="615" y="105" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="500">4 · Pipeline</text>
-          <text x="615" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">LangChain LCEL</text>
+          <!-- Étape Gateway = auth séparée, non systématique sur /process actuellement -->
+          <rect data-tt="fA-gateway" class="box" x="560" y="80" width="150" height="55" stroke-dasharray="4,3"/>
+          <text x="635" y="105" text-anchor="middle" fill="var(--fg-muted)" font-size="12" font-weight="500">Auth (Gateway)</text>
+          <text x="635" y="122" text-anchor="middle" fill="var(--fg-muted)" font-size="10" font-family="ui-monospace">JWT · admin · realtime</text>
 
           <!-- Step 5 : STT -->
           <rect data-tt="fA-stt" class="box" x="80" y="180" width="130" height="60"/>
@@ -1265,9 +1265,11 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
 
           <!-- Flèches Flux A -->
           <line data-from="fA-user" data-to="fA-frontend" class="accent" x1="160" y1="107" x2="200" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
-          <line data-from="fA-frontend" data-to="fA-gateway" class="accent" x1="330" y1="107" x2="370" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
-          <line data-from="fA-gateway" data-to="fA-pipeline" class="accent" x1="500" y1="107" x2="540" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
-          <path data-from="fA-pipeline" data-to="fA-stt" class="accent" d="M 615,135 C 615,160 200,150 145,180" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
+          <!-- Frontend → Pipeline DIRECT (reflete le code réel : fetch NEXT_PUBLIC_PIPELINE_URL) -->
+          <line data-from="fA-frontend" data-to="fA-pipeline" class="accent" x1="330" y1="107" x2="370" y2="107" stroke="var(--accent-dim)" stroke-width="1.5"/>
+          <!-- Gateway = auth séparée (utilisée pour /auth/*, /admin/*, /realtime/session) — pointillé -->
+          <line data-from="fA-frontend" data-to="fA-gateway" x1="265" y1="135" x2="600" y2="135" stroke="var(--fg-muted)" stroke-width="1" stroke-dasharray="4,3"/>
+          <path data-from="fA-pipeline" data-to="fA-stt" class="accent" d="M 445,135 C 445,160 200,150 145,180" stroke="var(--accent-dim)" stroke-width="1.5" fill="none"/>
           <line data-from="fA-stt" data-to="fA-guard-in" class="accent" x1="210" y1="210" x2="240" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <line data-from="fA-guard-in" data-to="fA-llm" class="accent" x1="370" y1="210" x2="400" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
           <line data-from="fA-llm" data-to="fA-guard-out" class="accent" x1="530" y1="210" x2="560" y2="210" stroke="var(--accent-dim)" stroke-width="1.5"/>
@@ -1709,8 +1711,8 @@ pipeline = (
     },
     stt: {
       name: "STT · Faster-Whisper large-v3 · :8001",
-      desc: "Speech-to-text open-source (CTranslate2). Route POST /transcribe. Cache modèle sur volume dédié.",
-      why:  "Meilleur modèle FR open, 4× plus rapide que whisper.cpp en CPU. API cloud écartée pour éviter la dépendance et le coût par minute."
+      desc: "Speech-to-text open-source (implémentation CTranslate2 de Whisper). Route POST /transcribe. Cache modèle sur volume dédié.",
+      why:  "Auto-hébergé, 99 langues supportées, contrôle sur la version. API cloud écartée pour éviter la dépendance et le coût par minute."
     },
     llm: {
       name: "LLM · FastAPI · :8002",
@@ -1760,14 +1762,14 @@ pipeline = (
       why:  "Toute la validation UX (format, taille) se fait ici avant l'appel réseau. Erreurs 415/413 gérées en amont."
     },
     "fA-gateway": {
-      name: "3 · Gateway JWT check",
-      desc: "Décode le JWT HS256, vérifie exp + type=access, retrouve l'user en DB. Puis forward la requête au Pipeline (Docker network interne).",
-      why:  "Séparation stricte : le Pipeline ne connaît pas les users. Si compromis, il ne peut rien faire sans le Gateway. Défense en profondeur."
+      name: "Auth · Gateway (couche séparée)",
+      desc: "La Gateway gère les routes /auth/*, /admin/* et /realtime/session (création du token éphémère OpenAI Realtime). Elle décode le JWT HS256 et vérifie exp + type=access sur ces routes.",
+      why:  "Actuellement, le frontend appelle directement le Pipeline pour /process (variable NEXT_PUBLIC_PIPELINE_URL). La centralisation complète du trafic derrière la Gateway est prévue en phase 2 (durcissement)."
     },
     "fA-pipeline": {
-      name: "4 · Pipeline · LangChain LCEL",
+      name: "3 · Pipeline · LangChain LCEL",
       desc: "Le chef d'orchestre. Instancie une chaîne Runnable STT → LLM → TTS composée avec l'opérateur | de LCEL.",
-      why:  "Chaînage typé, testable, chaque étape peut être moquée en unit test. Retry + circuit-breaker natifs. Chunking auto pour les audios longs (>5000 chars)."
+      why:  "Chaînage composable, testable et instrumentable ; chaque étape peut être moquée en unit test. Chunking auto pour les audios longs (>5000 chars)."
     },
     "fA-stt": {
       name: "5 · STT · Faster-Whisper large-v3",
@@ -1782,7 +1784,7 @@ pipeline = (
     "fA-llm": {
       name: "7 · LLM · LiteLLM → OpenAI",
       desc: "Compose le prompt (persona traducteur + user_text sandwich <user_text>). Appelle LiteLLM qui route vers OpenAI GPT-4o mini. Reçoit texte traduit.",
-      why:  "GPT-4o mini = meilleur ratio qualité/coût pour la traduction FR↔EN. Fallback GROQ/Anthropic possible sans changer le code du Pipeline."
+      why:  "GPT-4o mini = provider actuel de production. Rebenchmark prévu avec le protocole golden. Fallback GROQ/Anthropic possible sans changer le code du Pipeline."
     },
     "fA-guard-out": {
       name: "8 · Prompt-guard OUT",
@@ -1813,8 +1815,8 @@ pipeline = (
     },
     "fB-fetch": {
       name: "2 · Fetch stream radio",
-      desc: "HTTP GET vers l'URL de streaming de la radio autoroutière 107.7 (7 zones géographiques : Nord, Sud, Est, Ouest, Île-de-France…).",
-      why:  "Radio publique = source stable. Contenu structuré (flashs infos toutes les 5 min). Idéal pour extraire des événements trafic en temps quasi-réel."
+      desc: "HTTP GET vers l'URL de streaming de la radio autoroutière 107.7. Récupère un chunk audio du flux continu.",
+      why:  "Radio publique = source stable. Contenu structuré (flashs infos réguliers). Idéal pour extraire des événements trafic en temps quasi-réel."
     },
     "fB-whisper": {
       name: "3 · Whisper EMBARQUÉ",
@@ -1854,7 +1856,7 @@ pipeline = (
     tts: {
       name: "TTS · Voxtral + MMS-TTS · :8003",
       desc: "Voxtral (Mistral) pour fr/en/es/de, Meta MMS-TTS pour uk/it. Routing par langue.",
-      why:  "Voxtral qualité prod sur langues majeures, MMS couvre les langues rares. XTTS/Coqui écarté (fiabilité inférieure, dépendances lourdes)."
+      why:  "Voxtral couvre les langues majeures, MMS-TTS couvre les langues rares (dont l'ukrainien). Routing hybride pour combiner les deux."
     },
     "af-scheduler": {
       name: "Airflow Scheduler",
@@ -1921,17 +1923,20 @@ pipeline = (
     };
     const hide = () => tip.classList.remove('visible');
 
-    // Attach listeners directly on each rect + spotlight logic
-    const svg   = document.querySelector('svg.arch');
+    // Attach listeners directly on each rect + spotlight logic.
+    // Note : plusieurs SVG.arch dans la page (Architecture + Parcours données).
+    // On récupère à chaque hover le SVG PARENT du rect via closest() pour que
+    // le spotlight s'applique au bon SVG.
     const rects = document.querySelectorAll('svg.arch rect[data-tt]');
-    console.log('[tt] init — wrap:', !!wrap, '· rects found:', rects.length, '· tip in body:', document.body.contains(tip));
+    const allSvgs = document.querySelectorAll('svg.arch');
+    console.log('[tt] init — wrap:', !!wrap, '· svgs:', allSvgs.length, '· rects:', rects.length, '· tip in body:', document.body.contains(tip));
 
-    // Spotlight : au hover d'un rect, illumine les lines/paths reliés + les rects à l'autre bout.
-    const focusOn = (key) => {
+    // Spotlight : au hover d'un rect, illumine les lines/paths reliés dans SON svg + les rects à l'autre bout.
+    const focusOn = (rectEl, key) => {
+      const svg = rectEl.closest('svg.arch');
       if (!svg) return;
       svg.classList.add('has-focus');
-      const rect = svg.querySelector(`rect[data-tt="${key}"]`);
-      if (rect) rect.classList.add('tt-focused');
+      rectEl.classList.add('tt-focused');
       const links = svg.querySelectorAll(`[data-from="${key}"], [data-to="${key}"]`);
       const related = new Set();
       links.forEach(l => {
@@ -1947,17 +1952,18 @@ pipeline = (
       });
     };
     const focusOff = () => {
-      if (!svg) return;
-      svg.classList.remove('has-focus');
-      svg.querySelectorAll('.tt-focused, .tt-related').forEach(el => {
-        el.classList.remove('tt-focused', 'tt-related');
+      allSvgs.forEach(svg => {
+        svg.classList.remove('has-focus');
+        svg.querySelectorAll('.tt-focused, .tt-related').forEach(el => {
+          el.classList.remove('tt-focused', 'tt-related');
+        });
       });
     };
 
     rects.forEach(r => {
       r.addEventListener('mouseenter', () => {
         show(r);
-        focusOn(r.getAttribute('data-tt'));
+        focusOn(r, r.getAttribute('data-tt'));
       });
       r.addEventListener('mouseleave', () => {
         hide();
