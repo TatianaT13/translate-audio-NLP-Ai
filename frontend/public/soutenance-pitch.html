@@ -859,7 +859,7 @@
 
   <div class="chrome-bottom">
     <div class="counter">
-      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">13</span>
+      <span class="current" id="counter-current">01</span><span class="sep">·</span><span id="counter-total">14</span>
     </div>
     <div class="dots" id="dots"></div>
     <div class="nav-hint">
@@ -887,7 +887,7 @@
         <div>
           <p class="eyebrow" style="color:var(--accent);">Problème</p>
           <p class="body" style="color:var(--fg-muted);">
-            La radio autoroutière <strong>107.7</strong> diffuse les alertes trafic (accidents, bouchons, fermetures) <strong>uniquement en français</strong>. Pour un conducteur étranger, cette information peut être difficile à comprendre au moment où elle est utile.
+            La radio autoroutière <strong>107.7</strong> diffuse les alertes trafic (accidents, bouchons, fermetures) <strong>en français</strong>. Pour un conducteur étranger, cette information peut être difficile à comprendre au moment où elle est utile.
           </p>
         </div>
         <div>
@@ -924,7 +924,7 @@ Audio FR → <span class="kw">STT</span> → <span class="kw">LLM</span> → <sp
         <div>
           <p class="eyebrow" style="color:var(--accent);">Valeur apportée</p>
           <ul class="editorial">
-            <li><span><strong>Sécurité routière</strong> — prévention accidents secondaires</span></li>
+            <li><span><strong>Sécurité routière</strong> — rendre les alertes trafic compréhensibles plus rapidement</span></li>
             <li><span><strong>Multilingue</strong> à coût maîtrisé — 5 langues cibles</span></li>
             <li><span><strong>Architecture réutilisable</strong> — même socle pour d'autres cas d'usage audio</span></li>
             <li><span><strong>Observable</strong> — chaque requête tracée, coût suivi en temps réel</span></li>
@@ -1488,7 +1488,7 @@ pipeline = (
           <p class="eyebrow" style="color:var(--accent);">Sécurité, 3 couches</p>
           <ul class="editorial" style="margin-top:0;">
             <li><span><strong>Réseau</strong> — un seul port public (443), 14 conteneurs bindés <code>127.0.0.1</code>, HTTPS Let's Encrypt</span></li>
-            <li><span><strong>Auth applicative</strong> — JWT HS256 15 min + refresh 7j rotatif SHA-256, bcrypt password, 25 tests unitaires</span></li>
+            <li><span><strong>Auth applicative</strong> — JWT HS256 15 min + refresh 7j rotatif SHA-256, bcrypt password, module auth couvert par des tests unitaires</span></li>
             <li><span><strong>LLM</strong> — prompt-guard : pre-check regex FR/EN, séparation structurée <code>&lt;user_text&gt;</code>, post-check ratio + leak detection (inspiré OWASP LLM01)</span></li>
           </ul>
         </div>
@@ -1585,6 +1585,11 @@ pipeline = (
     </div>
   </section>
 
+  <!-- ─── 14 · Merci ──────────────────────────────────────────── -->
+  <section class="slide thanks" data-title="Merci">
+    <h1 class="display">Merci<em>.</em></h1>
+    <p class="signature">Questions &amp; échanges</p>
+  </section>
 
 </div>
 
@@ -1694,7 +1699,7 @@ pipeline = (
     live: {
       name: "Live speech-to-speech · /live",
       desc: "Traduction simultanée bidirectionnelle via WebRTC direct navigateur ↔ OpenAI Realtime API (gpt-realtime, GA oct 2025).",
-      why:  "Ephemeral token créé par le Gateway (la vraie clé OpenAI ne sort jamais du serveur). Latence ~500ms. VAD strict + mute auto anti-boucle. 6 langues source × 6 cible."
+      why:  "Ephemeral token créé par le Gateway (la vraie clé OpenAI ne sort jamais du serveur). VAD strict + mute auto anti-boucle. 6 langues source × 6 cible."
     },
     gateway: {
       name: "Gateway · FastAPI · :8004",
@@ -1723,7 +1728,7 @@ pipeline = (
     },
     litellm: {
       name: "LiteLLM router",
-      desc: "Proxy Python qui unifie l'API OpenAI Chat Completions vers 100+ providers cloud. Utilisé comme lib dans le service LLM.",
+      desc: "Proxy Python qui unifie l'API OpenAI Chat Completions vers de nombreux providers cloud. Utilisé comme lib dans le service LLM.",
       why:  "Un seul format d'API à gérer. Model aliases (Groq deprecated → OpenAI transparent). Retry auto sur erreurs transitoires. Alternative Ollama écartée (VRAM insuffisante sur hermes)."
     },
     groq: {
@@ -1756,7 +1761,7 @@ pipeline = (
     "fA-user": {
       name: "1 · Utilisateur",
       desc: "Chauffeur, agent, journaliste — quelqu'un qui a besoin de comprendre un audio dans sa langue.",
-      why:  "Point de départ. La contrainte : il uploade un fichier ou parle au micro, il attend sa réponse en < 10 secondes."
+      why:  "Point de départ. La contrainte : il uploade un fichier ou parle au micro, il attend une réponse rapide."
     },
     "fA-frontend": {
       name: "2 · Frontend Next.js",
@@ -1823,7 +1828,7 @@ pipeline = (
     "fB-whisper": {
       name: "3 · Whisper EMBARQUÉ",
       desc: "Le Watcher a sa propre instance faster-whisper (pas d'appel HTTP au service STT :8001). Traite le chunk audio en local.",
-      why:  "Éviter un aller-retour HTTP inutile pour un traitement continu. Whisper embarqué = latence réduite. Cache modèle sur volume watcher_data."
+      why:  "Éviter un aller-retour HTTP inutile pour un traitement continu. Whisper embarqué = un seul saut réseau en moins. Cache modèle sur volume watcher_data."
     },
     "fB-extract": {
       name: "4 · Extract events",
