@@ -1229,10 +1229,10 @@ pipeline = (
           </p>
           <div class="chart" style="margin-top:1.5vh;">
             <div class="bar-row"><div class="name" style="font-size:11px;">Llama 8B · v1.0</div><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><div class="bar-value">40.2</div></div>
-            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ">retenu prod</span></div><div class="bar-track"><div class="bar-fill" style="width:46%"></div></div><div class="bar-value">46.2</div></div>
-            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 70B · v1.1 <span class="champ" style="color:var(--fg-muted);">champion BLEU</span></div><div class="bar-track"><div class="bar-fill" style="width:51%"></div></div><div class="bar-value">51.3</div></div>
+            <div class="bar-row"><div class="name" style="font-size:11px;">Llama 8B · v1.1 <span class="champ" style="color:var(--fg-muted);">retenu historiquement</span></div><div class="bar-track"><div class="bar-fill" style="width:44%"></div></div><div class="bar-value">44.0</div></div>
+            <div class="bar-row is-champion"><div class="name" style="font-size:11px;">Llama 70B · v1.1 <span class="champ">champion BLEU</span></div><div class="bar-track"><div class="bar-fill" style="width:50%"></div></div><div class="bar-value">49.64</div></div>
           </div>
-          <p class="caption" style="margin-top:1.5vh;">Champion BLEU = 70B, mais retenu prod = 8B (70B coûte 10× plus pour +5 pts).</p>
+          <p class="caption" style="margin-top:1.5vh;">Champion expérimental : 70B + v1.1 (BLEU 49.64 / METEOR 0.713). 8B historiquement retenu pour compromis coût. Prod actuelle : GPT-4o mini (post-dépréciation Groq, nouvelle campagne comparative prévue).</p>
         </div>
         <div>
           <p class="eyebrow" style="color:var(--accent);">Comparé à</p>
@@ -1528,7 +1528,7 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">Rôle</p>
           <p class="body" style="color:var(--fg-muted);">
-            Orchestrateur de workflows. DAG <code>nightly_golden_eval</code> qui tourne à 02:00 UTC : traduit le corpus golden, calcule les métriques BLEU/METEOR, agrège, détecte les dérives.
+            Orchestrateur de workflows. DAG <code>nightly_golden_eval</code> à 02:00 UTC : ping le pipeline, relance les 7 audios golden, agrège succès/échecs/latence/coût, alerte si trop d'échecs. Intégration BLEU/METEOR et alerting Slack prévus en étape suivante. DAG <code>weekly_drift_check</code> le dimanche : compare semaine N vs N-1 (seuil 10%).
           </p>
           <p class="body" style="color:var(--fg-muted); margin-top:2vh;">
             Stack complète : scheduler + webserver + PostgreSQL dédié. Interface web sur <code>:8080</code>.
@@ -1556,7 +1556,7 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">Tracking</p>
           <p class="body" style="color:var(--fg-muted); font-size:13px;">
-            <strong>12 configurations</strong> comparées (2 Whisper × 2 LLM × 3 prompts) × 5 audios golden = <strong>60 runs</strong>. Métriques BLEU/METEOR/WER/latence/coût. Tag <code>champion</code> auto sur meilleur BLEU. Model Registry avec 3 modèles taggés <code>production_version</code>. <em style="color:var(--fg-muted);">Runs pré-migration OpenAI (Groq Llama à l'époque).</em>
+            <strong>12 configurations</strong> comparées (2 Whisper × 2 LLM × 3 prompts) × <strong>7 audios golden</strong> = <strong>84 évaluations individuelles</strong> (dans Langfuse) → <strong>12 runs agrégés</strong> dans MLflow (1 par config, métriques moyennées). Métriques BLEU (sacrebleu) / METEOR (nltk) / WER (jiwer) / latence / coût. Tag <code>champion</code> auto + <code>production_version</code> sur Model Registry. <em style="color:var(--fg-muted);">Campagne pré-migration OpenAI (Llama via Groq).</em>
           </p>
         </div>
         <div>
@@ -1645,12 +1645,12 @@ pipeline = (
   <section class="slide" data-title="Tests + CI">
     <div class="slide-body">
       <p class="eyebrow">Qualité — Tests + CI/CD</p>
-      <h2 class="title"><em>126 tests</em>,<br>CI GitHub Actions.</h2>
+      <h2 class="title"><em>195 tests</em>,<br>CI GitHub Actions.</h2>
       <div class="split">
         <div>
           <p class="eyebrow" style="color:var(--accent);">Structure</p>
           <p class="body" style="color:var(--fg-muted); font-size:13px;">
-            <code>tests/unit/</code> — 103 tests (prompt_guard, auth JWT, legacy flash_nlp)<br>
+            <code>tests/unit/</code> — 172 tests (prompt_guard, auth JWT, chunking, aliases, TTS routing)<br>
             <code>tests/integration/</code> — 23 tests (auth flow, pipeline e2e, TTS routing)<br>
             <code>tests/e2e/</code> — emplacement prêt pour Phase 2 (Playwright)
           </p>
@@ -1661,7 +1661,7 @@ pipeline = (
         <div>
           <p class="eyebrow" style="color:var(--accent);">CI</p>
           <p class="body" style="color:var(--fg-muted); font-size:13px;">
-            GitHub Actions à chaque push sur <code>main</code>. Lance <code>pytest tests/unit/</code> en 5s. Rapport JUnit XML uploadé comme artifact.
+            GitHub Actions à chaque push ou PR sur <code>main</code> : lance <code>pytest tests/unit/</code> et publie le rapport JUnit XML en artifact. Les tests d'intégration (nécessitent Docker) sont exécutés séparément. CD : SSH → git pull → deploy.sh → docker compose ps.
           </p>
           <p class="body" style="color:var(--fg-muted); margin-top:2vh; font-size:13px;">
             Comparé à : GitLab CI (payant après quota), Jenkins (auto-hébergé lourd), CircleCI (quota gratuit serré).
@@ -2140,7 +2140,7 @@ pipeline = (
       <h2 class="title"><em>Concrètement</em>.</h2>
       <div class="stats">
         <div class="stat">
-          <div class="value"><em>46.2</em></div>
+          <div class="value"><em>49.64</em></div>
           <div class="label">BLEU champion</div>
         </div>
         <div class="stat">
@@ -2160,7 +2160,7 @@ pipeline = (
       <div class="split-3">
         <div class="row"><span class="key">Langues</span><span class="val">EN · UK · ES · DE</span></div>
         <div class="row"><span class="key">Prompts testés</span><span class="val">3 versions</span></div>
-        <div class="row"><span class="key">Runs MLflow</span><span class="val">12 configs · 60 runs</span></div>
+        <div class="row"><span class="key">Runs MLflow</span><span class="val">12 configs · 84 évals · 12 runs agrégés</span></div>
       </div>
     </div>
   </section>
@@ -2178,7 +2178,7 @@ pipeline = (
             <li><span><strong>Déploiement production</strong> HTTPS sur traduction-audio.fr</span></li>
             <li><span><strong>MLOps 4 piliers</strong> — orchestration, inférence, monitoring, stockage</span></li>
             <li><span><strong>Multi-provider LLM</strong> — swap Groq ↔ OpenAI sans code change (LiteLLM)</span></li>
-            <li><span><strong>103 tests</strong> automatisés en CI (GitHub Actions)</span></li>
+            <li><span><strong>195 tests</strong> automatisés (172 unit en CI + 23 integration)</span></li>
           </ul>
         </div>
         <div>
@@ -2362,7 +2362,7 @@ pipeline = (
     groq: {
       name: "GROQ (cloud)",
       desc: "Provider LLM ultra-rapide (Llama 3.1 8B / 70B). Inference sur puces LPU maison.",
-      why:  "Ex-champion BLEU 51.3 sur nos golden. Retenu comme fallback rapide et gratuit (tier free généreux). Migré vers OpenAI en prod suite deprecation du gpt-oss-20b."
+      why:  "Champion BLEU 49.64 sur nos 7 audios golden (config large-v3 + Llama 70B + v1.1). Retenu comme fallback rapide et gratuit (tier free généreux). Migré vers OpenAI en prod suite deprecation du modèle Groq utilisé."
     },
     openai: {
       name: "OpenAI (cloud)",
@@ -2510,8 +2510,8 @@ pipeline = (
     },
     mlflow: {
       name: "MLflow · :5050",
-      desc: "Model Registry (Whisper, TTS) + experiment tracking. 60 runs (12 configs × 5 audios), champion tag auto.",
-      why:  "Standard MLOps pour le versioning des modèles. Pilote la sélection Llama 70B (BLEU 51.3) vs 8B (retenu prod : +5 pts pour 10× le coût = non)."
+      desc: "Model Registry (Whisper, TTS) + experiment tracking. 12 runs agrégés (1 par config, métriques moyennées sur 7 audios golden). 84 évaluations individuelles importées dans Langfuse pour drill-down.",
+      why:  "Standard MLOps pour le versioning des modèles. Pilote la sélection : champion 70B (BLEU 49.64) vs 8B (compromis coût/perf, historiquement retenu). Prod actuelle : GPT-4o mini via LiteLLM, rebenchmark prévu."
     },
     prometheus: {
       name: "Prometheus · :9090",
