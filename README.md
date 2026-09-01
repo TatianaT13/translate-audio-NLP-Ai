@@ -197,7 +197,7 @@ python scripts/eval_golden.py --audio data/flash_audio_archive/2026-01-23/nord/f
 - Scores : latences (STT/LLM/TTS), confiance langue, **coût $**, total tokens, BLEU, METEOR, WER
 - Dashboards natifs Langfuse remplis automatiquement (Cost, Tokens)
 ```bash
-python scripts/langfuse_import.py    # Importer les 84 runs historiques
+python scripts/langfuse_import.py    # Importer les 84 évaluations individuelles
 ```
 
 ### MLflow (model registry + experiment tracking)
@@ -290,7 +290,7 @@ python scripts/run_pipeline.py \
 │   ├── acquisition/  transcription/  analysis/  io/
 │
 ├── scripts/                        # Scripts CLI (eval, import, batch)
-├── outputs/experiments/            # results.csv (84 runs) + rapport
+├── outputs/experiments/            # results.csv (84 évaluations individuelles) + rapport
 ├── data/                           # Datasets golden, archives audio
 │
 ├── docker-compose.yml              # 1 commande lance tout (front + back)
@@ -347,7 +347,7 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 
 ## Roadmap
 
-- [x] Phase 1 — Dataset golden + évaluation BLEU (84 runs, 7 audios, 12 combinaisons)
+- [x] Phase 1 — Dataset golden + évaluation BLEU (84 évaluations individuelles, 7 audios × 12 configurations, agrégées en 12 runs MLflow)
 - [x] Phase 1+ — Métriques METEOR et WER ajoutées à l'évaluation
 - [x] Phase 2 — Microservices Docker (STT / LLM / TTS)
 - [x] Phase 2 — Langfuse tracing (import historique + tracing temps réel)

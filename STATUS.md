@@ -1,7 +1,11 @@
-# État du projet — 1er juin 2026
+# État du projet — actualisé 1er septembre 2026
 
-> Projet LLMOps · Traduction audio temps réel (FR → EN/UK/ES/DE)
-> Soutenance : **4 septembre 2026**
+> Projet LLMOps · Traduction audio temps réel (FR → EN/UK/ES/DE/IT)
+> Soutenance : **3 septembre 2026**
+>
+> Note : ce fichier consigne les jalons projet. Pour les chiffres à jour de la
+> campagne d'évaluation (BLEU, METEOR, protocole), voir le README et le rapport
+> technique.
 
 ---
 
@@ -9,17 +13,19 @@
 
 ### Phase 1 — Fondations & Prompt Engineering
 - [x] Dataset golden (7 audios de référence)
-- [x] **36 runs évalués** : 2 Whisper × 2 LLMs × 3 prompts × audios golden
-- [x] Métriques **BLEU / METEOR / WER / TTS-WER / latences**
-- [x] **Combinaison gagnante** : `whisper large-v3 + llama-3.1-8b + prompt v1.1`
-- [x] Tracking dans Langfuse (84 traces historiques importées)
+- [x] **12 configurations testées** : 2 Whisper × 2 LLMs × 3 prompts, chacune évaluée sur les 7 audios golden
+- [x] **84 évaluations individuelles** (importées dans Langfuse) → **12 runs agrégés dans MLflow** (1 par configuration, métriques moyennées)
+- [x] Métriques **BLEU (sacrebleu) / METEOR (nltk) / WER (jiwer) / latences / coût**
+- [x] **Champion expérimental** : `whisper large-v3 + llama-3.3-70b + prompt v1.1` (BLEU 49.64 · METEOR 0.713)
+- [x] Configuration historiquement retenue en prod : `llama 8B + v1.1` (compromis coût/qualité)
+- [x] Prod actuelle (post-dépréciation Groq) : `openai/gpt-4o-mini` via LiteLLM — nouvelle campagne comparative prévue
 
 ### Phase 2 — Microservices & Registres
 - [x] **STT Service** (port 8001) — Faster-Whisper
 - [x] **LLM Service** (port 8002) — LiteLLM + Groq
 - [x] **TTS Service** (port 8003) — Mistral Voxtral
 - [x] **Langfuse** — prompts + traces + scores + cost
-- [x] **MLflow** (port 5050) — Model Registry (3 modèles) + 36 expériences
+- [x] **MLflow** (port 5050) — Model Registry (3 modèles) + 12 runs agrégés (1 par configuration)
 - [ ] MinIO (storage S3-like) — pas encore
 
 ### Phase 3 — Orchestration & Gateway
@@ -104,7 +110,7 @@
   │   LANGFUSE   │  │    MLFLOW    │  │  PROMETHEUS  │  │   GRAFANA    │
   │   (cloud)    │  │   :5050      │  │    :9090     │  │    :3001     │
   │              │  │              │  │              │  │              │
-  │ • Prompts    │  │ • 36 runs    │  │ • Scrape     │  │ • Dashboard  │
+  │ • Prompts    │  │ • 12 runs    │  │ • Scrape     │  │ • Dashboard  │
   │ • Traces     │  │ • 3 modèles  │  │   /metrics   │  │   LLMOps     │
   │ • Coût $     │  │   registry   │  │   /15s       │  │   live       │
   │ • Tokens     │  │              │  │ • 30j data   │  │ • Iframe     │
