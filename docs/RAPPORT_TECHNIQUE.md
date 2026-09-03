@@ -67,7 +67,7 @@ La seconde extension est la traduction simultanée en direct, via WebRTC. Le nav
 
 En parallèle de ces trois modes, un service backend nommé Watcher tourne en continu. Il interroge périodiquement le flux radio 107.7, transcrit les nouveaux flash-infos avec un Whisper embarqué, extrait les événements structurés (zone, sévérité, type), les traduit dans les cinq langues cibles, et les pousse en Server-Sent Events vers un dashboard administrateur. Cela permet à un opérateur de voir en direct ce qui se passe sur le réseau autoroutier français.
 
-Enfin, le dashboard administrateur est un centre de contrôle MLOps complet. On y voit les métriques infrastructure, les expériences MLflow, les DAGs Airflow, la liste des utilisateurs, les traces LLM Langfuse et les coûts cumulés. L'accès est protégé par un rôle `is_admin` sur le compte utilisateur.
+Enfin, le dashboard administrateur est un centre de contrôle LLMOps. On y voit les métriques infrastructure, les expériences MLflow, les DAGs Airflow, la liste des utilisateurs, les traces LLM Langfuse et les coûts cumulés. L'accès est protégé par un rôle `is_admin` sur le compte utilisateur.
 
 ---
 
@@ -95,7 +95,7 @@ La deuxième phase, d'avril à mai, a consisté à découper le système en micr
 
 La troisième phase, en mai et juin, a été l'assemblage. J'ai construit le pipeline central en LangChain LCEL, ajouté la gateway avec authentification JWT, et déployé le tout sur mon VPS Hetzner en HTTPS.
 
-La quatrième phase, en juillet et août, a été consacrée au monitoring et à l'évaluation batch. J'ai ajouté Prometheus et Grafana pour les métriques infrastructure, activé le tracing MLflow et Langfuse dans le pipeline, et créé deux DAGs Airflow.
+La quatrième phase, en juillet et août, a été consacrée au monitoring et à l'évaluation batch. J'ai ajouté Prometheus et Grafana pour les métriques infrastructure, instrumenté le pipeline pour permettre le tracing MLflow et Langfuse, et créé deux DAGs Airflow.
 
 Les trois fonctionnalités bonus (meeting recorder, live WebRTC, watcher radio) ont émergé pendant la phase 4, quand l'infrastructure était suffisamment stable pour permettre d'ajouter des features sans casser l'existant.
 
@@ -173,11 +173,11 @@ J'ai écarté Auth0, Firebase Auth et Keycloak, chacun apportant une dépendance
 
 Airflow 2.10, avec deux DAGs. Le premier, `nightly_golden_eval`, tourne tous les jours à 2 heures UTC. Il extrait les audios golden (limité à 7 pour le batch quotidien), appelle le pipeline, agrège les taux de succès, la latence et le coût. Il alerte si trop de runs échouent. L'intégration automatique des métriques de qualité BLEU/METEOR et de l'alerting Slack constitue l'étape suivante prévue.
 
-Le second DAG, `weekly_drift_check`, tourne le dimanche à 3 heures UTC. Il interroge Langfuse pour comparer la semaine N à la semaine N-1 sur la latence, le coût, le BLEU et la probabilité de langue. Il alerte si la variation dépasse 10%.
+Le second DAG, `weekly_drift_check`, tourne le dimanche à 3 heures UTC. Il interroge les scores disponibles dans Langfuse pour comparer la semaine N à la semaine N-1 sur la latence, le coût, la probabilité de langue et, lorsqu'il est disponible, le BLEU. Il alerte si la variation dépasse 10%.
 
 ### MLflow
 
-Utilisé pour trois rôles simultanés. Le tracking d'expériences avec 12 runs agrégés (un par configuration unique), chaque run contenant les métriques moyennées sur les 7 audios du golden dataset. Le registre de modèles avec le tag `production_version` sur la configuration retenue et le tag `champion` sur celle qui atteint le meilleur BLEU. L'évaluation via `mlflow.evaluate()` qui offre nativement plusieurs métriques dont BLEU, ROUGE et exact match. Enfin, j'active le tracing distribué avec des décorateurs `@mlflow.trace` sur les steps du pipeline.
+MLflow est utilisé pour le tracking des expérimentations et pour référencer les modèles externes utilisés par la plateforme. Les 12 configurations sont enregistrées sous forme de runs agrégés (un par configuration unique), chaque run contenant les métriques moyennées sur les 7 audios du golden dataset ; la meilleure configuration est identifiée par le tag `champion=true` accompagné du tag `stage=production`. Trois entrées du Model Registry documentent également les modèles STT, LLM et TTS avec leur version de production. L'évaluation offline est renforcée par `mlflow.evaluate()` qui offre nativement plusieurs métriques dont BLEU, ROUGE et exact match. J'ai enfin instrumenté les steps du pipeline avec des décorateurs `@mlflow.trace` pour permettre le tracing distribué ; son activation en production reste conditionnée à la disponibilité d'un artifact store distant.
 
 En parallèle, 84 évaluations individuelles (12 configurations × 7 audios) sont importées dans Langfuse pour le drill-down par audio.
 
@@ -219,7 +219,7 @@ Le DAG `weekly_drift_check` complète ce dispositif en comparant la semaine cour
 
 La sécurité est traitée en trois couches, selon le principe de défense en profondeur.
 
-La couche réseau isole tout ce qui peut l'être. Les quatorze conteneurs Docker sont bindés sur `127.0.0.1` et invisibles depuis Internet. Seul Nginx expose le port 443 en HTTPS. Les certificats Let's Encrypt sont renouvelés automatiquement par certbot. Cette isolation garantit qu'un attaquant qui aurait un exploit sur MLflow ou sur Grafana ne peut simplement pas les atteindre depuis l'extérieur.
+La couche réseau isole tout ce qui peut l'être. Les quatorze conteneurs Docker sont bindés sur `127.0.0.1` et invisibles depuis Internet. Seul Nginx expose le port 443 en HTTPS. Les certificats Let's Encrypt sont renouvelés automatiquement par certbot. Cette isolation réduit fortement leur surface d'exposition en empêchant leur accès direct depuis Internet.
 
 La couche authentification applicative repose sur du JWT custom. Les tokens d'accès sont signés en HS256 avec une durée de vie courte de quinze minutes. Les tokens de refresh sont plus longs (sept jours) mais hashés en SHA-256 en base, et surtout rotatifs (l'ancien est révoqué à chaque utilisation). Les mots de passe sont hashés avec bcrypt en salt automatique. Ce module est couvert par 25 tests unitaires qui vérifient le roundtrip, l'expiration, le tampering, les mauvaises signatures et les mauvais algorithmes.
 
@@ -233,7 +233,7 @@ J'ai adopté une approche à trois niveaux, complémentaires les uns des autres.
 
 Le niveau infrastructure est couvert par Prometheus et Grafana. Prometheus scrape les métriques HTTP standards (requêtes par seconde, latence, erreurs 4xx et 5xx) sur les six services FastAPI, plus les métriques système. Les dashboards Grafana sont organisés par service et par percentile de latence. Cette couche répond aux questions ops : est-ce que le service est up, combien de requêtes traite-t-il, quelle est la latence p95.
 
-Le niveau applicatif est couvert par le tracing MLflow. J'ai décoré les steps du pipeline avec `@mlflow.trace`. Chaque appel produit un span parent avec des sous-spans hiérarchisés. Je vois dans l'UI MLflow quel step prend combien de temps.
+Le niveau applicatif est couvert par une instrumentation MLflow prête à l'emploi. J'ai décoré les steps du pipeline avec `@mlflow.trace` : lorsque le tracing est activé, chaque appel produit un span parent avec des sous-spans hiérarchisés, visibles dans l'UI MLflow avec le temps consommé par chaque step. L'activation en production reste conditionnée à la disponibilité d'un artifact store distant.
 
 Le niveau métier LLM est couvert par Langfuse. Cet outil est spécialisé dans l'observabilité des applications LLM. Il capture chaque appel avec l'input, l'output, la latence, le coût, les tokens consommés. La vue waterfall affiche les spans dans l'ordre chronologique. Les prompts sont versionnés (v1.0, v1.1, v1.2).
 
@@ -257,7 +257,7 @@ Les tests sont organisés en trois catégories. La suite unit couvre les modules
 
 Sur la qualité de traduction, le champion expérimental est la configuration `large-v3 + Llama 3.3 70B + v1.1` avec un score BLEU moyen de **49.64** et un score METEOR moyen de **0.713** sur le corpus golden. Ce champion représente le meilleur compromis qualité observé lors de la campagne de sélection.
 
-La configuration historiquement retenue en production est Llama 8B, choisie pour son compromis coût/performance : environ 90% de la qualité du 70B pour un dixième du coût. Suite à la dépréciation Groq d'août 2026, la production actuelle utilise OpenAI GPT-4o mini via LiteLLM. Cette configuration n'a pas encore été rebenchmarkée sur le même protocole, une nouvelle campagne est prévue.
+La configuration Llama 8B avait historiquement été retenue en production pour son compromis coût/performance, malgré une qualité inférieure au champion 70B. Suite à la dépréciation Groq d'août 2026, la production actuelle utilise OpenAI GPT-4o mini via LiteLLM. Cette configuration n'a pas encore été rebenchmarkée sur le même protocole, une nouvelle campagne est prévue.
 
 Sur la performance, la latence end-to-end oscille entre deux et trois secondes selon la longueur de l'audio. Le détail est le suivant : environ 800 millisecondes pour le STT (Whisper large-v3 en CPU), 1,2 seconde pour le LLM, 600 millisecondes pour le TTS. Le mode Live WebRTC est nettement plus rapide avec 500 millisecondes de latence first-byte, puisque OpenAI Realtime fait tout en interne.
 
@@ -289,7 +289,7 @@ Whisper avait tendance à halluciner sur les accents. Sans hint de langue explic
 
 Le projet est livré en phase 1. La phase 2 comporte plusieurs chantiers.
 
-Côté qualité et évaluation, la priorité est d'intégrer réellement le calcul BLEU et METEOR dans le DAG nightly (aujourd'hui limité à la vérification de disponibilité) et de brancher un alerting Slack automatique. Une nouvelle campagne comparative doit aussi être menée sur OpenAI GPT-4o mini pour valider scientifiquement la qualité de la configuration de production actuelle sur le même protocole que la campagne initiale.
+Côté qualité et évaluation, la priorité est d'intégrer le calcul BLEU et METEOR dans le DAG nightly, qui contrôle actuellement la disponibilité du pipeline et exécute le golden dataset afin de suivre les taux de succès, la latence et le coût, et de brancher un alerting Slack automatique. Une nouvelle campagne comparative doit aussi être menée sur OpenAI GPT-4o mini pour valider scientifiquement la qualité de la configuration de production actuelle sur le même protocole que la campagne initiale.
 
 Côté architecture, la centralisation complète des appels applicatifs derrière la gateway est prévue, en remplacement des URLs de services directs actuellement bakerisées dans le bundle Next.js. Cela renforce l'isolation réseau et facilite le scaling futur.
 
