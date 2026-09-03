@@ -11,31 +11,28 @@ Architecture microservices avec orchestration Langchain LCEL, authentification J
 ```
 Client (Next.js)
        │
-       │ POST /auth/login  │  POST /process (audio)
-       ▼
-┌──────────────────────────┐
-│  Gateway Service  :8004  │   Auth JWT + admin API
-│  FastAPI + SQLAlchemy    │
-└──────────┬───────────────┘
-           │ proxy / forward
-           ▼
-┌─────────────────────────────────────────┐
-│  Pipeline Service  :8000                │
-│  Langchain LCEL orchestrateur           │
-│  + Langfuse tracing                     │
-│  STT ──► LLM ──► TTS                   │
-└──────┬──────────┬──────────┬────────────┘
-       │          │          │
-       ▼          ▼          ▼
-  STT :8001   LLM :8002   TTS :8003
-  Whisper     LiteLLM     Mistral
-  large-v3    + Groq       Voxtral
+       │ POST /auth/*  (Gateway)         │ POST /process  (Pipeline direct)
+       ▼                                 ▼
+┌──────────────────────────┐    ┌─────────────────────────────────────────┐
+│  Gateway Service  :8004  │    │  Pipeline Service  :8000                │
+│  FastAPI + SQLAlchemy    │    │  Langchain LCEL orchestrateur           │
+│  Auth JWT + admin API    │    │  + Langfuse tracing                     │
+│  /realtime/session       │    │  STT ──► LLM ──► TTS                   │
+└──────────────────────────┘    └──────┬──────────┬──────────┬────────────┘
+                                       │          │          │
+                                       ▼          ▼          ▼
+                                  STT :8001   LLM :8002   TTS :8003
+                                  Whisper     LiteLLM     Mistral
+                                  large-v3    multi-prov. Voxtral / MMS-TTS
 
 ┌──────────────────────────┐
 │  Watcher Service  :8005  │   Trafic Live (admin only)
-│  Polling autorouteinfo   │
-│  Whisper small + SSE     │
+│  Polling autorouteinfo   │   Whisper embarqué + LLM direct + SSE
 └──────────────────────────┘
+
+> Le frontend appelle actuellement le Pipeline directement pour /process.
+> La Gateway est utilisée séparément pour l'auth, l'admin et le token
+> éphémère OpenAI Realtime. Centralisation complète prévue en phase 2.
 ```
 
 | Service | Port | Technologie |
@@ -87,7 +84,7 @@ docker compose up --build
 
 **Apps & APIs** :
 - **Frontend** : http://localhost:3000
-- Dashboard admin MLOps : http://localhost:3000/admin
+- Dashboard admin LLMOps : http://localhost:3000/admin
 - Gateway API : http://localhost:8004/docs
 - Pipeline API : http://localhost:8000/docs
 - STT / LLM / TTS / Watcher : http://localhost:8001-8005/docs
@@ -125,7 +122,7 @@ Pages frontend : `/login`, `/register`, `/forgot-password`, `/reset-password`
 
 ---
 
-## Dashboard Admin MLOps
+## Dashboard Admin LLMOps
 
 Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 
@@ -160,7 +157,7 @@ Service dédié (`backend/services/watcher/`) qui tourne en arrière-plan en per
 
 ## Évaluation (Phase 1)
 
-**12 configurations** testées : 2 modèles Whisper × 2 LLMs × 3 prompts, évaluées sur 7 fichiers audio golden = 36 lignes de résultats agrégées.
+**12 configurations** testées : 2 modèles Whisper × 2 LLMs × 3 prompts, évaluées sur 7 fichiers audio golden = **84 évaluations individuelles** (Langfuse) → **12 runs MLflow** agrégés (1 par configuration).
 
 **Métriques calculées** : BLEU (sacrebleu), METEOR (nltk), WER (jiwer — nécessite refs FR)
 
@@ -317,7 +314,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-81 tests couvrant : acquisition, transcription, audio utils, NLP, I/O.
+**172 tests unitaires** + **23 tests d'intégration** couvrant : gateway auth, pipeline LCEL, STT/LLM/TTS, watcher, prompt-guard, acquisition, transcription, NLP, I/O.
 
 CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 
@@ -368,7 +365,7 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 - [ ] Phase 4 — Evidently drift detection (alternative à `weekly_drift_check`)
 - [ ] Phase 2 — MinIO (storage S3-like pour audio)
 - [ ] Phase 3 — Rate limiting Gateway
-- [ ] Déploiement — VPS + nginx + SSL (traduction-audio.fr)
+- [x] Déploiement — VPS Hetzner + Nginx + Let's Encrypt (traduction-audio.fr)
 
 ---
 
