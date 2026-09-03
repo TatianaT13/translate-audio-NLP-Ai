@@ -211,7 +211,7 @@ Suite à la dépréciation de `llama-3.1-8b-instant` par Groq en août 2026, la 
 
 L'évaluation continue est automatisée par le DAG Airflow `nightly_golden_eval`. Il tourne toutes les nuits, ping le pipeline pour vérifier sa disponibilité, appelle le pipeline sur les 7 audios du golden, agrège les taux de succès, la latence et le coût. Il alerte si au moins la moitié des runs échouent. L'intégration automatique du calcul BLEU/METEOR dans le DAG et l'alerting Slack constituent l'étape suivante prévue.
 
-Le DAG `weekly_drift_check` complète ce dispositif en comparant la semaine courante à la semaine précédente sur la latence, le coût, le BLEU et la probabilité de langue, avec un seuil de variation de 10%.
+Le DAG `weekly_drift_check` complète ce dispositif en comparant la semaine courante à la semaine précédente sur la latence, le coût, la probabilité de langue et, lorsqu'il est disponible dans Langfuse, le BLEU, avec un seuil de variation de 10%.
 
 ---
 
@@ -303,7 +303,7 @@ Sur le plan des compétences, ce projet me valide un ensemble transférable : Py
 
 ## 15. Conclusion
 
-Ce projet démontre qu'il est possible aujourd'hui de construire une plateforme LLMOps complète, sécurisée et déployée en production réelle, en s'appuyant sur des modèles pré-entraînés et un écosystème d'outils matures. L'enjeu n'est pas la modélisation, mais l'orchestration.
+Ce projet démontre qu'il est possible aujourd'hui de construire une plateforme LLMOps complète, intégrant plusieurs mécanismes de sécurisation et déployée en production, en s'appuyant sur des modèles pré-entraînés et un écosystème d'outils matures. L'enjeu n'est pas la modélisation, mais l'orchestration.
 
 Le projet couvre trois niveaux d'orchestration articulés autour d'un socle unique. LangChain LCEL orchestre le temps réel, chaînant STT, LLM et TTS à chaque requête utilisateur. Airflow orchestre le batch, avec l'évaluation nocturne et la surveillance hebdomadaire des dérives. Docker Compose orchestre le cycle de vie de l'ensemble des 14 conteneurs. Cette articulation à trois niveaux est ce qui distingue une vraie plateforme d'un simple script.
 
