@@ -20,6 +20,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "traduction-audio.fr — Translate any voice, instantly",
   description: "Upload or record audio in French and get an instant English translation powered by AI.",
+  // Le favicon passe par /api/favicon.ico (exempté de basic auth nginx via rewrite Next.js)
+  // pour être servi avant même que l'user ne soit authentifié.
+  icons: {
+    icon: "/api/favicon.ico",
+    shortcut: "/api/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
