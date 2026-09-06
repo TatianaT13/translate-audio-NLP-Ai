@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
       { source: "/llm/:path*",      destination: "http://llm:8002/:path*"     },
     ];
   },
+
+  // Le pipeline STT + LLM + TTS peut prendre plus d'une minute sur un audio long.
+  // Par défaut, Next.js coupe les rewrites à ~30s → ECONNRESET côté user.
+  experimental: {
+    proxyTimeout: 600_000, // 10 minutes en ms
+  },
 };
 
 export default nextConfig;
