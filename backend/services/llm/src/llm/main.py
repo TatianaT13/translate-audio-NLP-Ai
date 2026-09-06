@@ -79,6 +79,14 @@ def _clean_meta(text: str) -> str:
     return cleaned or text.strip()
 
 
+_FALLBACKS = [
+    m.strip() for m in os.getenv(
+        "LLM_FALLBACKS",
+        "openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022",
+    ).split(",") if m.strip()
+]
+
+
 def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> tuple[str, float, dict]:
     """Retourne (output, latency_ms, usage_info).
     usage_info = {prompt_tokens, completion_tokens, total_tokens, cost_usd}
@@ -88,11 +96,20 @@ def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> 
     clean=False         garde la sortie brute — utilisé pour le summarize markdown
                        (les regex de cleanup mangeraient les ":" du markdown)."""
     t0 = time.perf_counter()
-    response = litellm.completion(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        timeout=timeout,
-    )
+    fallbacks = [m for m in _FALLBACKS if m != model]
+    try:
+        response = litellm.completion(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=timeout,
+            num_retries=2,
+            fallbacks=fallbacks or None,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM upstream unavailable ({type(e).__name__}): {str(e)[:200]}",
+        )
     raw = response.choices[0].message.content.strip()
     translation = _clean_meta(raw) if clean else raw
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -134,7 +151,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
 
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "groq/openai/gpt-oss-20b")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "openai/gpt-4o-mini")
 DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v1.1")
 
 
