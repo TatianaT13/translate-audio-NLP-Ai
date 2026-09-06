@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { runPipeline, audioFromBase64 } from "@/lib/api";
 import type { ProcessResult } from "@/lib/api";
-import { getMe, logout, changePassword, deleteAccount, checkPasswordStrength } from "@/lib/auth";
+import { getMe, logout, changePassword, deleteAccount, checkPasswordStrength, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 
 type Step = "idle" | "recording" | "processing" | "done" | "error";
@@ -636,7 +636,20 @@ export default function Home() {
   const audioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
-    getMe().then(setUser).catch(() => router.push("/login"));
+    getMe()
+      .then((u) => {
+        if (u) setUser(u);
+        else router.push("/login");
+      })
+      .catch(() => router.push("/login"));
+
+    // Refresh preventif de l'access token toutes les 10 min (avant l'expiration
+    // JWT de 15 min). Evite que le menu et les calls API cassent silencieusement
+    // pour un user reste sur la page longtemps.
+    const id = setInterval(() => {
+      refreshAccessToken().catch(() => {});
+    }, 10 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   const handleLogout = async () => {

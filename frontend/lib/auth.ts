@@ -94,13 +94,39 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 export async function getMe(): Promise<User | null> {
-  const token = getAccessToken();
+  let token = getAccessToken();
   if (!token) return null;
-  const res = await fetch(`${GATEWAY_URL}/auth/me`, {
+  let res = await fetch(`${GATEWAY_URL}/auth/me`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
+  // Access token expiré (JWT 15min) — tente un refresh silencieux avec
+  // le refresh token (7j) avant d'abandonner. Sinon le menu utilisateur
+  // disparaît sans raison visible pour l'user encore actif.
+  if (res.status === 401) {
+    token = await refreshAccessToken();
+    if (!token) return null;
+    res = await fetch(`${GATEWAY_URL}/auth/me`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+  }
   if (!res.ok) return null;
   return res.json();
+}
+
+// Appelle une URL avec Bearer JWT. En cas de 401, refresh silencieux et retry.
+// À utiliser depuis les composants pour tout call vers Gateway ou Pipeline.
+export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  let token = getAccessToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  let res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    token = await refreshAccessToken();
+    if (!token) return res;
+    headers.set("Authorization", `Bearer ${token}`);
+    res = await fetch(url, { ...init, headers });
+  }
+  return res;
 }
 
 export async function changePassword(oldPassword: string, newPassword: string) {
