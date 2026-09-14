@@ -190,6 +190,60 @@ function ExpandableText({ text, color }: { text: string; color?: string }) {
   );
 }
 
+// ── Audio player + selecteur de vitesse (1x / 1.25x / 1.5x / 2x) ─────────────
+function AudioPlayerWithSpeed({ src, style }: { src: string; style?: React.CSSProperties }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [speed, setSpeed] = useState(1);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  const speeds: number[] = [1, 1.25, 1.5, 2];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
+      <audio
+        ref={audioRef}
+        controls
+        src={src}
+        style={{ width: "100%", height: "34px", accentColor: "var(--accent)", ...style }}
+      />
+      <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end", alignItems: "center" }}>
+        <span style={{ fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--muted)", opacity: 0.6, marginRight: "6px" }}>
+          Vitesse
+        </span>
+        {speeds.map(s => {
+          const active = speed === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSpeed(s)}
+              aria-pressed={active}
+              title={`Lire à ${s}× vitesse`}
+              style={{
+                padding: "3px 9px",
+                fontSize: "10px",
+                fontFamily: "ui-monospace, monospace",
+                fontVariantNumeric: "tabular-nums",
+                borderRadius: "4px",
+                border: `1px solid ${active ? "var(--accent-dim)" : "var(--border)"}`,
+                background: active ? "rgba(201,169,110,0.12)" : "transparent",
+                color: active ? "var(--accent)" : "var(--muted)",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {s}×
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface ResultsViewProps {
   result: ProcessResult;
   audioUrl: string | null;
@@ -221,7 +275,7 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
           padding: "14px 18px", borderRadius: "16px",
           background: "var(--surface)", border: "1px solid var(--accent-dim)",
         }}>
-          <audio controls src={audioUrl} style={{ flex: 1, height: "34px", accentColor: "var(--accent)" }} />
+          <AudioPlayerWithSpeed src={audioUrl} />
           <button onClick={onDownload} title="Télécharger" style={{
             padding: "8px", borderRadius: "10px", cursor: "pointer",
             background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
@@ -1106,7 +1160,9 @@ ${result.translation}
                   </div>
                 </div>
                 {/* Preview audio player */}
-                <audio controls src={pendingFile.previewUrl} style={{ width: "100%", marginBottom: S.gap16, borderRadius: "8px" }} />
+                <div style={{ marginBottom: S.gap16 }}>
+                  <AudioPlayerWithSpeed src={pendingFile.previewUrl} style={{ borderRadius: "8px" }} />
+                </div>
                 {/* Actions */}
                 <div style={{ display: "flex", gap: S.gap8, justifyContent: "flex-end" }}>
                   <button onClick={cancelPending} style={{
