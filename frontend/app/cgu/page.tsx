@@ -8,7 +8,8 @@ export default function CGU() {
       <p>
         Les présentes Conditions générales d&apos;utilisation (« <strong>CGU</strong> »)
         encadrent l&apos;utilisation du site <strong>traduction-audio.fr</strong> (le « Service ») édité
-        par <span className="placeholder">[NOM DE L&apos;ÉDITEUR]</span>. En créant un compte ou en
+        par <strong>Tetyana Tarasenko</strong>, entrepreneur individuel dont les coordonnées figurent
+        dans les <a href="/mentions-legales">mentions légales</a>. En créant un compte ou en
         utilisant le Service, vous acceptez sans réserve les présentes CGU.
       </p>
 

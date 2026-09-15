@@ -54,9 +54,9 @@ export default function Contact() {
       <h2>Adresse postale</h2>
       <dl>
         <dt>Éditeur</dt>
-        <dd><span className="placeholder">[NOM DE L&apos;ÉDITEUR]</span></dd>
+        <dd>Tetyana Tarasenko — entrepreneur individuel</dd>
         <dt>Adresse</dt>
-        <dd><span className="placeholder">[NUMÉRO, RUE, CODE POSTAL, VILLE, PAYS]</span></dd>
+        <dd>5A Rue des Argillières, 21121 Ahuy, France</dd>
       </dl>
 
       <p style={{ marginTop: "40px", fontStyle: "italic" }}>

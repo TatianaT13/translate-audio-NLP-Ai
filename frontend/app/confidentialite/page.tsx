@@ -14,8 +14,9 @@ export default function Confidentialite() {
 
       <h2>1. Responsable du traitement</h2>
       <p>
-        <span className="placeholder">[NOM DE L&apos;ÉDITEUR]</span>, dont les coordonnées figurent
-        dans les <a href="/mentions-legales">mentions légales</a>, est responsable du traitement de vos données.
+        <strong>Tetyana Tarasenko</strong>, entrepreneur individuel (SIRET 838 177 012 00021), dont
+        les coordonnées figurent dans les <a href="/mentions-legales">mentions légales</a>, est
+        responsable du traitement de vos données.
       </p>
 
       <h2>2. Données collectées</h2>
@@ -34,7 +35,7 @@ export default function Confidentialite() {
       <h3>Données de facturation</h3>
       <ul>
         <li>Historique des paiements et factures (obligation légale : conservation 10 ans)</li>
-        <li>Les données bancaires sont traitées exclusivement par notre prestataire de paiement <span className="placeholder">[NOM DU PSP]</span> et ne transitent pas par nos serveurs</li>
+        <li>Les données bancaires sont traitées exclusivement par notre prestataire de paiement (Stripe Payments Europe, Ltd.) et ne transitent jamais par nos serveurs</li>
       </ul>
 
       <h2>3. Finalités du traitement</h2>

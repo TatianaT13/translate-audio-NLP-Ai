@@ -7,8 +7,8 @@ export default function CGV() {
     <LegalLayout title="Conditions générales de vente" updated="15 septembre 2026">
       <p>
         Les présentes Conditions générales de vente (« <strong>CGV</strong> ») régissent la
-        souscription aux offres payantes proposées par <span className="placeholder">[NOM DE L&apos;ÉDITEUR]</span>
-        via le site <strong>traduction-audio.fr</strong>.
+        souscription aux offres payantes proposées par <strong>Tetyana Tarasenko</strong>,
+        entrepreneur individuel (SIRET 838 177 012 00021), via le site <strong>traduction-audio.fr</strong>.
       </p>
 
       <h2>1. Objet</h2>
@@ -19,18 +19,18 @@ export default function CGV() {
 
       <h2>2. Offres et tarifs</h2>
       <p>
-        Les offres, leurs caractéristiques et leurs tarifs sont détaillés sur la page
-        <span className="placeholder"> [/tarifs ou /pricing]</span> du site. Les prix sont exprimés
-        en euros toutes taxes comprises (TTC), sauf mention contraire. L&apos;éditeur se réserve le
-        droit de modifier ses tarifs à tout moment, sans effet rétroactif sur les abonnements en
-        cours.
+        Les offres, leurs caractéristiques et leurs tarifs sont détaillés sur la page dédiée aux
+        tarifs du site. Les prix sont exprimés en euros. En application de l&apos;article 293 B du
+        Code général des impôts, l&apos;éditeur bénéficie de la franchise en base de TVA :
+        <em> TVA non applicable, art. 293 B du CGI</em>. L&apos;éditeur se réserve le droit de
+        modifier ses tarifs à tout moment, sans effet rétroactif sur les abonnements en cours.
       </p>
 
       <h2>3. Commande</h2>
       <p>
         Toute commande implique l&apos;acceptation pleine et entière des présentes CGV. La commande
         est validée après confirmation du paiement par le prestataire de services de paiement retenu
-        (<span className="placeholder">[NOM DU PSP — ex : Stripe]</span>).
+        (Stripe Payments Europe, Ltd.).
       </p>
 
       <h2>4. Modalités de paiement</h2>
@@ -70,8 +70,8 @@ export default function CGV() {
       <h2>8. Suspension et défaut de paiement</h2>
       <p>
         En cas de défaut de paiement, l&apos;éditeur se réserve le droit de suspendre l&apos;accès
-        au Service jusqu&apos;à régularisation. Après un délai de <span className="placeholder">[X jours]</span>
-        sans régularisation, le compte pourra être supprimé.
+        au Service jusqu&apos;à régularisation. Après un délai de 15 jours sans régularisation, le
+        compte pourra être supprimé.
       </p>
 
       <h2>9. Responsabilité</h2>
@@ -92,7 +92,19 @@ export default function CGV() {
       <p>
         Conformément aux articles L. 611-1 et suivants du Code de la consommation, tout consommateur
         a le droit de recourir gratuitement à un médiateur de la consommation en vue de la résolution
-        amiable de tout litige. Le médiateur compétent est <span className="placeholder">[NOM ET COORDONNÉES DU MÉDIATEUR]</span>.
+        amiable de tout litige. En cas d&apos;échec d&apos;une réclamation formulée par écrit auprès
+        de l&apos;éditeur, le consommateur peut également saisir la plateforme européenne de
+        règlement en ligne des litiges :
+        {" "}
+        <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
+          ec.europa.eu/consumers/odr
+        </a>.
+      </p>
+      <p style={{ fontSize: "12px", opacity: 0.7 }}>
+        <em>
+          Note : l&apos;adhésion à un service de médiation de la consommation agréé sera indiquée
+          ici dès qu&apos;elle sera effective.
+        </em>
       </p>
 
       <h2>11. Droit applicable et juridiction</h2>

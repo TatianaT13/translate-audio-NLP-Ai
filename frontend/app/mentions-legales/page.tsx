@@ -14,20 +14,18 @@ export default function MentionsLegales() {
 
       <h2>1. Éditeur du site</h2>
       <dl>
-        <dt>Raison sociale</dt>
-        <dd><span className="placeholder">[NOM DE L&apos;ENTREPRISE OU AUTO-ENTREPRENEUR]</span></dd>
+        <dt>Éditeur</dt>
+        <dd>Tetyana Tarasenko</dd>
         <dt>Forme juridique</dt>
-        <dd><span className="placeholder">[SAS · SARL · EURL · Micro-entreprise · …]</span></dd>
-        <dt>Adresse du siège social</dt>
-        <dd><span className="placeholder">[NUMÉRO, RUE, CODE POSTAL, VILLE, PAYS]</span></dd>
+        <dd>Entrepreneur individuel</dd>
+        <dt>Adresse</dt>
+        <dd>5A Rue des Argillières, 21121 Ahuy, France</dd>
         <dt>Numéro SIRET</dt>
-        <dd><span className="placeholder">[14 CHIFFRES]</span></dd>
-        <dt>Numéro RCS ou RM</dt>
-        <dd><span className="placeholder">[RCS · Ville · numéro]</span></dd>
+        <dd>838 177 012 00021</dd>
+        <dt>Code APE</dt>
+        <dd>6201Z — Programmation informatique</dd>
         <dt>Numéro de TVA intracommunautaire</dt>
-        <dd><span className="placeholder">[FR XX XXXXXXXXX] (si assujetti)</span></dd>
-        <dt>Capital social</dt>
-        <dd><span className="placeholder">[Montant en €] (si applicable)</span></dd>
+        <dd>Non applicable — franchise en base de TVA (article 293 B du Code général des impôts)</dd>
         <dt>Directeur de la publication</dt>
         <dd>Tetyana Tarasenko</dd>
         <dt>Contact</dt>
@@ -37,11 +35,11 @@ export default function MentionsLegales() {
       <h2>2. Hébergement</h2>
       <dl>
         <dt>Hébergeur</dt>
-        <dd><span className="placeholder">[NOM DE L&apos;HÉBERGEUR — ex : Hetzner Online GmbH]</span></dd>
+        <dd>Hetzner Online GmbH</dd>
         <dt>Adresse</dt>
-        <dd><span className="placeholder">[ADRESSE COMPLÈTE DE L&apos;HÉBERGEUR]</span></dd>
+        <dd>Industriestr. 25, 91710 Gunzenhausen, Allemagne</dd>
         <dt>Contact hébergeur</dt>
-        <dd><span className="placeholder">[téléphone ou email support]</span></dd>
+        <dd>+49 (0)9831 505-0 — <a href="https://www.hetzner.com" target="_blank" rel="noopener noreferrer">www.hetzner.com</a></dd>
       </dl>
 
       <h2>3. Propriété intellectuelle</h2>

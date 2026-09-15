@@ -28,21 +28,21 @@ export default function Cookies() {
         <li><strong>préférences utilisateur</strong> (localStorage) — langue cible, mode de vitesse audio, etc.</li>
       </ul>
 
-      <h3>Cookies de mesure d&apos;audience (soumis à consentement)</h3>
+      <h3>Cookies de mesure d&apos;audience</h3>
       <p>
-        <span className="placeholder">
-          [SI VOUS UTILISEZ UN OUTIL D&apos;ANALYTICS (Plausible, Matomo, GA…), COMPLÉTEZ ICI. SINON RETIREZ CETTE SECTION.]
-        </span>
+        Aucun outil de mesure d&apos;audience n&apos;est actuellement déployé sur le site.
+        Cette section sera mise à jour si un outil respectueux de la vie privée
+        (Plausible, Matomo) venait à être ajouté.
       </p>
 
       <h3>Cookies tiers</h3>
       <p>
-        Certains services tiers (paiement, hébergement de contenu) peuvent déposer leurs propres
-        cookies dans le cadre de leur fonctionnement. Ces cookies sont soumis à la politique de
-        confidentialité de leurs éditeurs respectifs :
+        Certains services tiers peuvent déposer leurs propres cookies dans le cadre de leur
+        fonctionnement. Ces cookies sont soumis à la politique de confidentialité de leurs
+        éditeurs respectifs :
       </p>
       <ul>
-        <li><span className="placeholder">[Prestataire de paiement — Stripe, etc.]</span></li>
+        <li><strong>Stripe</strong> (paiement) — <a href="https://stripe.com/fr/privacy" target="_blank" rel="noopener noreferrer">stripe.com/fr/privacy</a></li>
       </ul>
 
       <h2>3. Gérer vos préférences</h2>
