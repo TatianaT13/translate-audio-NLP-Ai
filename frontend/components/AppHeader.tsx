@@ -11,7 +11,7 @@ import type { User } from "@/lib/auth";
 import {
   TranslateIcon, MicIcon, DocumentIcon,
   HomeIcon, AdminIcon, LogoutIcon, KeyIcon, TrashIcon,
-  ChevronDownIcon, ExternalLinkIcon,
+  ChevronDownIcon,
 } from "@/components/icons";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -211,7 +211,9 @@ function DropdownMenu({ user, onNavigate, onChangePwd, onDelete, onLogout }: Dro
     { type: "link",   label: "Accueil",                href: "/",          Icon: HomeIcon },
     { type: "separator" },
     ...(user.is_admin ? [{ type: "link" as const, label: "Admin",       href: "/admin",     Icon: AdminIcon }] : []),
-    { type: "link",   label: "Support de soutenance", href: "/soutenance-pitch.html", Icon: ExternalLinkIcon },
+    // Support de soutenance : masque du menu utilisateur (garde sur disque et
+    // sur git dans frontend/public/soutenance-pitch.html pour reference).
+    // { type: "link",   label: "Support de soutenance", href: "/soutenance-pitch.html", Icon: ExternalLinkIcon },
     { type: "separator" },
     { type: "action", label: "Changer le mot de passe", onClick: onChangePwd, Icon: KeyIcon },
     { type: "action", label: "Se déconnecter",          onClick: onLogout,     Icon: LogoutIcon },
