@@ -7,6 +7,7 @@ import type { ProcessResult } from "@/lib/api";
 import { getMe, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
+import { FooterMinimal } from "@/components/Footer";
 
 type Step = "idle" | "recording" | "processing" | "done" | "error";
 type SubStep = "transcribing" | "translating" | "synthesizing" | null;
@@ -1211,32 +1212,7 @@ ${result.translation}
         )}
       </div>
 
-      {/* ── Footer ── */}
-      <footer style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
-        padding: "14px 24px",
-        borderTop: "1px solid var(--border)",
-        background: "var(--background)",
-        textAlign: "center",
-        zIndex: 10,
-      }}>
-        <p style={{ fontSize: "11px", letterSpacing: "0.12em", color: "var(--muted)", opacity: 0.4 }}>
-          © {new Date().getFullYear()} traduction-audio.fr · Whisper · Llama · Voxtral
-          {(() => {
-            // Programmer's Day — 256e jour de l'année (2^8 = valeurs uniques d'un byte).
-            // 13 sept les années non bissextiles, 12 sept les années bissextiles.
-            const now = new Date();
-            const start = new Date(now.getFullYear(), 0, 0);
-            const diff = now.getTime() - start.getTime();
-            const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-            return dayOfYear === 256 ? (
-              <span title="Programmer's Day · 2⁸ = 256" style={{ marginLeft: "0.8em", color: "var(--accent)", opacity: 0.7 }}>
-                · day 2⁸
-              </span>
-            ) : null;
-          })()}
-        </p>
-      </footer>
+      <FooterMinimal />
 
       <style>{`
         @keyframes pulse {

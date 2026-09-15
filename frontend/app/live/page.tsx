@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
+import { FooterMinimal } from "@/components/Footer";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
 
@@ -389,6 +390,7 @@ export default function LivePage() {
 
       {/* <audio> caché mais DANS le DOM — indispensable pour que le browser autorise la lecture WebRTC */}
       <audio ref={audioRef} autoPlay playsInline hidden />
+      <FooterMinimal />
     </div>
   );
 }

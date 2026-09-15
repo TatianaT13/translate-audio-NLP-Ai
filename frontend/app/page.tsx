@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
+import { FooterFull } from "@/components/Footer";
 import { TranslateIcon, MicIcon, DocumentIcon } from "@/components/icons";
 
 // ── Card ──────────────────────────────────────────────────────────────────────
@@ -150,8 +151,8 @@ export default function Landing() {
           fontSize: "16px", lineHeight: 1.6, color: "var(--muted)",
           maxWidth: "540px", margin: "0 auto",
         }}>
-          Traduction audio propulsée par Whisper, GPT-4o mini et Voxtral.
-          Choisissez le mode adapté à votre besoin.
+          Écoutez, comprenez, communiquez — dans votre langue.
+          Choisissez le mode qui correspond à votre besoin.
         </p>
       </section>
 
@@ -165,13 +166,13 @@ export default function Landing() {
       }}>
         <FeatureCard
           Icon={TranslateIcon}
-          eyebrow="Cas d'usage principal"
+          eyebrow="Traduction audio"
           title="Traduire un audio"
-          description="Uploadez un fichier ou enregistrez-vous. On transcrit, on traduit, on synthétise à voix haute."
+          description="Déposez un fichier ou enregistrez votre voix. On vous rend la traduction écrite et lue à voix haute."
           bullets={[
-            "MP3, WAV, M4A, OGG, WebM, FLAC · max 25 Mo",
-            "Anglais, ukrainien, espagnol, allemand",
-            "Whisper large-v3 + GPT-4o mini + Voxtral",
+            "Formats audio courants pris en charge",
+            "Traduction vers anglais, espagnol, allemand, ukrainien",
+            "Écoute directe et téléchargement du résultat",
           ]}
           ctaLabel={user ? "Ouvrir" : "Se connecter"}
           onClick={go("/translate")}
@@ -179,13 +180,13 @@ export default function Landing() {
 
         <FeatureCard
           Icon={MicIcon}
-          eyebrow="Temps réel · bêta"
-          title="Live speech-to-speech"
-          description="Parlez en français, entendez la réponse dans la langue cible instantanément. Latence sub-seconde."
+          eyebrow="Conversation en direct"
+          title="Traduction instantanée"
+          description="Parlez dans votre langue, entendez la réponse dans une autre. Idéal pour un échange face-à-face ou en appel."
           bullets={[
-            "WebRTC · OpenAI Realtime API",
-            "6 langues source × 6 cibles",
-            "VAD automatique ou push-to-talk",
+            "Conversation à deux sens en temps réel",
+            "Six langues au choix, changement à la volée",
+            "Fonctionne au micro ou en push-to-talk",
           ]}
           ctaLabel={user ? "Ouvrir" : "Se connecter"}
           onClick={go("/live")}
@@ -194,28 +195,22 @@ export default function Landing() {
 
         <FeatureCard
           Icon={DocumentIcon}
-          eyebrow="Réunions multilingues"
+          eyebrow="Réunions"
           title="Compte-rendu de réunion"
-          description="Enregistrez une réunion longue. On génère un résumé structuré : synthèse, actions, décisions."
+          description="Enregistrez une réunion, recevez un compte-rendu clair : points clés, décisions, actions à mener."
           bullets={[
-            "Enregistrement continu (>30 min)",
-            "Résumé exécutif · détaillé · actions",
-            "Export texte, dans 5 langues",
+            "Enregistrement long, sans coupure",
+            "Trois formats de résumé au choix",
+            "Compte-rendu disponible en cinq langues",
           ]}
           ctaLabel={user ? "Ouvrir" : "Se connecter"}
           onClick={go("/meeting")}
         />
       </section>
 
-      {/* ── Footer ── */}
-      <footer style={{
-        marginTop: "auto", padding: "24px 32px",
-        borderTop: "1px solid var(--border)", textAlign: "center",
-      }}>
-        <p style={{ fontSize: "11px", letterSpacing: "0.12em", color: "var(--muted)", opacity: 0.5, margin: 0 }}>
-          © {new Date().getFullYear()} traduction-audio.fr · Whisper · Llama · Voxtral
-        </p>
-      </footer>
+      <div style={{ marginTop: "auto" }}>
+        <FooterFull />
+      </div>
     </main>
   );
 }

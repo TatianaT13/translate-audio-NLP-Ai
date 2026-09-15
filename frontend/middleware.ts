@@ -3,7 +3,12 @@ import type { NextRequest } from "next/server";
 
 // "/" est la landing publique (cards des 3 features + CTA login)
 // Les pages features (/translate, /live, /meeting, /admin) restent protegees.
-const PUBLIC_PATHS  = ["/login", "/register", "/forgot-password", "/reset-password"];
+// Les pages legales et informatives sont publiques (obligation LCEN + SEO).
+const PUBLIC_PATHS  = [
+  "/login", "/register", "/forgot-password", "/reset-password",
+  "/mentions-legales", "/cgu", "/cgv",
+  "/confidentialite", "/cookies", "/contact", "/a-propos",
+];
 const PUBLIC_EXACT  = ["/"];
 // Préfixes proxyés vers les backends Docker → laisse passer sans auth Next.js
 // (l'auth réelle est gérée par le service cible, ex: JWT côté gateway)

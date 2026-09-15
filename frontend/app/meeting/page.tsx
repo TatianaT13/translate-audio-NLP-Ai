@@ -6,6 +6,7 @@ import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { transcribeChunk, summarizeMeeting, type ChunkTranscript, type SummaryResponse } from "@/lib/meeting";
 import { AppHeader } from "@/components/AppHeader";
+import { FooterMinimal } from "@/components/Footer";
 
 type Step = "idle" | "recording" | "processing_chunk" | "stopped" | "summarizing" | "summarized" | "error";
 
@@ -421,6 +422,7 @@ export default function MeetingPage() {
         }
       `}</style>
     </main>
+    <FooterMinimal />
     </>
   );
 }
