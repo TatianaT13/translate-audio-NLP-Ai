@@ -1,0 +1,1459 @@
+"use client";
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { runPipeline, audioFromBase64 } from "@/lib/api";
+import type { ProcessResult } from "@/lib/api";
+import { getMe, logout, changePassword, deleteAccount, checkPasswordStrength, refreshAccessToken } from "@/lib/auth";
+import type { User } from "@/lib/auth";
+
+type Step = "idle" | "recording" | "processing" | "done" | "error";
+type SubStep = "transcribing" | "translating" | "synthesizing" | null;
+
+const LANGS = [
+  { code: "en", label: "Anglais" },
+  { code: "uk", label: "Ukrainien" },
+  { code: "es", label: "Espagnol" },
+  { code: "de", label: "Allemand" },
+];
+
+// Options sélectionnables — alimentent le panel "Configuration avancée"
+const WHISPER_MODELS = [
+  { value: "small",    label: "Whisper small (rapide)" },
+  { value: "medium",   label: "Whisper medium (équilibré)" },
+  { value: "large-v3", label: "Whisper large-v3 (qualité max)" },
+];
+
+const LLM_MODELS = [
+  { value: "openai/gpt-4o-mini",       label: "GPT-4o mini (OpenAI) — pay-per-use" },
+  { value: "openai/gpt-4o",            label: "GPT-4o (OpenAI) — qualité premium" },
+  { value: "groq/openai/gpt-oss-20b",  label: "GPT-OSS 20B (Groq) — free tier" },
+  { value: "groq/openai/gpt-oss-120b", label: "GPT-OSS 120B (Groq) — free tier XL" },
+  { value: "groq/qwen/qwen3.6-27b",    label: "Qwen 3.6 27B (Groq) — multilingue" },
+];
+
+const PROMPT_VERSIONS = [
+  { value: "v1.0", label: "v1.0 — basique" },
+  { value: "v1.1", label: "v1.1 — pro traffic (défaut)" },
+  { value: "v1.2", label: "v1.2 — broadcast quality" },
+];
+
+const S = {
+  gap4:  "4px",
+  gap8:  "8px",
+  gap12: "12px",
+  gap16: "16px",
+  gap24: "24px",
+  gap32: "32px",
+  gap48: "48px",
+};
+
+const QUOTES = [
+  { fr: "On ne voit bien qu'avec le cœur.",                  author: "Antoine de Saint-Exupéry", text: "One sees clearly only with the heart.",     lang: "EN", color: "#7eb8c9" },
+  { fr: "Je pense, donc je suis.",                           author: "René Descartes",            text: "Я мислю, отже я існую.",                   lang: "UK", color: "#9b7ec9" },
+  { fr: "La vie est courte, l'art est long.",                author: "Hippocrate",                text: "La vida es corta, el arte es largo.",      lang: "ES", color: "#c9a96e" },
+  { fr: "L'union fait la force.",                            author: "Proverbe belge",            text: "Einigkeit macht stark.",                   lang: "DE", color: "#7ec9a0" },
+
+  { fr: "Connais-toi toi-même.",                             author: "Socrate",                   text: "Know thyself.",                            lang: "EN", color: "#7eb8c9" },
+  { fr: "Le silence est d'or.",                              author: "Proverbe français",          text: "Мовчання — золото.",                       lang: "UK", color: "#9b7ec9" },
+  { fr: "Rien ne se perd, rien ne se crée.",                 author: "Antoine Lavoisier",         text: "Nada se pierde, todo se transforma.",      lang: "ES", color: "#c9a96e" },
+  { fr: "Le doute est le commencement de la sagesse.",       author: "Aristote",                  text: "Der Zweifel ist der Beginn der Weisheit.", lang: "DE", color: "#7ec9a0" },
+
+  { fr: "Le temps, c'est de l'argent.",                      author: "Proverbe",                  text: "Time is money.",                           lang: "EN", color: "#7eb8c9" },
+  { fr: "Les mots sont les fenêtres de l'âme.",              author: "Proverbe",                  text: "Слова — це вікна душі.",                   lang: "UK", color: "#9b7ec9" },
+  { fr: "Mieux vaut tard que jamais.",                       author: "Proverbe",                  text: "Más vale tarde que nunca.",                lang: "ES", color: "#c9a96e" },
+  { fr: "L'erreur est humaine.",                             author: "Proverbe",                  text: "Irren ist menschlich.",                    lang: "DE", color: "#7ec9a0" },
+
+  { fr: "La nuit porte conseil.",                            author: "Proverbe français",          text: "Sleep on it — the night brings counsel.",  lang: "EN", color: "#7eb8c9" },
+  { fr: "La beauté est dans les yeux de celui qui regarde.", author: "Proverbe",                  text: "Краса в очах того, хто дивиться.",         lang: "UK", color: "#9b7ec9" },
+  { fr: "Vouloir, c'est pouvoir.",                           author: "Proverbe",                  text: "Querer es poder.",                         lang: "ES", color: "#c9a96e" },
+  { fr: "Il n'est jamais trop tard pour bien faire.",        author: "Proverbe",                  text: "Es ist nie zu spät, Gutes zu tun.",        lang: "DE", color: "#7ec9a0" },
+];
+
+function MiniWave({ color }: { color: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "2px", margin: "0 18px", flexShrink: 0 }}>
+      {[6, 11, 8, 14, 9, 14, 8, 11, 6].map((h, i) => (
+        <span key={i} className="wave-bar" style={{
+          display: "inline-block", width: "2px", height: `${h}px`, borderRadius: "1px",
+          background: color, opacity: 0.55, animationDelay: `${i * 0.09}s`,
+        }} />
+      ))}
+    </span>
+  );
+}
+
+function WaveTransform({ mini = false }: { mini?: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  const items = [...QUOTES, ...QUOTES];
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: "100%", overflow: "hidden",
+        marginBottom: mini ? 0 : S.gap24,
+        WebkitMaskImage: "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
+        maskImage:       "linear-gradient(to right, transparent, black 64px, black calc(100% - 64px), transparent)",
+        opacity: mini ? 0.5 : 1,
+        transition: "opacity 0.3s",
+        cursor: "default",
+      }}
+    >
+      <div style={{
+        display: "inline-flex", alignItems: "center", whiteSpace: "nowrap",
+        animation: `marquee ${mini ? "200s" : "160s"} linear infinite`,
+        animationPlayState: hovered ? "paused" : "running",
+      }}>
+        {items.map((q, i) => (
+          <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
+            <span style={{
+              fontSize: mini ? "12px" : "19px",
+              fontFamily: "var(--font-body), ui-monospace, monospace",
+              fontStyle: "italic", color: "var(--foreground)", opacity: 0.78,
+            }}>
+              &ldquo;{q.fr}&rdquo;
+            </span>
+
+            <MiniWave color={q.color} />
+
+            <span style={{
+              fontSize: mini ? "12px" : "19px",
+              fontFamily: "var(--font-body), ui-monospace, monospace",
+              fontStyle: "italic", color: q.color,
+            }}>
+              &ldquo;{q.text}&rdquo;
+            </span>
+
+            <span style={{
+              fontSize: "10px", fontWeight: 600, letterSpacing: "0.18em",
+              padding: "2px 8px", borderRadius: "999px", marginLeft: "10px",
+              background: `${q.color}18`, color: q.color,
+            }}>
+              {q.lang}
+            </span>
+
+            <span style={{
+              fontSize: "11px", color: "var(--muted)", opacity: 0.65,
+              margin: "0 48px 0 12px", letterSpacing: "0.1em",
+            }}>
+              — {q.author}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProcessingTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const display = elapsed >= 60
+    ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
+    : `${elapsed}s`;
+  return (
+    <span style={{ fontSize: "13px", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
+      {display}
+    </span>
+  );
+}
+
+function ExpandableText({ text, color }: { text: string; color?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 320;
+  const isLong = text.length > LIMIT;
+  const displayed = expanded || !isLong ? text : text.slice(0, LIMIT) + "…";
+
+  return (
+    <div>
+      <p style={{
+        fontSize: "14px", lineHeight: 1.85, fontWeight: 300,
+        color: color ?? "var(--foreground)", whiteSpace: "pre-wrap",
+      }}>
+        {displayed}
+      </p>
+      {isLong && (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          marginTop: "10px", fontSize: "12px", cursor: "pointer",
+          background: "none", border: "none", padding: 0,
+          color: "var(--accent)", opacity: 0.7, letterSpacing: "0.05em",
+        }}>
+          {expanded ? "Voir moins" : "Voir plus"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Audio player + selecteur de vitesse (1x / 1.25x / 1.5x / 2x) ─────────────
+function AudioPlayerWithSpeed({ src, style }: { src: string; style?: React.CSSProperties }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [speed, setSpeed] = useState(1);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  const speeds: number[] = [1, 1.25, 1.5, 2];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
+      <audio
+        ref={audioRef}
+        controls
+        src={src}
+        style={{ width: "100%", height: "34px", accentColor: "var(--accent)", ...style }}
+      />
+      <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end", alignItems: "center" }}>
+        <span style={{ fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--muted)", opacity: 0.6, marginRight: "6px" }}>
+          Vitesse
+        </span>
+        {speeds.map(s => {
+          const active = speed === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSpeed(s)}
+              aria-pressed={active}
+              title={`Lire à ${s}× vitesse`}
+              style={{
+                padding: "3px 9px",
+                fontSize: "10px",
+                fontFamily: "ui-monospace, monospace",
+                fontVariantNumeric: "tabular-nums",
+                borderRadius: "4px",
+                border: `1px solid ${active ? "var(--accent-dim)" : "var(--border)"}`,
+                background: active ? "rgba(201,169,110,0.12)" : "transparent",
+                color: active ? "var(--accent)" : "var(--muted)",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {s}×
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface ResultsViewProps {
+  result: ProcessResult;
+  audioUrl: string | null;
+  langLabel: string;
+  copied: boolean;
+  onCopy: () => void;
+  onDownload: () => void;
+  onDownloadTranscript: () => void;
+}
+
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript }: ResultsViewProps) {
+  const latencies = [
+    { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
+    { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
+    { label: "TTS",   ms: result.latency_tts_ms,   color: "#9b7ec9" },
+    { label: "Total", ms: result.latency_total_ms, color: "var(--muted)" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: S.gap24, animation: "fadeUp 0.5s ease forwards" }}>
+
+      {/* Ticker mini */}
+      <WaveTransform mini />
+
+      {/* Audio player */}
+      {audioUrl && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: S.gap12,
+          padding: "14px 18px", borderRadius: "16px",
+          background: "var(--surface)", border: "1px solid var(--accent-dim)",
+        }}>
+          <AudioPlayerWithSpeed src={audioUrl} />
+          <button onClick={onDownload} title="Télécharger" style={{
+            padding: "8px", borderRadius: "10px", cursor: "pointer",
+            background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
+            color: "var(--accent)", flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Transcription — full width */}
+      <div style={{ borderRadius: "20px", overflow: "hidden", background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div style={{
+          padding: "14px 22px", display: "flex", justifyContent: "space-between",
+          alignItems: "center", borderBottom: "1px solid var(--border)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: S.gap12 }}>
+            <span style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>
+              Transcription
+            </span>
+            <span style={{ fontSize: "10px", padding: "2px 10px", borderRadius: "999px", background: "rgba(201,169,110,0.07)", color: "var(--accent)" }}>
+              {result.language.toUpperCase()} {Math.round(result.language_prob * 100)}%
+            </span>
+          </div>
+          <div style={{ height: "3px", width: "52px", borderRadius: "999px", overflow: "hidden", background: "var(--border)" }}>
+            <div style={{ height: "100%", borderRadius: "999px", background: "var(--accent-dim)", width: `${Math.round(result.language_prob * 100)}%`, transition: "width 0.6s ease" }} />
+          </div>
+        </div>
+        <div style={{ padding: "20px 22px" }}>
+          <ExpandableText text={result.source_text} />
+        </div>
+      </div>
+
+      {/* Arrow divider */}
+      <div style={{ display: "flex", alignItems: "center", gap: S.gap16 }}>
+        <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, var(--accent-dim))" }} />
+        <div style={{
+          display: "flex", alignItems: "center", gap: S.gap8,
+          padding: "6px 14px", borderRadius: "999px",
+          background: "rgba(201,169,110,0.06)", border: "1px solid var(--accent-dim)",
+        }}>
+          <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.1em" }}>FR</span>
+          <svg width="22" height="10" viewBox="0 0 22 10" fill="none">
+            <path d="M1 5h20M16 1l5 4-5 4" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 700, letterSpacing: "0.15em" }}>{langLabel.toUpperCase().slice(0,2)}</span>
+        </div>
+        <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, var(--accent-dim))" }} />
+      </div>
+
+      {/* Translation — full width, accented */}
+      <div style={{ borderRadius: "20px", overflow: "hidden", background: "rgba(201,169,110,0.03)", border: "1px solid var(--accent-dim)" }}>
+        <div style={{
+          padding: "14px 22px", display: "flex", justifyContent: "space-between",
+          alignItems: "center", borderBottom: "1px solid rgba(201,169,110,0.12)",
+        }}>
+          <span style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 600 }}>
+            {langLabel}
+          </span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button onClick={onDownloadTranscript} title="Télécharger source + traduction (.txt)" style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", background: "rgba(201,169,110,0.06)",
+              border: "1px solid var(--accent-dim)", color: "var(--accent)",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              .txt
+            </button>
+            <button onClick={onCopy} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", transition: "all 0.2s",
+              background: copied ? "rgba(201,169,110,0.18)" : "rgba(201,169,110,0.06)",
+              border: "1px solid var(--accent-dim)", color: "var(--accent)",
+            }}>
+              {copied ? (
+                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié</>
+              ) : (
+                <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</>
+              )}
+            </button>
+          </div>
+        </div>
+        <div style={{ padding: "20px 22px" }}>
+          <ExpandableText text={result.translation} color="var(--foreground)" />
+        </div>
+      </div>
+
+      {/* Metrics bar */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        gap: "2px", padding: "12px 16px", borderRadius: "16px",
+        background: "var(--surface)", border: "1px solid var(--border)",
+        flexWrap: "wrap",
+      }}>
+        {latencies.map((m, i) => {
+          const secs = m.ms / 1000;
+          const display = secs >= 60 ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s` : `${secs.toFixed(1)}s`;
+          return (
+            <div key={m.label} style={{ display: "flex", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: m.color }}>{display}</span>
+                <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>{m.label}</span>
+              </div>
+              <div style={{ width: "1px", height: "28px", background: "var(--border)" }} />
+            </div>
+          );
+        })}
+
+        {/* Coût LLM (Langfuse pricing) */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--accent)" }}>
+            {result.cost_usd != null && result.cost_usd > 0
+              ? `$${result.cost_usd.toFixed(5)}`
+              : "—"}
+          </span>
+          <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>
+            Coût {result.total_tokens ? `· ${result.total_tokens} tok` : ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChangePasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [oldPwd, setOldPwd]   = useState("");
+  const [newPwd, setNewPwd]   = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const strength = checkPasswordStrength(newPwd);
+  const allGood  = strength.length && strength.uppercase && strength.digit;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPwd !== confirm) { setError("Les mots de passe ne correspondent pas"); return; }
+    if (!allGood) { setError("Le mot de passe ne respecte pas les critères"); return; }
+    setError(null); setLoading(true);
+    try {
+      await changePassword(oldPwd, newPwd);
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      background: "rgba(12,12,14,0.85)", backdropFilter: "blur(4px)",
+    }} onClick={onClose}>
+      <div style={{
+        width: "100%", maxWidth: "380px", margin: "24px",
+        background: "var(--surface)", border: "1px solid var(--border)",
+        borderRadius: "20px", padding: "28px", animation: "fadeUp 0.3s ease",
+      }} onClick={e => e.stopPropagation()}>
+        <h2 className="font-serif" style={{ fontSize: "20px", color: "var(--foreground)", marginBottom: "24px" }}>
+          Changer le mot de passe
+        </h2>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {[
+            { label: "Ancien mot de passe", value: oldPwd, set: setOldPwd },
+            { label: "Nouveau mot de passe", value: newPwd, set: setNewPwd },
+            { label: "Confirmer", value: confirm, set: setConfirm },
+          ].map(f => (
+            <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--muted)" }}>{f.label}</label>
+              <input type="password" value={f.value} onChange={e => f.set(e.target.value)}
+                placeholder="••••••••" required style={{
+                  padding: "11px 14px", borderRadius: "10px", fontSize: "14px",
+                  background: "var(--background)", border: "1px solid var(--border)",
+                  color: "var(--foreground)", outline: "none", width: "100%",
+                }} />
+            </div>
+          ))}
+          {newPwd.length > 0 && (
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {[{ ok: strength.length, label: "8 car." }, { ok: strength.uppercase, label: "Maj." }, { ok: strength.digit, label: "Chiffre" }].map(r => (
+                <span key={r.label} style={{ fontSize: "11px", color: r.ok ? "#7ec9a0" : "var(--muted)" }}>
+                  {r.ok ? "✓" : "○"} {r.label}
+                </span>
+              ))}
+            </div>
+          )}
+          {error && (
+            <p style={{ fontSize: "13px", color: "#e87070", padding: "10px 14px", borderRadius: "10px", background: "rgba(232,112,112,0.08)", border: "1px solid rgba(232,112,112,0.2)" }}>
+              {error}
+            </p>
+          )}
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{
+              flex: 1, padding: "11px", borderRadius: "10px", cursor: "pointer", fontSize: "13px",
+              background: "none", border: "1px solid var(--border)", color: "var(--muted)",
+            }}>Annuler</button>
+            <button type="submit" disabled={loading} style={{
+              flex: 2, padding: "11px", borderRadius: "10px", cursor: loading ? "wait" : "pointer",
+              fontSize: "13px", fontWeight: 500, border: "none",
+              background: loading ? "var(--border)" : "linear-gradient(135deg, var(--accent), var(--accent-dim))",
+              color: loading ? "var(--muted)" : "#0c0c0e",
+            }}>{loading ? "Enregistrement…" : "Enregistrer"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [open, setOpen]         = useState(false);
+  const [showPwd, setShowPwd]   = useState(false);
+  const [showDel, setShowDel]   = useState(false);
+  const [delLoading, setDelLoading] = useState(false);
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    setDelLoading(true);
+    try { await deleteAccount(); router.push("/login"); }
+    catch { setDelLoading(false); }
+  };
+
+  const handleChangeSuccess = () => {
+    setShowPwd(false);
+    router.push("/login");
+  };
+
+  return (
+    <>
+      {showPwd && <ChangePasswordModal onClose={() => setShowPwd(false)} onSuccess={handleChangeSuccess} />}
+
+      {/* Delete confirm modal */}
+      {showDel && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 100, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          background: "rgba(12,12,14,0.85)", backdropFilter: "blur(4px)",
+        }} onClick={() => setShowDel(false)}>
+          <div style={{
+            width: "100%", maxWidth: "360px", margin: "24px",
+            background: "var(--surface)", border: "1px solid rgba(232,112,112,0.3)",
+            borderRadius: "20px", padding: "28px", animation: "fadeUp 0.3s ease",
+          }} onClick={e => e.stopPropagation()}>
+            <h2 className="font-serif" style={{ fontSize: "20px", color: "var(--foreground)", marginBottom: "12px" }}>
+              Supprimer le compte
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "24px", lineHeight: 1.6 }}>
+              Cette action est irréversible. Toutes vos données seront supprimées définitivement.
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setShowDel(false)} style={{
+                flex: 1, padding: "11px", borderRadius: "10px", cursor: "pointer",
+                background: "none", border: "1px solid var(--border)", color: "var(--muted)", fontSize: "13px",
+              }}>Annuler</button>
+              <button onClick={handleDelete} disabled={delLoading} style={{
+                flex: 2, padding: "11px", borderRadius: "10px", cursor: delLoading ? "wait" : "pointer",
+                background: "rgba(232,112,112,0.15)", border: "1px solid rgba(232,112,112,0.3)",
+                color: "#e87070", fontSize: "13px", fontWeight: 500,
+              }}>{delLoading ? "Suppression…" : "Supprimer définitivement"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ position: "relative" }}>
+        <button onClick={() => setOpen(o => !o)} style={{
+          display: "flex", alignItems: "center", gap: "8px",
+          padding: "6px 14px", borderRadius: "999px", cursor: "pointer",
+          background: open ? "rgba(201,169,110,0.1)" : "var(--surface)",
+          border: "1px solid var(--border)", color: "var(--muted)",
+          fontSize: "12px", transition: "all 0.2s",
+        }}>
+          <div style={{
+            width: "22px", height: "22px", borderRadius: "50%",
+            background: "rgba(201,169,110,0.12)", border: "1px solid var(--accent-dim)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "10px", color: "var(--accent)", fontWeight: 700,
+          }}>
+            {user.email[0].toUpperCase()}
+          </div>
+          <span style={{ maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {user.email}
+          </span>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>
+            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+
+        {open && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 50,
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "14px", padding: "6px", minWidth: "200px",
+            animation: "fadeUp 0.2s ease forwards",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }}>
+            {[
+              { label: "← Accueil (choisir un mode)", action: () => router.push("/"), color: "var(--muted)" },
+              { label: "🎙 Traduction live (bêta)", action: () => router.push("/live"), color: "var(--accent)" },
+              { label: "Compte-rendu de réunion", action: () => router.push("/meeting"), color: "var(--accent)" },
+              ...(user.is_admin ? [{ label: "Dashboard admin", action: () => router.push("/admin"), color: "var(--accent)" }] : []),
+              { label: "Support de soutenance", action: () => { window.open("/soutenance-pitch.html", "_blank", "noopener,noreferrer"); setOpen(false); }, color: "var(--accent)" },
+              { label: "Changer le mot de passe", action: () => { setShowPwd(true); setOpen(false); }, color: "var(--foreground)" },
+              { label: "Se déconnecter", action: onLogout, color: "var(--foreground)" },
+              { label: "Supprimer le compte", action: () => { setShowDel(true); setOpen(false); }, color: "#e87070" },
+            ].map(item => (
+              <button key={item.label} onClick={item.action} style={{
+                display: "block", width: "100%", padding: "10px 14px",
+                borderRadius: "10px", cursor: "pointer", textAlign: "left",
+                background: "none", border: "none", color: item.color,
+                fontSize: "13px", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div style={{
+      position: "fixed", bottom: "32px", left: "50%", transform: "translateX(-50%)",
+      padding: "12px 24px", borderRadius: "999px", fontSize: "13px", fontWeight: 500,
+      background: "var(--accent)", color: "#0c0c0e",
+      boxShadow: "0 8px 32px rgba(201,169,110,0.3)",
+      animation: "fadeUp 0.3s ease forwards", zIndex: 50,
+    }}>
+      {message}
+    </div>
+  );
+}
+
+export default function Home() {
+  const router = useRouter();
+  const [user, setUser]             = useState<User | null>(null);
+  const [step, setStep]             = useState<Step>("idle");
+  const [result, setResult]         = useState<ProcessResult | null>(null);
+  const [audioUrl, setAudioUrl]     = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isHoverDrop, setIsHoverDrop] = useState(false);
+  const [targetLang,    setTargetLang]    = useState("en");
+  // Default configurable par env (bake au build via NEXT_PUBLIC_DEFAULT_WHISPER_MODEL)
+  // → local : medium (Docker Desktop limité), prod : large-v3 (Hetzner 62 Go)
+  const [whisperModel,  setWhisperModel]  = useState(
+    process.env.NEXT_PUBLIC_DEFAULT_WHISPER_MODEL || "medium"
+  );
+  // Default configurable par env (bake au build via NEXT_PUBLIC_DEFAULT_LLM_MODEL)
+  // → permet de switcher de provider (OpenAI/Groq/Anthropic) sans toucher au code
+  const [llmModel,      setLlmModel]      = useState(
+    process.env.NEXT_PUBLIC_DEFAULT_LLM_MODEL || "openai/gpt-4o-mini"
+  );
+  const [promptVersion, setPromptVersion] = useState("v1.1");
+  const [showAdvanced,  setShowAdvanced]  = useState(false);
+
+  // Persister les choix avancés dans localStorage — migration auto des valeurs obsolètes.
+  // Clé versionnée pour invalider les anciennes configs sans intervention user
+  // (v1 contenait des modèles Groq dépréciés → v2 utilise le default env du frontend).
+  const CONFIG_STORAGE_KEY = "translate_config_v2";
+
+  useEffect(() => {
+    try {
+      // Migration : purger l'ancienne clé (v1) et forcer le user à repartir des defaults
+      // du build. Sans ça, les visiteurs récurrents restent bloqués sur un modèle mort.
+      if (typeof window !== "undefined" && localStorage.getItem("translate_config")) {
+        localStorage.removeItem("translate_config");
+      }
+
+      const saved = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}");
+      if (saved.whisperModel  && WHISPER_MODELS.some(m => m.value === saved.whisperModel))  setWhisperModel(saved.whisperModel);
+      if (saved.llmModel      && LLM_MODELS.some(m => m.value === saved.llmModel))          setLlmModel(saved.llmModel);
+      if (saved.promptVersion && PROMPT_VERSIONS.some(m => m.value === saved.promptVersion)) setPromptVersion(saved.promptVersion);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify({ whisperModel, llmModel, promptVersion }));
+  }, [whisperModel, llmModel, promptVersion]);
+  const [toast, setToast]           = useState<string | null>(null);
+  const [copied, setCopied]         = useState(false);
+  const [pendingFile, setPendingFile] = useState<{
+    file: File | Blob;
+    name: string;
+    sizeKb: number;
+    previewUrl: string;
+    durationSec: number | null;
+  } | null>(null);
+  const [subStep, setSubStep] = useState<SubStep>(null);
+  const [errorSuggestion, setErrorSuggestion] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fileRef      = useRef<HTMLInputElement>(null);
+  const mediaRef     = useRef<MediaRecorder | null>(null);
+  const chunksRef    = useRef<Blob[]>([]);
+  const audioBlobRef = useRef<Blob | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then((u) => {
+        if (u) setUser(u);
+        else router.push("/login");
+      })
+      .catch(() => router.push("/login"));
+
+    // Refresh preventif de l'access token toutes les 10 min (avant l'expiration
+    // JWT de 15 min). Evite que le menu et les calls API cassent silencieusement
+    // pour un user reste sur la page longtemps.
+    const id = setInterval(() => {
+      refreshAccessToken().catch(() => {});
+    }, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleLogout = async () => {
+    await logout().catch(() => {});
+    router.push("/");
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.target !== document.body) return;
+      e.preventDefault();
+      if (step === "idle") startRecording();
+      else if (step === "recording") stopRecording();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step]);
+
+  // ── Validation format audio côté client (whitelist stricte) ──────────────
+  const ACCEPTED_AUDIO_EXTS = [".mp3", ".wav", ".m4a", ".ogg", ".opus", ".webm", ".flac", ".aac", ".mp4"];
+  const ACCEPTED_MIME_PREFIXES = ["audio/", "video/mp4", "video/webm"];  // video/mp4 = m4a parfois
+
+  const validateAudioFile = (file: File): string | null => {
+    const name = file.name.toLowerCase();
+    const hasValidExt = ACCEPTED_AUDIO_EXTS.some(ext => name.endsWith(ext));
+    const hasValidMime = ACCEPTED_MIME_PREFIXES.some(p => file.type.startsWith(p));
+    if (!hasValidExt && !hasValidMime) {
+      return `Format non supporté : « ${file.name} ». Formats acceptés : MP3, WAV, M4A, OGG, WebM, FLAC.`;
+    }
+    const MAX_MB = 25;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      return `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : ${MAX_MB} Mo (~20 min d'audio).`;
+    }
+    if (file.size < 500) {
+      return `Fichier trop petit (${file.size} bytes) — probablement vide ou corrompu.`;
+    }
+    return null;
+  };
+
+  const preparePendingFile = useCallback((file: File | Blob) => {
+    setError(null); setResult(null); setAudioUrl(null); setCopied(false);
+    // Réinitialiser tout preview précédent (libère l'URL blob)
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+
+    const asFile = file instanceof File ? file : new File([file], "recording.webm", { type: file.type });
+    const validationErr = validateAudioFile(asFile);
+    if (validationErr) {
+      setError(validationErr);
+      setStep("error");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(asFile);
+    // Extraire la durée via un élément <audio> temporaire
+    const tmp = new Audio(previewUrl);
+    tmp.addEventListener("loadedmetadata", () => {
+      setPendingFile(prev => prev ? { ...prev, durationSec: Math.round(tmp.duration) } : prev);
+    });
+    tmp.addEventListener("error", () => { /* preview OK sans metadata */ });
+
+    setPendingFile({
+      file:        asFile,
+      name:        asFile.name,
+      sizeKb:      Math.round(asFile.size / 1024),
+      previewUrl,
+      durationSec: null,
+    });
+    setStep("idle");
+  }, [pendingFile]);
+
+  const cancelPending = () => {
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+    setPendingFile(null);
+    setError(null);
+    setStep("idle");
+  };
+
+  const run = useCallback(async (file: File | Blob) => {
+    setError(null); setResult(null); setAudioUrl(null); setCopied(false);
+    const MAX_MB = 25;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setError(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : ${MAX_MB} Mo (~20 min d'audio).`);
+      setStep("error");
+      return;
+    }
+
+    // AbortController pour le bouton "Annuler"
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    // Estimation grossière des durées de chaque étape en secondes :
+    //   STT ~= 0.3s / seconde d'audio (Whisper large-v3 CPU ~0.4x realtime)
+    //   LLM ~= 3s fixe (petit texte flash trafic)
+    //   TTS ~= 4s fixe (Voxtral)
+    const audioSec  = pendingFile?.durationSec ?? Math.max(10, Math.round(file.size / (16 * 1024)));  // fallback via taille
+    const sttMs     = Math.max(3000, audioSec * 300);
+    const llmDelay  = sttMs;
+    const tsDelay   = llmDelay + 3000;
+    const t1 = setTimeout(() => setSubStep("translating"),  llmDelay);
+    const t2 = setTimeout(() => setSubStep("synthesizing"), tsDelay);
+
+    setStep("processing");
+    setSubStep("transcribing");
+    try {
+      const res = await runPipeline(file, {
+        targetLang, llmModel, promptVersion, whisperModel, signal: ctrl.signal,
+      });
+      setResult(res);
+      if (res.audio_b64) {
+        const blob = audioFromBase64(res.audio_b64, res.audio_content_type);
+        audioBlobRef.current = blob;
+        setAudioUrl(URL.createObjectURL(blob));
+      }
+      setStep("done");
+      setSubStep(null);
+      // Nettoyage du preview après succès (libère la mémoire de la URL blob)
+      if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+      setPendingFile(null);
+      setToast(res.language_prob < 0.7 ? "Confiance faible — vérifiez la transcription" : "Traduction terminée");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // PipelineError : préférer userMessage + suggestion + status
+      const isPipelineErr = e instanceof Error && "userMessage" in e;
+      if (isPipelineErr) {
+        const pe = e as unknown as { userMessage: string; suggestion: string | null; status: number };
+        setError(pe.userMessage);
+        setErrorSuggestion(pe.suggestion);
+        setErrorStatus(pe.status);
+      } else {
+        setError(msg);
+        setErrorSuggestion(null);
+        setErrorStatus(null);
+      }
+      setStep(msg === "Requête annulée" ? "idle" : "error");
+      setSubStep(null);
+    } finally {
+      clearTimeout(t1); clearTimeout(t2);
+      abortRef.current = null;
+    }
+  }, [targetLang, llmModel, promptVersion, whisperModel, pendingFile]);
+
+  const cancelRun = () => {
+    abortRef.current?.abort();
+    setSubStep(null);
+    setStep("idle");
+  };
+
+  const runDemo = async () => {
+    setError(null); setResult(null); setAudioUrl(null);
+    try {
+      const res = await fetch("/demo.mp3", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Fichier démo introuvable (HTTP ${res.status})`);
+      const blob = await res.blob();
+      // Passe par le preview pour cohérence UX (l'user voit le fichier avant traduction)
+      preparePendingFile(new File([blob], "demo.mp3", { type: "audio/mpeg" }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Fichier démo non disponible";
+      setError(`${msg}. Déposez votre propre audio.`);
+      setStep("error");
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false); setIsHoverDrop(false);
+    const f = e.dataTransfer.files[0];
+    if (f) preparePendingFile(f);
+  };
+
+  // ── Enregistrement micro ─────────────────────────────────────────────────
+  const RECORDING_MAX_SEC = 5 * 60;  // 5 min max — safeguard user
+  const [recordingSec, setRecordingSec] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pickRecorderMime = (): string | undefined => {
+    // Ordre de préférence — webm/opus meilleur ratio qualité/taille
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/mpeg"];
+    for (const m of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return undefined; // MediaRecorder utilisera son default
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickRecorderMime();
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        // Utilise le vrai mimeType produit par le browser (pas hardcodé)
+        const realType = mr.mimeType || mime || "audio/webm";
+        const ext = realType.includes("mp4") ? "m4a" : realType.includes("mpeg") ? "mp3" : "webm";
+        const blob = new Blob(chunksRef.current, { type: realType });
+        stream.getTracks().forEach(t => t.stop());
+
+        // Cleanup timers
+        if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+        if (recordingMaxTimerRef.current) { clearTimeout(recordingMaxTimerRef.current); recordingMaxTimerRef.current = null; }
+        setRecordingSec(0);
+
+        // Passe par le preview (cohérence UX) au lieu de run direct
+        preparePendingFile(new File([blob], `enregistrement.${ext}`, { type: realType }));
+      };
+      mr.start();
+      mediaRef.current = mr;
+      setStep("recording");
+      setRecordingSec(0);
+
+      // Timer d'affichage
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSec(s => s + 1);
+      }, 1000);
+      // Safeguard : auto-stop au bout de RECORDING_MAX_SEC
+      recordingMaxTimerRef.current = setTimeout(() => {
+        setToast(`Enregistrement stoppé automatiquement (${RECORDING_MAX_SEC / 60} min max)`);
+        mr.stop();
+      }, RECORDING_MAX_SEC * 1000);
+    } catch {
+      setError("Microphone inaccessible — vérifiez l'autorisation du navigateur.");
+      setStep("error");
+    }
+  };
+
+  const stopRecording = () => mediaRef.current?.stop();
+
+  const copyTranslation = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.translation);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadAudio = () => {
+    if (!audioBlobRef.current) return;
+    const ext = audioBlobRef.current.type.includes("mpeg") ? "mp3" : "wav";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(audioBlobRef.current);
+    a.download = `translation.${ext}`; a.click();
+  };
+
+  const downloadTranscript = () => {
+    if (!result) return;
+    const content = `# Traduction audio — traduction-audio.fr
+Date : ${new Date().toLocaleString("fr-FR")}
+Langue source : ${result.language} (confiance ${(result.language_prob * 100).toFixed(0)}%)
+Langue cible  : ${langLabel}
+Latence totale : ${(result.latency_total_ms / 1000).toFixed(1)}s
+${result.cost_usd != null ? `Coût : $${result.cost_usd.toFixed(6)}\n` : ""}
+─── Transcription ───
+${result.source_text}
+
+─── Traduction (${langLabel}) ───
+${result.translation}
+`;
+    const blob = new Blob(["﻿" + content], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `traduction_${result.language}_to_${targetLang}_${Date.now()}.txt`;
+    a.click();
+  };
+
+  const reset = () => {
+    setStep("idle"); setResult(null); setAudioUrl(null); setError(null); setCopied(false);
+    if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
+    setPendingFile(null);
+  };
+
+  const langLabel = LANGS.find(l => l.code === targetLang)?.label ?? "English";
+
+  const dropActive = isDragging || isHoverDrop;
+
+  return (
+    <main style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", padding: "40px 24px 72px",
+      background: "var(--background)",
+    }}>
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+
+      {/* ── User menu (top right) ── */}
+      {user && (
+        <div style={{ position: "fixed", top: "16px", right: "20px", zIndex: 40 }}>
+          <UserMenu user={user} onLogout={handleLogout} />
+        </div>
+      )}
+
+      {/* ── Header ── */}
+      <header style={{
+        textAlign: "center", width: "100%", maxWidth: "680px",
+        marginBottom: step === "done" ? S.gap24 : S.gap32,
+        animation: "fadeUp 0.5s ease forwards",
+      }}>
+        <div style={{
+          display: "inline-block", fontSize: "11px", letterSpacing: "0.35em",
+          textTransform: "uppercase", marginBottom: S.gap24,
+          padding: "6px 16px", borderRadius: "999px",
+          background: "rgba(201,169,110,0.08)", color: "var(--accent)",
+        }}>
+          Traduction Audio IA
+        </div>
+
+        {step === "done" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap16, flexWrap: "wrap" }}>
+            <h1 className="font-serif" style={{ fontSize: "clamp(20px, 3.5vw, 26px)", color: "var(--foreground)", lineHeight: 1.2 }}>
+              Parlez.{" "}
+              <em style={{ color: "var(--accent)" }}>On traduit.</em>
+            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: S.gap8 }}>
+              <span style={{ fontSize: "11px", color: "var(--muted)", opacity: 0.5, letterSpacing: "0.1em" }}>FR</span>
+              <svg width="20" height="10" viewBox="0 0 20 10" fill="none" style={{ opacity: 0.4 }}>
+                <path d="M1 5h18M14 1l5 4-5 4" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{
+                fontSize: "11px", fontWeight: 600, letterSpacing: "0.18em",
+                padding: "3px 10px", borderRadius: "999px",
+                background: "rgba(201,169,110,0.12)", color: "var(--accent)",
+              }}>{langLabel.toUpperCase()}</span>
+            </div>
+            <button onClick={reset} style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "7px 16px", borderRadius: "999px", fontSize: "12px",
+              cursor: "pointer", transition: "all 0.2s",
+              background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
+            }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>
+              Recommencer
+            </button>
+          </div>
+        ) : (
+          <>
+            <h1 className="font-serif" style={{
+              fontSize: "clamp(32px, 6vw, 54px)", color: "var(--foreground)",
+              lineHeight: 1.1, marginBottom: S.gap16,
+            }}>
+              Parlez.
+              <br />
+              <em style={{ color: "var(--accent)" }}>On traduit.</em>
+            </h1>
+            <p style={{
+              fontSize: "15px", lineHeight: 1.5, fontWeight: 400,
+              color: "var(--foreground)", opacity: 0.9, maxWidth: "42ch", margin: "0 auto",
+            }}>
+              Votre audio, dans la langue de votre choix.
+            </p>
+            <p style={{
+              fontSize: "12px", lineHeight: 1.6, fontWeight: 300,
+              color: "var(--muted)", maxWidth: "56ch", margin: "8px auto 0",
+            }}>
+              Importez ou enregistrez votre audio. Nous le transcrivons, le traduisons et le lisons dans la langue choisie.
+            </p>
+          </>
+        )}
+      </header>
+
+      <div style={{ width: "100%", maxWidth: "680px" }}>
+
+        {/* ── Idle ── */}
+        {step === "idle" && (
+          <div style={{ animation: "fadeUp 0.5s ease forwards" }}>
+
+            {/* Language selector */}
+            <div style={{ display: "flex", gap: S.gap8, justifyContent: "center", flexWrap: "wrap", marginBottom: S.gap16 }}>
+              {LANGS.map(l => (
+                <button key={l.code} onClick={() => setTargetLang(l.code)} style={{
+                  padding: "7px 18px", borderRadius: "999px", fontSize: "13px",
+                  fontWeight: 500, cursor: "pointer", transition: "all 0.2s",
+                  background: targetLang === l.code ? "rgba(201,169,110,0.12)" : "var(--surface)",
+                  border: `1px solid ${targetLang === l.code ? "var(--accent)" : "var(--border)"}`,
+                  color: targetLang === l.code ? "var(--accent)" : "var(--muted)",
+                }}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Configuration avancée — collapsible */}
+            <div style={{ marginBottom: S.gap24, textAlign: "center" }}>
+              <button onClick={() => setShowAdvanced(s => !s)} style={{
+                fontSize: "11px", color: "var(--muted)", background: "none",
+                border: "none", cursor: "pointer", padding: "4px 8px",
+                letterSpacing: "0.1em", textTransform: "uppercase",
+              }}>
+                {showAdvanced ? "▾" : "▸"} Configuration avancée
+              </button>
+
+              {showAdvanced && (
+                <div style={{
+                  marginTop: S.gap12, padding: "16px 18px", borderRadius: "14px",
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: S.gap12,
+                  textAlign: "left",
+                  animation: "fadeUp 0.25s ease",
+                }}>
+                  {[
+                    { label: "Modèle STT",    value: whisperModel,  setter: setWhisperModel,  options: WHISPER_MODELS },
+                    { label: "Modèle LLM",    value: llmModel,      setter: setLlmModel,      options: LLM_MODELS },
+                    { label: "Version prompt", value: promptVersion, setter: setPromptVersion, options: PROMPT_VERSIONS },
+                  ].map(field => (
+                    <div key={field.label} style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
+                      <label style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                        {field.label}
+                      </label>
+                      <select
+                        value={field.value}
+                        onChange={e => field.setter(e.target.value)}
+                        style={{
+                          padding: "8px 10px", fontSize: "12px",
+                          borderRadius: "8px", border: "1px solid var(--border)",
+                          background: "var(--background)", color: "var(--foreground)",
+                          outline: "none", cursor: "pointer",
+                          width: "100%", maxWidth: "100%", minWidth: 0,
+                          textOverflow: "ellipsis",
+                        }}>
+                        {field.options.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <WaveTransform />
+
+            {/* Drop zone OU preview du fichier sélectionné */}
+            {pendingFile ? (
+              <div style={{
+                borderRadius: "20px", padding: "24px 24px 20px", marginBottom: S.gap24,
+                background: "rgba(201,169,110,0.04)",
+                border: "1.5px solid var(--accent-dim, rgba(201,169,110,0.4))",
+                animation: "fadeUp 0.25s ease",
+              }}>
+                {/* Nom + taille + durée */}
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: S.gap16, marginBottom: S.gap16, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: S.gap8, marginBottom: "4px" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                      </svg>
+                      <span style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {pendingFile.name}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                      {pendingFile.sizeKb < 1024
+                        ? `${pendingFile.sizeKb} Ko`
+                        : `${(pendingFile.sizeKb / 1024).toFixed(1)} Mo`}
+                      {pendingFile.durationSec != null && ` · ${Math.floor(pendingFile.durationSec / 60)}:${String(pendingFile.durationSec % 60).padStart(2, "0")}`}
+                    </p>
+                  </div>
+                </div>
+                {/* Preview audio player */}
+                <div style={{ marginBottom: S.gap16 }}>
+                  <AudioPlayerWithSpeed src={pendingFile.previewUrl} style={{ borderRadius: "8px" }} />
+                </div>
+                {/* Actions */}
+                <div style={{ display: "flex", gap: S.gap8, justifyContent: "flex-end" }}>
+                  <button onClick={cancelPending} style={{
+                    padding: "8px 16px", borderRadius: "10px", fontSize: "13px",
+                    background: "transparent", border: "1px solid var(--border)",
+                    color: "var(--muted)", cursor: "pointer",
+                  }}>
+                    Annuler
+                  </button>
+                  <button onClick={() => run(pendingFile.file)} style={{
+                    padding: "8px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 500,
+                    background: "var(--accent)", border: "none", color: "#0c0c0e", cursor: "pointer",
+                  }}>
+                    ▶ Traduire
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+                onClick={() => fileRef.current?.click()}
+                onMouseEnter={() => setIsHoverDrop(true)}
+                onMouseLeave={() => setIsHoverDrop(false)}
+                style={{
+                  borderRadius: "20px", textAlign: "center", cursor: "pointer",
+                  padding: "36px 24px", marginBottom: S.gap24,
+                  background: dropActive ? "rgba(201,169,110,0.06)" : "var(--surface)",
+                  border: `1.5px dashed ${dropActive ? "var(--accent)" : "var(--border)"}`,
+                  boxShadow: dropActive ? "0 0 0 4px rgba(201,169,110,0.06)" : "none",
+                  transition: "all 0.25s",
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{
+                    color: dropActive ? "var(--accent)" : "var(--muted)",
+                    margin: "0 auto 20px", transition: "color 0.25s",
+                  }}>
+                  <path d="M9 18V5l12-2v13" />
+                  <circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                </svg>
+                <p style={{ fontSize: "15px", fontWeight: 400, color: "var(--foreground)", marginBottom: "6px" }}>
+                  Déposez un fichier audio ici
+                </p>
+                <p style={{ fontSize: "13px", color: "var(--muted)" }}>MP3, WAV, M4A, OGG, WebM, FLAC · max 25 Mo</p>
+                <input ref={fileRef} type="file"
+                  accept=".mp3,.wav,.m4a,.ogg,.opus,.webm,.flac,.aac,.mp4,audio/*"
+                  style={{ display: "none" }}
+                  onChange={e => e.target.files?.[0] && preparePendingFile(e.target.files[0])} />
+              </div>
+            )}
+
+            {/* divider */}
+            <div style={{ display: "flex", alignItems: "center", gap: S.gap16, marginBottom: S.gap24 }}>
+              <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: "var(--muted)", opacity: 0.4, flexShrink: 0 }}>
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+              <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+            </div>
+
+            {/* Micro — action alternative clairement identifiée */}
+            <button onClick={startRecording} title="Enregistrer directement depuis votre micro (raccourci : barre d'espace)" style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+              padding: "14px", borderRadius: "14px", cursor: "pointer",
+              fontSize: "14px", fontWeight: 500, letterSpacing: "0.02em",
+              background: "var(--surface)",
+              color: "var(--foreground)", border: "1px solid var(--border)",
+              transition: "all 0.2s",
+            }}>
+              {/* Icône micro */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: "var(--accent)", flexShrink: 0 }}>
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+              <span>Parler au micro</span>
+            </button>
+
+            {/* Lien discret vers la démo — pas un CTA principal */}
+            <div style={{ textAlign: "center", marginTop: S.gap16 }}>
+              <button onClick={runDemo} title="Écouter un exemple préchargé pour tester l'app sans déposer votre propre audio" style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "12px", color: "var(--muted)", opacity: 0.75,
+                textDecoration: "underline", textDecorationStyle: "dotted",
+                textUnderlineOffset: "4px", padding: "4px 8px",
+                transition: "color 0.2s, opacity 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.opacity = "1"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.opacity = "0.75"; }}
+              >
+                Pas d&apos;audio sous la main ?  Écouter un exemple ↗
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Recording avec timer + limite visuelle ── */}
+        {step === "recording" && (
+          <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "6px", height: "48px", marginBottom: "24px" }}>
+              {[0.0, 0.1, 0.2, 0.3, 0.15, 0.25, 0.2].map((delay, i) => (
+                <div key={i} className="wave-bar" style={{
+                  width: "8px", height: "100%", borderRadius: "4px",
+                  background: "var(--accent)", animationDelay: `${delay}s`,
+                }} />
+              ))}
+            </div>
+            {/* Compteur mm:ss + limite */}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{
+                fontSize: "28px", fontWeight: 300, color: "var(--accent)",
+                fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums",
+              }}>
+                {String(Math.floor(recordingSec / 60)).padStart(2, "0")}:{String(recordingSec % 60).padStart(2, "0")}
+              </span>
+              <span style={{ fontSize: "12px", color: "var(--muted)", opacity: 0.6 }}>
+                / {RECORDING_MAX_SEC / 60}:00 max
+              </span>
+            </div>
+            <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "32px" }}>
+              Parlez, puis cliquez pour arrêter
+            </p>
+            <button onClick={stopRecording} style={{
+              padding: "12px 32px", borderRadius: "999px", fontSize: "13px",
+              fontWeight: 500, cursor: "pointer", transition: "opacity 0.2s",
+              background: "var(--accent)", border: "none", color: "#0c0c0e",
+            }}>
+              ⬛ Arrêter
+            </button>
+          </div>
+        )}
+
+        {/* ── Processing avec steps progressifs + cancel ── */}
+        {step === "processing" && (
+          <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap12, marginBottom: S.gap24 }}>
+              {([
+                { key: "transcribing",  label: "STT", full: "Transcription (Whisper)" },
+                { key: "translating",   label: "LLM", full: "Traduction (LLM)" },
+                { key: "synthesizing",  label: "TTS", full: "Synthèse vocale (TTS)" },
+              ] as const).map((sw, i, arr) => {
+                const stepOrder = ["transcribing", "translating", "synthesizing"] as const;
+                const currentIdx = subStep ? stepOrder.indexOf(subStep) : -1;
+                const isDone     = currentIdx > i;
+                const isActive   = subStep === sw.key;
+                const isPending  = currentIdx < i;
+                const color = isDone ? "var(--accent)" : isActive ? "var(--accent)" : "var(--muted)";
+                const opacity = isPending ? 0.35 : 1;
+                return (
+                  <div key={sw.key} style={{ display: "flex", alignItems: "center", gap: S.gap12 }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", opacity }}>
+                      {isDone ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      ) : (
+                        <div style={{
+                          width: "10px", height: "10px", borderRadius: "50%",
+                          background: color,
+                          animation: isActive ? "pulse 1.2s ease-in-out infinite" : "none",
+                        }} />
+                      )}
+                      <span style={{ fontSize: "11px", letterSpacing: "0.1em", color, fontWeight: isActive ? 600 : 400 }}>{sw.label}</span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div style={{ width: "32px", height: "1px", background: currentIdx > i ? "var(--accent)" : "var(--border)", marginBottom: "18px" }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap8, marginBottom: S.gap16 }}>
+              <p style={{ fontSize: "13px", color: "var(--muted)" }}>
+                {subStep === "transcribing" && "Transcription en cours…"}
+                {subStep === "translating"  && "Traduction en cours…"}
+                {subStep === "synthesizing" && "Synthèse vocale en cours…"}
+              </p>
+              <ProcessingTimer />
+            </div>
+            <button onClick={cancelRun} style={{
+              padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
+              background: "transparent", border: "1px solid var(--border)",
+              color: "var(--muted)", cursor: "pointer",
+            }}>
+              Annuler
+            </button>
+          </div>
+        )}
+
+        {/* ── Results ── */}
+        {step === "done" && result && (
+          <ResultsView
+            result={result}
+            audioUrl={audioUrl}
+            langLabel={langLabel}
+            copied={copied}
+            onCopy={copyTranslation}
+            onDownload={downloadAudio}
+            onDownloadTranscript={downloadTranscript}
+          />
+        )}
+
+        {/* ── Error enrichie (message + suggestion + code) ── */}
+        {step === "error" && error && (
+          <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
+            <div style={{
+              width: "48px", height: "48px", borderRadius: "50%", margin: "0 auto 20px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(232,112,112,0.1)", border: "1px solid rgba(232,112,112,0.2)",
+            }}>
+              <span style={{ color: "#e87070", fontSize: "18px" }}>×</span>
+            </div>
+            <p style={{ fontSize: "14px", color: "#e87070", marginBottom: "8px" }}>
+              Une erreur est survenue
+              {errorStatus && <span style={{ marginLeft: "8px", fontSize: "11px", opacity: 0.6, fontFamily: "monospace" }}>HTTP {errorStatus}</span>}
+            </p>
+            <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "48ch", margin: "0 auto 20px", lineHeight: 1.5 }}>{error}</p>
+            {errorSuggestion && (
+              <p style={{
+                fontSize: "12px", color: "var(--accent)", maxWidth: "48ch",
+                margin: "0 auto 32px", fontStyle: "italic",
+              }}>
+                💡 {errorSuggestion}
+              </p>
+            )}
+            <div style={{ display: "flex", justifyContent: "center", gap: S.gap12, flexWrap: "wrap" }}>
+              {errorStatus === 415 && (
+                <a href="https://cloudconvert.com/mp3-converter" target="_blank" rel="noopener noreferrer" style={{
+                  padding: "10px 20px", borderRadius: "999px", fontSize: "13px",
+                  background: "rgba(201,169,110,0.08)", border: "1px solid var(--accent-dim)",
+                  color: "var(--accent)", textDecoration: "none",
+                }}>
+                  Ouvrir CloudConvert ↗
+                </a>
+              )}
+              <button onClick={reset} style={{
+                padding: "10px 28px", borderRadius: "999px", fontSize: "13px",
+                cursor: "pointer", background: "var(--surface)",
+                border: "1px solid var(--border)", color: "var(--foreground)",
+              }}>
+                Réessayer
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <footer style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        padding: "14px 24px",
+        borderTop: "1px solid var(--border)",
+        background: "var(--background)",
+        textAlign: "center",
+        zIndex: 10,
+      }}>
+        <p style={{ fontSize: "11px", letterSpacing: "0.12em", color: "var(--muted)", opacity: 0.4 }}>
+          © {new Date().getFullYear()} traduction-audio.fr · Whisper · Llama · Voxtral
+          {(() => {
+            // Programmer's Day — 256e jour de l'année (2^8 = valeurs uniques d'un byte).
+            // 13 sept les années non bissextiles, 12 sept les années bissextiles.
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 0);
+            const diff = now.getTime() - start.getTime();
+            const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+            return dayOfYear === 256 ? (
+              <span title="Programmer's Day · 2⁸ = 256" style={{ marginLeft: "0.8em", color: "var(--accent)", opacity: 0.7 }}>
+                · day 2⁸
+              </span>
+            ) : null;
+          })()}
+        </p>
+      </footer>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.2); }
+        }
+      `}</style>
+    </main>
+  );
+}

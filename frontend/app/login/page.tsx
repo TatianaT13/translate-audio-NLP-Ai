@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { login } from "@/lib/auth";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath     = searchParams.get("next") || "/";
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]       = useState<string | null>(null);
@@ -18,7 +20,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/");
+      // ?next=/xxx passe par la landing depuis une card qui necessite auth
+      router.push(nextPath.startsWith("/") ? nextPath : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de connexion");
     } finally {

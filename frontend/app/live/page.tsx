@@ -266,7 +266,7 @@ export default function LivePage() {
         {user && (
           <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "12px" }}>
             <span style={{ color: "var(--muted)" }}>{user.email}</span>
-            <button onClick={() => logout().then(() => router.push("/login"))} style={{
+            <button onClick={() => logout().then(() => router.push("/"))} style={{
               background: "transparent", border: "1px solid var(--border)", color: "var(--muted)",
               padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "11px",
             }}>Déconnexion</button>

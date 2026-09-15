@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// "/" est la landing publique (cards des 3 features + CTA login)
+// Les pages features (/translate, /live, /meeting, /admin) restent protegees.
 const PUBLIC_PATHS  = ["/login", "/register", "/forgot-password", "/reset-password"];
+const PUBLIC_EXACT  = ["/"];
 // Préfixes proxyés vers les backends Docker → laisse passer sans auth Next.js
 // (l'auth réelle est gérée par le service cible, ex: JWT côté gateway)
 const PROXY_PREFIXES = ["/api", "/pipeline", "/stt", "/llm"];
@@ -21,8 +24,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow public auth routes
+  // Allow public auth routes + landing
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+  if (PUBLIC_EXACT.includes(pathname)) {
     return NextResponse.next();
   }
 
