@@ -143,6 +143,12 @@ def register_routes(app, get_current_user):
             submit_type="auto",
             integration_identifier="hosted_web_0001",
             origin_context="web",
+            # Desactive Managed Payments pour ce request. L'editeur est en
+            # franchise de TVA (art. 293 B CGI) donc Stripe ne doit PAS
+            # collecter automatiquement de TVA. Managed Payments etant active
+            # par defaut sur le compte, on le desactive explicitement ici pour
+            # que automatic_tax={enabled: False} soit accepte.
+            managed_payments={"enabled": False},
         )
         return CheckoutResponse(url=session.url)
 
