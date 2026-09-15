@@ -134,7 +134,7 @@ def register_routes(app, get_current_user):
             cancel_url=f"{APP_BASE_URL}/tarifs/annule",
             metadata={"user_id": str(current_user.id)},
             # ── fixed_by_ui (Stripe Checkout Studio) ───────────────────────
-            ui_mode="hosted",
+            ui_mode="hosted_page",
             billing_address_collection="auto",
             phone_number_collection={"enabled": False},
             automatic_tax={"enabled": False},
