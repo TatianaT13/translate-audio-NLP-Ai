@@ -146,19 +146,8 @@ export interface ServiceHealth {
 export const getServicesHealth = () =>
   apiFetch<{ services: ServiceHealth[] }>("/admin/services/health");
 
-export interface TrafficEvent {
-  type:          string;          // type principal (le plus sévère)
-  types?:        string[];        // tous les types détectés sur cette portion (fusion)
-  severity:      "high" | "medium" | "low";
-  routes:        string[];
-  direction:     string;
-  location_hint: string;
-  zone:          string;
-  timestamp:     string;
-  delay_hint:    string;
-  translations?: Record<string, string>;
-  alsoIn?:       string[];      // zones supplémentaires où ce même event est diffusé (dédup client)
-}
+// TrafficEvent + TrafficSnapshot + getTrafficEvents retires avec la
+// desactivation du service watcher (v0.2 — mise en production commerciale).
 
 export async function synthesizeTTS(text: string, lang: string): Promise<Blob> {
   const headers = await authHeaders();
@@ -170,11 +159,6 @@ export async function synthesizeTTS(text: string, lang: string): Promise<Blob> {
   if (!res.ok) throw new Error(`TTS erreur ${res.status}`);
   return res.blob();
 }
-
-export type TrafficSnapshot = Record<"nord" | "sud" | "ouest", TrafficEvent[]>;
-
-export const getTrafficEvents = () =>
-  apiFetch<TrafficSnapshot>("/admin/traffic/events");
 
 export interface ExperimentRun {
   run_id:           string;
@@ -203,12 +187,4 @@ export interface ExperimentsResponse {
 export const getExperiments = () =>
   apiFetch<ExperimentsResponse>("/admin/experiments");
 
-export function openTrafficStream(onEvent: (data: TrafficSnapshot | { zone: string; events: TrafficEvent[] }) => void): EventSource {
-  const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
-  const token = getAccessToken() ?? "";
-  const es = new EventSource(`${GATEWAY}/admin/traffic/stream?token=${encodeURIComponent(token)}`);
-  es.onmessage = (e) => {
-    try { onEvent(JSON.parse(e.data)); } catch {}
-  };
-  return es;
-}
+// openTrafficStream retire avec la desactivation du service watcher

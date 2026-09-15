@@ -63,12 +63,15 @@
 - [x] **Multi-stage builds** avec `uv` (10× plus rapide que pip)
 - [x] Healthchecks intégrés sur chaque conteneur
 
-### Watcher Trafic Live (bonus hors-méthodo)
-- [x] Service polling autorouteinfo.fr toutes les 15s sur 3 zones (nord/sud/ouest)
-- [x] STT Whisper + extraction d'événements + traduction batch EN/UK/ES
-- [x] **Streaming SSE** vers dashboard admin
-- [x] Fusion automatique des events sur même portion (1 carte, plusieurs badges)
-- [x] Filtre "Tous / Urgences uniquement"
+### Watcher Trafic Live — DÉSACTIVÉ en v0.2
+- Service polling autorouteinfo.fr / radio 107.7 retiré de la stack de
+  production pour la mise en marche du produit payant. Raison : la
+  redistribution du contenu radio scrappé pose des questions de droits
+  (SACEM, licence de diffusion) incompatibles avec une offre commerciale.
+- Le code reste sur disque dans `backend/services/watcher/` et peut
+  être réactivé en décommentant les blocs dans `docker-compose.yml` et
+  `monitoring/prometheus.yml`. Utile pour la démo LLMOps interne ou pour
+  un pivot B2B (opérateur autoroutier avec licence).
 
 ---
 
@@ -89,20 +92,20 @@
               ┌──────────────────────────┼──────────────────────────────┐
               │                          │                              │
               ▼                          ▼                              ▼
-   ┌──────────────────┐      ┌──────────────────────┐      ┌──────────────────┐
-   │  GATEWAY  :8004  │      │   PIPELINE   :8000   │      │  WATCHER  :8005  │
-   │  FastAPI         │      │   FastAPI            │      │  Polling trafic  │
-   │  • JWT auth      │      │   + Langchain LCEL   │      │  + STT + SSE     │
-   │  • Admin API     │      │   + Langfuse trace   │      │                  │
-   │  • Proxy watcher │      └──┬────────┬────────┬─┘      └────────┬─────────┘
-   └──────────────────┘         │        │        │                 │
-                                ▼        ▼        ▼                 │
-                       ┌────────┐ ┌────────┐ ┌────────┐             │
-                       │  STT   │ │  LLM   │ │  TTS   │◄────────────┘
-                       │ :8001  │ │ :8002  │ │ :8003  │
-                       │ Whisper│ │LiteLLM │ │Mistral │
-                       │        │ │ +Groq  │ │Voxtral │
-                       └────────┘ └────────┘ └────────┘
+   ┌──────────────────┐              ┌──────────────────────┐
+   │  GATEWAY  :8004  │              │   PIPELINE   :8000   │
+   │  FastAPI         │              │   FastAPI            │
+   │  • JWT auth      │              │   + Langchain LCEL   │
+   │  • Admin API     │              │   + Langfuse trace   │
+   │  • /realtime     │              └──┬────────┬────────┬─┘
+   └──────────────────┘                 │        │        │
+                                        ▼        ▼        ▼
+                              ┌────────┐ ┌────────┐ ┌────────┐
+                              │  STT   │ │  LLM   │ │  TTS   │
+                              │ :8001  │ │ :8002  │ │ :8003  │
+                              │ Whisper│ │LiteLLM │ │Mistral │
+                              │ large-v3│ │multi-p │ │Voxtral │
+                              └────────┘ └────────┘ └────────┘
 
   ──────────────────────── REGISTRES & MONITORING ────────────────────────
 

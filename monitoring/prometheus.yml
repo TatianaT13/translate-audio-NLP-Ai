@@ -41,8 +41,12 @@ scrape_configs:
       - targets: ["tts:8003"]
         labels: { service: tts }
 
-  - job_name: watcher
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["watcher:8005"]
-        labels: { service: watcher }
+  # Watcher desactive avec la mise en production du produit payant.
+  # Voir docker-compose.yml pour les details. Decommenter en meme temps
+  # que le service dans docker-compose.yml pour reactiver.
+  #
+  # - job_name: watcher
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["watcher:8005"]
+  #       labels: { service: watcher }

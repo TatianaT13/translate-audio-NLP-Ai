@@ -169,28 +169,38 @@ services:
       retries: 3
       start_period: 30s
 
-  # ─── Watcher (Live traffic SSE) ────────────────────────────────────
-  watcher:
-    build:
-      context: ./backend/services/watcher
-    ports:
-      - "127.0.0.1:8005:8005"
-    environment:
-      # Whisper small/medium suffisant ici (flashs de ~30s, pas besoin de large-v3 → OOM)
-      - WHISPER_MODEL=${WATCHER_WHISPER_MODEL:-small}
-      - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
-      - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
-    mem_limit: 2g
-    mem_reservation: 1g
-    volumes:
-      - watcher_data:/app/state
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8005/health').status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+  # ─── Watcher (Live traffic SSE) — DESACTIVE ─────────────────────────
+  # Service qui scrappe la radio 107.7 en continu pour extraire les flashs
+  # trafic. Retire de la stack de production pour la mise en marche du
+  # produit payant : la redistribution de contenu radio scrappe pose des
+  # questions de droits (SACEM, propriete des jingles, licence diffusion)
+  # incompatibles avec une offre commerciale.
+  #
+  # Le code du service reste sur disque dans backend/services/watcher/
+  # et peut etre relance en decommentant ce bloc + le bloc dans
+  # monitoring/prometheus.yml. Utile pour la demo LLMOps interne ou pour
+  # un pivot B2B (operateur autoroutier avec licence).
+  #
+  # watcher:
+  #   build:
+  #     context: ./backend/services/watcher
+  #   ports:
+  #     - "127.0.0.1:8005:8005"
+  #   environment:
+  #     - WHISPER_MODEL=${WATCHER_WHISPER_MODEL:-small}
+  #     - POLL_INTERVAL_S=${POLL_INTERVAL_S:-15}
+  #     - MAX_EVENTS_PER_ZONE=${MAX_EVENTS_PER_ZONE:-10}
+  #   mem_limit: 2g
+  #   mem_reservation: 1g
+  #   volumes:
+  #     - watcher_data:/app/state
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8005/health').status==200 else 1)"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 30s
 
   # ─── MLflow (Model Registry + Experiment Tracking) ────────────────
   mlflow:
@@ -322,7 +332,7 @@ volumes:
   whisper_cache:
   tts_models:
   gateway_data:
-  watcher_data:
+  # watcher_data:  # desactive avec le service watcher (voir bloc commente ci-dessus)
   prometheus_data:
   grafana_data:
   mlflow_data:

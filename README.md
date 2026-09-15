@@ -2,7 +2,7 @@
 
 Système LLMOps de traduction audio temps réel : **Audio FR → Transcription → Traduction EN/UK/ES/DE → Synthèse vocale**.
 
-Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse end-to-end, MLflow Model Registry + 12 configurations comparées, **Airflow batch (2 DAGs : nightly eval + weekly drift)**, monitoring Prometheus+Grafana, garde-fou prompt injection 3 couches, monitoring trafic autoroutier temps réel.
+Architecture microservices avec orchestration Langchain LCEL, authentification JWT, tracing Langfuse end-to-end, MLflow Model Registry + 12 configurations comparées, **Airflow batch (2 DAGs : nightly eval + weekly drift)**, monitoring Prometheus+Grafana, garde-fou prompt injection 3 couches.
 
 ---
 
@@ -25,14 +25,12 @@ Client (Next.js)
                                   Whisper     LiteLLM     Mistral
                                   large-v3    multi-prov. Voxtral / MMS-TTS
 
-┌──────────────────────────┐
-│  Watcher Service  :8005  │   Trafic Live (admin only)
-│  Polling autorouteinfo   │   Whisper embarqué + LLM direct + SSE
-└──────────────────────────┘
-
 > Le frontend appelle actuellement le Pipeline directement pour /process.
 > La Gateway est utilisée séparément pour l'auth, l'admin et le token
 > éphémère OpenAI Realtime. Centralisation complète prévue en phase 2.
+>
+> Le service Watcher (polling radio 107.7) est désactivé en v0.2 pour
+> la mise en production commerciale. Voir docker-compose.yml.
 ```
 
 | Service | Port | Technologie |
@@ -43,7 +41,6 @@ Client (Next.js)
 | LLM | 8002 | FastAPI + LiteLLM + Groq |
 | TTS | 8003 | FastAPI + Mistral Voxtral |
 | Gateway (auth + admin) | 8004 | FastAPI + SQLAlchemy + JWT (15min) + refresh (7j) |
-| Watcher (trafic live SSE) | 8005 | FastAPI + Whisper + extraction events |
 | **Prometheus** | 9090 | Scrape `/metrics` toutes les 15s, rétention 30j |
 | **Grafana** | 3001 | Dashboard "LLMOps Overview" préconfiguré |
 | **MLflow** | 5050 | Model Registry + Experiment Tracking |
@@ -76,7 +73,7 @@ cp .env.example .env
 
 ### Lancement
 
-**Une seule commande** lance tout (frontend + 6 services backend + Prometheus + Grafana + MLflow) :
+**Une seule commande** lance tout (frontend + 5 microservices backend + Prometheus + Grafana + MLflow + Airflow) :
 
 ```bash
 docker compose up --build
@@ -87,7 +84,7 @@ docker compose up --build
 - Dashboard admin LLMOps : http://localhost:3000/admin
 - Gateway API : http://localhost:8004/docs
 - Pipeline API : http://localhost:8000/docs
-- STT / LLM / TTS / Watcher : http://localhost:8001-8005/docs
+- STT / LLM / TTS : http://localhost:8001-8003/docs
 
 **Observabilité & Registres** :
 - **Grafana** (monitoring système) : http://localhost:3001
@@ -138,20 +135,13 @@ Accessible à `/admin` pour les utilisateurs avec le rôle `is_admin`.
 
 ---
 
-## Watcher — Trafic Live
+## Watcher — Trafic Live (désactivé en v0.2)
 
-Service dédié (`backend/services/watcher/`) qui tourne en arrière-plan en permanence :
-
-- Poll adaptatif toutes les **~15s** sur 3 flux autorouteinfo.fr (nord / sud / ouest)
-- Requêtes conditionnelles ETag/Last-Modified — zéro bande passante si pas de changement
-- **STT Whisper small** en mémoire (`mem_limit: 2g`) — fichiers audio supprimés immédiatement après transcription
-- Extraction d'événements trafic par regex (`event_extractor.py`) : accident, bouchon, animal, fermeture, intempéries, travaux, véhicule en panne
-- **Tous les niveaux de sévérité conservés** (`high` / `medium` / `low`) — le filtre est côté UI
-- **Ring buffer `deque(maxlen=10)`** par zone — persisté sur disque (`/app/state`)
-- **SSE `/stream`** → dashboard admin mis à jour en temps réel
-- **Toggle UI** : "Tous les flashs" vs "Urgences uniquement" (filtrage `high`)
-
-> Usage strictement interne (admin uniquement). L'app publique ne redistribue pas ce contenu.
+Le service `backend/services/watcher/` (polling radio 107.7 → SSE dashboard
+admin) est **désactivé** avec la mise en production commerciale de la
+plateforme. Le code reste dans le repo pour référence et pour un
+éventuel pivot B2B avec licence de diffusion. Voir `docker-compose.yml`
+pour le contexte et les étapes de réactivation.
 
 ---
 
@@ -210,12 +200,9 @@ python scripts/mlflow_register.py   # (Re-)importer les configs + register model
 ```
 
 ### Prometheus + Grafana (monitoring système + business)
-- Prometheus scrape `/metrics` toutes les 15s sur les 6 services (instrumenté via `prometheus-fastapi-instrumentator`)
+- Prometheus scrape `/metrics` toutes les 15s sur les 5 microservices (instrumenté via `prometheus-fastapi-instrumentator`)
 - Grafana : dashboard "LLMOps Overview" préconfiguré (2 rows)
   - **Microservices** : req/s · latence p95 · taux erreur 5xx · services up · req/min · % erreurs
-  - **Watcher Live** : polls/min par zone · events extraits/h par sévérité · coût LLM total · tokens total
-- Métriques business custom watcher : `watcher_polls_total`, `watcher_events_extracted_total`,
-  `watcher_translation_cost_usd_total`, `watcher_translation_tokens_total`
 - Provisioning : `monitoring/grafana/provisioning/` (datasource + dashboard JSON)
 
 ### Airflow (orchestration batch)
@@ -281,7 +268,7 @@ python scripts/run_pipeline.py \
 │       ├── stt/                    # Faster-Whisper (port 8001)
 │       ├── llm/                    # LiteLLM → Groq/OpenAI/Anthropic (port 8002)
 │       ├── tts/                    # Mistral Voxtral + MMS-TTS (port 8003)
-│       └── watcher/                # Trafic Live SSE (port 8005)
+│       └── watcher/                # Trafic Live SSE (désactivé v0.2)
 │
 ├── src/flash_nlp/                  # Lib partagée pour les scripts CLI
 │   ├── acquisition/  transcription/  analysis/  io/
@@ -329,13 +316,10 @@ CI GitHub Actions : `.github/workflows/ci.yml` (pytest sur chaque push/PR).
 | `MISTRAL_VOICE_ID` | ID de voix Mistral Voxtral | Oui |
 | `JWT_SECRET` | Clé secrète JWT (32+ chars) | Oui |
 | `WHISPER_MODEL` | Modèle Whisper du STT service (`small`, `medium`, `large-v3`) | Non (défaut: `small`) |
-| `WATCHER_WHISPER_MODEL` | Modèle Whisper du watcher (séparé du STT) | Non (défaut: `small` — `large-v3` cause OOM) |
 | `LLM_MODEL` | Modèle LiteLLM | Non (défaut: `openai/gpt-4o-mini`) |
 | `PROMPT_VERSION` | Version du prompt (`v1.0`–`v1.2`) | Non (défaut: `v1.1`) |
 | `DATABASE_URL` | URL base de données | Non (défaut: SQLite) |
 | `DEV_MODE` | Endpoints de développement (ex: `/admin/seed`, mots de passe reset retournés en clair) | Non (défaut: `false`) |
-| `POLL_INTERVAL_S` | Intervalle polling watcher (secondes) | Non (défaut: `15`) |
-| `MAX_EVENTS_PER_ZONE` | Ring buffer watcher | Non (défaut: `10`) |
 | `LANGFUSE_PUBLIC_KEY` | Clé publique Langfuse | Non |
 | `LANGFUSE_SECRET_KEY` | Clé secrète Langfuse | Non |
 | `LANGFUSE_HOST` | URL Langfuse | Non (défaut: cloud.langfuse.com) |
