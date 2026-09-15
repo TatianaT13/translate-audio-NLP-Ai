@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getMe, logout } from "@/lib/auth";
+import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
+import { AppHeader } from "@/components/AppHeader";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
 
@@ -245,34 +246,21 @@ export default function LivePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column" }}>
-      {/* ── Header ── */}
-      <header style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
+      <AppHeader current="live" />
+
+      {/* ── Title bar (specifique Live) ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
         padding: "16px 32px", borderBottom: "1px solid var(--border)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <button onClick={() => router.push("/")} style={{
-            background: "transparent", border: "1px solid var(--border)", color: "var(--muted)",
-            padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
-          }}>← Accueil</button>
-          <h1 className="font-serif" style={{ fontSize: "18px", color: "var(--accent)", letterSpacing: "0.02em" }}>
-            🎙 Live · Traduction simultanée
-          </h1>
-          <span style={{
-            fontSize: "10px", padding: "2px 8px", borderRadius: "999px",
-            background: "rgba(201,169,110,0.12)", color: "var(--accent)", letterSpacing: "0.15em",
-          }}>BÊTA</span>
-        </div>
-        {user && (
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "12px" }}>
-            <span style={{ color: "var(--muted)" }}>{user.email}</span>
-            <button onClick={() => logout().then(() => router.push("/"))} style={{
-              background: "transparent", border: "1px solid var(--border)", color: "var(--muted)",
-              padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "11px",
-            }}>Déconnexion</button>
-          </div>
-        )}
-      </header>
+        <h1 className="font-serif" style={{ fontSize: "18px", color: "var(--accent)", letterSpacing: "0.02em", margin: 0 }}>
+          Live · Traduction simultanée
+        </h1>
+        <span style={{
+          fontSize: "10px", padding: "2px 8px", borderRadius: "999px",
+          background: "rgba(201,169,110,0.12)", color: "var(--accent)", letterSpacing: "0.15em",
+        }}>BÊTA</span>
+      </div>
 
       {/* ── Body ── */}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px", gap: "32px" }}>

@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getMe, logout } from "@/lib/auth";
+import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { transcribeChunk, summarizeMeeting, type ChunkTranscript, type SummaryResponse } from "@/lib/meeting";
+import { AppHeader } from "@/components/AppHeader";
 
 type Step = "idle" | "recording" | "processing_chunk" | "stopped" | "summarizing" | "summarized" | "error";
 
@@ -189,37 +190,31 @@ export default function MeetingPage() {
   if (!user) return null;
 
   return (
+    <>
+    <AppHeader current="meeting" />
     <main style={{
-      minHeight: "100vh", background: "var(--background)",
+      minHeight: "calc(100vh - 65px)", background: "var(--background)",
       padding: "32px 24px 80px",
       display: "flex", flexDirection: "column", alignItems: "center",
     }}>
       <div style={{ width: "100%", maxWidth: "720px" }}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-          <div>
-            <div style={{
-              display: "inline-block", fontSize: "10px", letterSpacing: "0.35em",
-              textTransform: "uppercase", marginBottom: "10px",
-              padding: "4px 12px", borderRadius: "999px",
-              background: "rgba(201,169,110,0.08)", color: "var(--accent)",
-            }}>
-              Meeting Recorder
-            </div>
-            <h1 className="font-serif" style={{ fontSize: "clamp(24px, 4vw, 36px)", color: "var(--foreground)", lineHeight: 1.2 }}>
-              Compte-rendu de <em style={{ color: "var(--accent)" }}>réunion</em>
-            </h1>
-            <p style={{ fontSize: "13px", color: "var(--muted)", marginTop: "6px" }}>
-              Enregistrement en continu · transcription par chunks de 30s · résumé multi-langue
-            </p>
-          </div>
-          <button onClick={() => router.push("/")} style={{
-            padding: "7px 16px", borderRadius: "999px", fontSize: "12px",
-            cursor: "pointer", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
+        {/* Title bar */}
+        <div style={{ marginBottom: "24px" }}>
+          <div style={{
+            display: "inline-block", fontSize: "10px", letterSpacing: "0.35em",
+            textTransform: "uppercase", marginBottom: "10px",
+            padding: "4px 12px", borderRadius: "999px",
+            background: "rgba(201,169,110,0.08)", color: "var(--accent)",
           }}>
-            ← Traduction
-          </button>
+            Meeting Recorder
+          </div>
+          <h1 className="font-serif" style={{ fontSize: "clamp(24px, 4vw, 36px)", color: "var(--foreground)", lineHeight: 1.2 }}>
+            Compte-rendu de <em style={{ color: "var(--accent)" }}>réunion</em>
+          </h1>
+          <p style={{ fontSize: "13px", color: "var(--muted)", marginTop: "6px" }}>
+            Enregistrement en continu · transcription par chunks de 30s · résumé multi-langue
+          </p>
         </div>
 
         {/* Recording controls */}
@@ -426,5 +421,6 @@ export default function MeetingPage() {
         }
       `}</style>
     </main>
+    </>
   );
 }
