@@ -126,15 +126,23 @@ def register_routes(app, get_current_user):
         customer_id = _ensure_customer(current_user, db)
 
         session = stripe.checkout.Session.create(
+            # ── sample_only (preserves : valeurs reelles de l'app) ─────────
             customer=customer_id,
             mode="subscription",
             line_items=[{"price": price_id, "quantity": 1}],
             success_url=f"{APP_BASE_URL}/tarifs/succes?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{APP_BASE_URL}/tarifs/annule",
-            allow_promotion_codes=True,
-            billing_address_collection="auto",
-            automatic_tax={"enabled": False},  # TVA franchise EI - a activer si assujettie
             metadata={"user_id": str(current_user.id)},
+            # ── fixed_by_ui (Stripe Checkout Studio) ───────────────────────
+            ui_mode="hosted",
+            billing_address_collection="auto",
+            phone_number_collection={"enabled": False},
+            automatic_tax={"enabled": False},
+            allow_promotion_codes=False,
+            payment_method_collection="always",
+            submit_type="auto",
+            integration_identifier="hosted_web_0001",
+            origin_context="web",
         )
         return CheckoutResponse(url=session.url)
 
