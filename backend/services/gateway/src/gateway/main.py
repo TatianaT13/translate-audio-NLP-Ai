@@ -24,6 +24,36 @@ from gateway.database import Base, engine, get_db
 # ── Init ──────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
+
+def _run_lightweight_migrations() -> None:
+    """Ajoute les colonnes stripe_* a la table users si elles n'existent pas.
+
+    Base.metadata.create_all() cree les tables manquantes mais ne migre pas
+    les tables existantes. Pour eviter Alembic (overkill sur SQLite mono-instance)
+    on fait un ALTER TABLE conditionnel au demarrage.
+
+    Idempotent : si la colonne existe deja, on passe silencieusement.
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return  # create_all() s'en occupera
+    existing_cols = {c["name"] for c in inspector.get_columns("users")}
+    stripe_cols = [
+        ("stripe_customer_id",  "VARCHAR"),
+        ("subscription_tier",   "VARCHAR DEFAULT 'free' NOT NULL"),
+        ("subscription_status", "VARCHAR"),
+        ("current_period_end",  "TIMESTAMP"),
+    ]
+    with engine.begin() as conn:
+        for col_name, col_def in stripe_cols:
+            if col_name not in existing_cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
+                print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
+
+
+_run_lightweight_migrations()
+
 DEV_MODE      = os.getenv("DEV_MODE", "false").lower() == "true"
 FRONTEND_URLS = os.getenv("FRONTEND_URLS", "http://localhost:3000").split(",")
 
@@ -937,3 +967,8 @@ async def realtime_session(current_user: models.User = Depends(get_current_user)
         "expires_at":    expires_at,
         "model":         OPENAI_REALTIME_MODEL,
     }
+
+
+# ── Stripe billing routes ────────────────────────────────────────────────────
+from gateway import billing as _billing
+_billing.register_routes(app, get_current_user)

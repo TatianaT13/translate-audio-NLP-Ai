@@ -11,7 +11,7 @@ import type { User } from "@/lib/auth";
 import {
   TranslateIcon, MicIcon, DocumentIcon,
   HomeIcon, AdminIcon, LogoutIcon, KeyIcon, TrashIcon,
-  ChevronDownIcon,
+  ChevronDownIcon, CardIcon,
 } from "@/components/icons";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -175,6 +175,9 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
             </div>
           ) : (
             <>
+              <Link href="/tarifs" style={{
+                fontSize: "13px", color: "var(--muted)", textDecoration: "none",
+              }}>Tarifs</Link>
               <Link href="/login" style={{
                 fontSize: "13px", color: "var(--muted)", textDecoration: "none",
               }}>Se connecter</Link>
@@ -211,6 +214,7 @@ function DropdownMenu({ user, onNavigate, onChangePwd, onDelete, onLogout }: Dro
     { type: "link",   label: "Accueil",                href: "/",          Icon: HomeIcon },
     { type: "separator" },
     ...(user.is_admin ? [{ type: "link" as const, label: "Admin",       href: "/admin",     Icon: AdminIcon }] : []),
+    { type: "link",   label: "Tarifs & abonnement",     href: "/tarifs",    Icon: CardIcon },
     // Support de soutenance : masque du menu utilisateur (garde sur disque et
     // sur git dans frontend/public/soutenance-pitch.html pour reference).
     // { type: "link",   label: "Support de soutenance", href: "/soutenance-pitch.html", Icon: ExternalLinkIcon },

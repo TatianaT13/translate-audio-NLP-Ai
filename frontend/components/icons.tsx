@@ -132,3 +132,13 @@ export function ExternalLinkIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function CardIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="2" y="6" width="20" height="14" rx="2" />
+      <line x1="2" y1="11" x2="22" y2="11" />
+      <line x1="6" y1="16" x2="10" y2="16" />
+    </svg>
+  );
+}

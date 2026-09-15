@@ -35,6 +35,7 @@ export function FooterFull() {
         { label: "Traduction",       href: "/translate" },
         { label: "Traduction live",  href: "/live" },
         { label: "Compte-rendu",     href: "/meeting" },
+        { label: "Tarifs",           href: "/tarifs" },
       ],
     },
     {
