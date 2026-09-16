@@ -123,6 +123,12 @@ services:
     environment:
       # large-v3 = ~3 Go (recommandé : medium ou small si Docker Desktop limité)
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      # STT_BACKEND=openai bascule vers l'API OpenAI Whisper (~0.006 USD/min,
+      # 10-20x plus rapide qu'un Whisper CPU self-hosted).
+      # Laisser 'local' pour utiliser Faster-Whisper self-hosted.
+      - STT_BACKEND=${STT_BACKEND:-local}
+      - OPENAI_STT_MODEL=${OPENAI_STT_MODEL:-whisper-1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - whisper_cache:/home/app/.cache/huggingface
     # large-v3 = ~3 Go de modèle + overhead PyTorch + audio en cours → 6-8 Go

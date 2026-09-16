@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 load_dotenv()
 
 from stt.whisper_service import WhisperService
+from stt import openai_backend
 
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -26,6 +27,12 @@ Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose
 
 _whisper_cache: dict[str, WhisperService] = {}
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
+
+# STT_BACKEND : "local" (Faster-Whisper self-hosted) ou "openai" (Whisper API).
+# openai est 10-20x plus rapide, ~0.006 USD/min, ideal en prod commerciale.
+# local reste utile pour la demo LLMOps ou pour minimiser les couts variables
+# a fort volume constant.
+STT_BACKEND = os.getenv("STT_BACKEND", "local").lower()
 
 
 def convert_audio(src: str, dst: str) -> None:
@@ -91,7 +98,12 @@ def get_whisper(model_name: str) -> WhisperService:
 async def health():
     """Async pour répondre immédiatement même si le thread pool est saturé
     par les transcriptions Whisper en cours."""
-    return {"status": "ok", "loaded_models": list(_whisper_cache.keys())}
+    return {
+        "status":        "ok",
+        "backend":       "openai" if (STT_BACKEND == "openai" and openai_backend.is_available()) else "local",
+        "loaded_models": list(_whisper_cache.keys()),
+        "openai_model":  openai_backend.OPENAI_STT_MODEL if STT_BACKEND == "openai" else None,
+    }
 
 
 @app.post("/transcribe")
@@ -121,13 +133,23 @@ async def transcribe(
 
     try:
         convert_audio(tmp_in_path, tmp_wav_path)
-        svc = get_whisper(model)
-        lang_arg = None if language == "auto" else language
-        result = svc.transcribe_wav_with_segments(
-            wav_path=tmp_wav_path,
-            language=lang_arg,
-            beam_size=beam_size,
-        )
+
+        # Bascule dynamique local vs OpenAI selon la config
+        if STT_BACKEND == "openai" and openai_backend.is_available():
+            result = openai_backend.transcribe_with_openai(
+                audio_path=tmp_wav_path,
+                language=language,
+            )
+            used_model = openai_backend.OPENAI_STT_MODEL
+        else:
+            svc = get_whisper(model)
+            lang_arg = None if language == "auto" else language
+            result = svc.transcribe_wav_with_segments(
+                wav_path=tmp_wav_path,
+                language=lang_arg,
+                beam_size=beam_size,
+            )
+            used_model = model
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -140,5 +162,6 @@ async def transcribe(
         "language_probability": result["language_probability"],
         "duration":             result["duration"],
         "segments":             result["segments"],
-        "model":                model,
+        "model":                used_model,
+        "backend":              STT_BACKEND if STT_BACKEND == "openai" else "local",
     })
