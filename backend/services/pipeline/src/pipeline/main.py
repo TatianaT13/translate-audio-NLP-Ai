@@ -219,7 +219,7 @@ async def _llm_step(state: dict) -> dict:
     prompt_tokens = completion_tokens = total_tokens = 0
     cost_usd = 0.0
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         for i, chunk in enumerate(chunks, 1):
             data = await _translate_chunk(
                 client, chunk, state["target_lang"], state["llm_model"], state["prompt_version"],
@@ -285,7 +285,7 @@ async def _tts_step(state: dict) -> dict:
     audio_parts: list[bytes] = []
     content_type_seen = "audio/mpeg"
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         for i, chunk in enumerate(tts_chunks, 1):
             resp = await client.post(
                 f"{TTS_URL}/synthesize",

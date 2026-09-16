@@ -28,8 +28,9 @@ const nextConfig: NextConfig = {
 
   // Le pipeline STT + LLM + TTS peut prendre plus d'une minute sur un audio long.
   // Par défaut, Next.js coupe les rewrites à ~30s → ECONNRESET côté user.
+  // 30 min = couvre un audio de 60 min qui prend ~15 min de pipeline complet.
   experimental: {
-    proxyTimeout: 600_000, // 10 minutes en ms
+    proxyTimeout: 1_800_000, // 30 minutes en ms
   },
 };
 
