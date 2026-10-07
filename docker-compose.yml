@@ -75,6 +75,8 @@ services:
       - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY:-}
       - STRIPE_PRICE_PRO_YEARLY=${STRIPE_PRICE_PRO_YEARLY:-}
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:3000}
+      # Token partage service-to-service (Pipeline -> Gateway /billing/consume)
+      - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
     volumes:
       - gateway_data:/app/data
       - ./outputs/experiments:/app/experiments:ro
@@ -99,6 +101,10 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      # Gateway reachable depuis le Pipeline pour /billing/pre-authorize + consume
+      - GATEWAY_URL=http://gateway:8004
+      - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
     depends_on:
       stt:
         condition: service_healthy

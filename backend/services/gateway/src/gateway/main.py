@@ -51,6 +51,10 @@ def _run_lightweight_migrations() -> None:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
 
+    # Les nouvelles tables user_credits + credit_transactions sont creees
+    # automatiquement par Base.metadata.create_all() ci-dessus — rien a faire ici
+    # tant qu'on n'ajoute pas de colonnes a user_credits apres sa premiere creation.
+
 
 _run_lightweight_migrations()
 
@@ -159,6 +163,14 @@ def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Alloue les 10 credits trial one-time (plan tarifaire — formule Decouverte)
+    try:
+        from gateway import credits as _credits
+        _credits.grant_trial(db, user.id)
+    except Exception as e:
+        print(f"[gateway] grant_trial warning for user {user.id}: {e}", flush=True)
+
     return {"message": "Compte créé avec succès", "email": user.email}
 
 

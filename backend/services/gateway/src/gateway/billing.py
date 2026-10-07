@@ -24,13 +24,18 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from gateway import models
+from gateway import models, credits as _credits
 from gateway.database import get_db
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
 STRIPE_SECRET_KEY     = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+# Token partage entre services internes (Pipeline <-> Gateway) pour les appels
+# machine-to-machine qui ne portent pas de JWT user (ex: /billing/consume
+# apres un pipeline/process reussi). Doit matcher la var cote Pipeline.
+SERVICE_TOKEN = os.getenv("GATEWAY_SERVICE_TOKEN", "")
 
 # Prices IDs a creer dans le dashboard Stripe puis coller dans .env
 STRIPE_PRICE_PRO_MONTHLY = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
@@ -223,10 +228,22 @@ def register_routes(app, get_current_user):
         # Sync selon le type d'event
         if event_type in ("customer.subscription.created", "customer.subscription.updated"):
             _sync_subscription_state(user, data, db)
+            # Allouer / mettre a jour les credits selon le nouveau tier
+            tier = "pro" if user.subscription_tier == "pro" else "free"
+            period_end = user.current_period_end
+            try:
+                _credits.apply_tier(db, user.id, tier, period_resets_at=period_end)
+            except Exception as e:
+                print(f"[billing] credits.apply_tier error for user {user.id}: {e}", flush=True)
         elif event_type == "customer.subscription.deleted":
             user.subscription_tier   = "free"
             user.subscription_status = "canceled"
             db.commit()
+            # Downgrade free : on garde le solde existant (user peut consommer le reliquat)
+            try:
+                _credits.apply_tier(db, user.id, "free")
+            except Exception as e:
+                print(f"[billing] credits.apply_tier(free) error for user {user.id}: {e}", flush=True)
         elif event_type == "checkout.session.completed":
             # Confirme le customer_id (utile si create() n'a pas ete appele avant)
             if data.get("customer") and not user.stripe_customer_id:
@@ -234,5 +251,117 @@ def register_routes(app, get_current_user):
                 db.commit()
 
         return JSONResponse({"received": True, "type": event_type})
+
+    # ── Endpoints credits (user) ─────────────────────────────────────────
+
+    @router.get("/credits")
+    def get_credits(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Retourne le solde de credits + l'allocation mensuelle."""
+        # Refill lazy si la periode est terminee
+        _credits.refill_if_due(db, current_user.id, current_user.subscription_tier or "free")
+        row = _credits._get_or_create(db, current_user.id)
+        return {
+            "processing": {
+                "balance":       row.processing_balance,
+                "monthly":       row.processing_monthly,
+                "carryover_max": row.processing_carryover_max,
+            },
+            "live": {
+                "balance":       row.live_balance,
+                "monthly":       row.live_monthly,
+                "carryover_max": row.live_carryover_max,
+            },
+            "tier":                  current_user.subscription_tier or "free",
+            "trial_credits_granted": row.trial_credits_granted,
+            "period_resets_at":      row.period_resets_at.isoformat() if row.period_resets_at else None,
+        }
+
+    # ── Endpoints service-to-service (Pipeline → Gateway) ────────────────
+
+    def _check_service_token(x_service_token: str | None) -> None:
+        if not SERVICE_TOKEN or x_service_token != SERVICE_TOKEN:
+            raise HTTPException(status_code=401, detail="Service token invalide")
+
+    class PreAuthorizeRequest(BaseModel):
+        user_id:   int
+        kind:      str      # "processing" | "live"
+        amount:    int
+
+    @router.post("/pre-authorize")
+    def pre_authorize(
+        req: PreAuthorizeRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Verifie que l'user a assez de credits avant lancement du job.
+
+        Appele par le Pipeline AVANT de taper OpenAI pour eviter de bruler du
+        quota API alors que l'user n'a plus de credits.
+
+        Pas de consommation reelle ici — c'est juste un check.
+        """
+        _check_service_token(request.headers.get("x-service-token"))
+        if req.kind not in ("processing", "live"):
+            raise HTTPException(status_code=400, detail="kind doit etre 'processing' ou 'live'")
+        user = db.query(models.User).filter(models.User.id == req.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User introuvable")
+        _credits.refill_if_due(db, user.id, user.subscription_tier or "free")
+        ok = _credits.has_enough(db, user.id, req.kind, req.amount)  # type: ignore[arg-type]
+        row = _credits._get_or_create(db, user.id)
+        balance = row.processing_balance if req.kind == "processing" else row.live_balance
+        return {
+            "ok":       ok,
+            "balance":  balance,
+            "needed":   req.amount,
+            "tier":     user.subscription_tier or "free",
+        }
+
+    class ConsumeRequest(BaseModel):
+        user_id:   int
+        kind:      str
+        amount:    int
+        reason:    str
+        meta:      dict | None = None
+
+    @router.post("/consume")
+    def consume_credits(
+        req: ConsumeRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Decremente le solde apres un job reussi."""
+        _check_service_token(request.headers.get("x-service-token"))
+        if req.kind not in ("processing", "live"):
+            raise HTTPException(status_code=400, detail="kind doit etre 'processing' ou 'live'")
+        try:
+            row = _credits.consume(db, req.user_id, req.kind, req.amount, req.reason, req.meta)  # type: ignore[arg-type]
+        except ValueError as e:
+            raise HTTPException(status_code=402, detail=str(e))
+        balance = row.processing_balance if req.kind == "processing" else row.live_balance
+        return {"ok": True, "balance": balance}
+
+    class RefundRequest(BaseModel):
+        user_id:   int
+        kind:      str
+        amount:    int
+        reason:    str
+
+    @router.post("/refund")
+    def refund_credits(
+        req: RefundRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Rembourse des credits (ex : job pipeline echoue cote notre serveur)."""
+        _check_service_token(request.headers.get("x-service-token"))
+        if req.kind not in ("processing", "live"):
+            raise HTTPException(status_code=400, detail="kind doit etre 'processing' ou 'live'")
+        row = _credits.refund(db, req.user_id, req.kind, req.amount, req.reason)  # type: ignore[arg-type]
+        balance = row.processing_balance if req.kind == "processing" else row.live_balance
+        return {"ok": True, "balance": balance}
 
     app.include_router(router)

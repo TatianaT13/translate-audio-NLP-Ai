@@ -129,6 +129,8 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
           {checking ? (
             <div style={{ width: "120px", height: "32px" }} />
           ) : user ? (
+            <>
+            <CreditsBadge />
             <div ref={menuRef} style={{ position: "relative" }}>
               <button
                 onClick={() => setMenuOpen(o => !o)}
@@ -173,6 +175,7 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
                 />
               )}
             </div>
+            </>
           ) : (
             <>
               <Link href="/tarifs" style={{
@@ -440,4 +443,47 @@ function detectCurrent(pathname: string): Current {
   if (pathname.startsWith("/meeting"))   return "meeting";
   if (pathname.startsWith("/admin"))     return "admin";
   return null;
+}
+
+// ── Credits badge ────────────────────────────────────────────────────────────
+import { getCredits, type CreditsState } from "@/lib/credits";
+
+function CreditsBadge() {
+  const [credits, setCredits] = useState<CreditsState | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    let active = true;
+    const load = () => getCredits().then((c) => { if (active) setCredits(c); }).catch(() => {});
+    load();
+    // Refresh toutes les 30 sec pour voir la decrementation apres un job
+    const id = setInterval(load, 30_000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
+  if (!credits) return null;
+
+  const balance = credits.processing.balance;
+  const low     = balance <= 5;
+
+  return (
+    <Link
+      href="/tarifs"
+      title={`${balance} crédits restants — cliquez pour voir les offres`}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "6px",
+        padding: "6px 12px", borderRadius: "999px",
+        fontSize: "12px", fontFamily: "ui-monospace, monospace",
+        fontVariantNumeric: "tabular-nums",
+        background: low ? "rgba(232,112,112,0.08)" : "rgba(201,169,110,0.08)",
+        border: `1px solid ${low ? "rgba(232,112,112,0.3)" : "var(--border)"}`,
+        color: low ? "#e87070" : "var(--muted)",
+        textDecoration: "none",
+        transition: "all 0.15s",
+      }}
+    >
+      <span style={{ fontWeight: 500 }}>{balance}</span>
+      <span style={{ opacity: 0.7 }}>crédits</span>
+    </Link>
+  );
 }

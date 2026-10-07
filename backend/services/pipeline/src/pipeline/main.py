@@ -12,8 +12,9 @@ import time
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from jose import JWTError, jwt
 from langchain_core.runnables import RunnableLambda
 
 from pipeline.prompt_guard import check_input, check_output, sandbox_user_text
@@ -23,6 +24,12 @@ load_dotenv()
 STT_URL = os.getenv("STT_URL", "http://localhost:8001")
 LLM_URL = os.getenv("LLM_URL", "http://localhost:8002")
 TTS_URL = os.getenv("TTS_URL", "http://localhost:8003")
+
+# Pour les crédits : appel service-to-service vers Gateway
+GATEWAY_URL           = os.getenv("GATEWAY_URL", "http://gateway:8004")
+GATEWAY_SERVICE_TOKEN = os.getenv("GATEWAY_SERVICE_TOKEN", "")
+JWT_SECRET            = os.getenv("JWT_SECRET", "")
+JWT_ALGO              = "HS256"
 
 # ── Langfuse (optionnel — désactivé si clés absentes) ────────────────────────
 _lf = None
@@ -370,6 +377,64 @@ _LEGACY_MODEL_ALIASES = {
 }
 
 
+def _decode_user_id(auth_header: str | None) -> int | None:
+    """Decode optionnellement un JWT Bearer et extrait le user_id (sub).
+
+    Retourne None si aucun token ou si invalide : le pipeline tourne alors en
+    mode anonyme (pas de check de credits — c'est un garde-fou gere plus haut
+    par le frontend qui envoie toujours le JWT pour un user connecte).
+    """
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not JWT_SECRET or not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        return int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        return None
+
+
+def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True) -> int:
+    """Estime les credits requis AVANT d'avoir la duree reelle.
+
+    Approximation : 1 Mo de MP3 ≈ 1 min a 128kbps mono, ≈ 2 min a 64kbps.
+    On prend l'estimation large (64kbps mono = 8 KB/s) pour ne pas sous-estimer.
+    """
+    estimated_minutes = max(audio_bytes / (8 * 1024 * 60), 1)
+    rate = 2 if with_tts else 1
+    return max(1, int(estimated_minutes * rate + 0.999))
+
+
+async def _pre_authorize(user_id: int, amount: int, kind: str = "processing") -> dict:
+    """Appelle Gateway pour vérifier le solde avant lancement."""
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.post(
+            f"{GATEWAY_URL}/billing/pre-authorize",
+            json={"user_id": user_id, "kind": kind, "amount": amount},
+            headers={"x-service-token": GATEWAY_SERVICE_TOKEN},
+        )
+    if r.status_code == 401:
+        print("[pipeline] WARN: GATEWAY_SERVICE_TOKEN mismatch — credits non checks", flush=True)
+        return {"ok": True, "balance": -1, "needed": amount}
+    r.raise_for_status()
+    return r.json()
+
+
+async def _consume_credits(user_id: int, amount: int, reason: str, kind: str = "processing") -> None:
+    """Appelle Gateway pour décrémenter le solde après succès."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{GATEWAY_URL}/billing/consume",
+                json={"user_id": user_id, "kind": kind, "amount": amount, "reason": reason},
+                headers={"x-service-token": GATEWAY_SERVICE_TOKEN},
+            )
+    except Exception as e:
+        print(f"[pipeline] consume error (non-fatal) for user {user_id}: {e}", flush=True)
+
+
 @app.post("/process")
 async def process(
     file: UploadFile = File(...),
@@ -377,6 +442,7 @@ async def process(
     llm_model: str = Form("openai/gpt-4o-mini"),
     prompt_version: str = Form("v1.1"),
     whisper_model: str = Form("small"),
+    authorization: str | None = Header(default=None),
 ):
     """
     Pipeline complet : audio → transcription → traduction → synthèse vocale.
@@ -395,6 +461,31 @@ async def process(
 
     audio_bytes = await file.read()
     filename = file.filename or "audio.mp3"
+
+    # ── Verif credits (si JWT fourni) ─────────────────────────────────────
+    # On fait un pre-authorize optimiste base sur la taille du fichier. En cas
+    # de refus, 402 Payment Required avec le detail du quota manquant. Si
+    # succes, on consomme reellement les credits a la fin avec la vraie duree.
+    user_id = _decode_user_id(authorization)
+    estimated_credits = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True)
+    if user_id is not None:
+        try:
+            auth_resp = await _pre_authorize(user_id, estimated_credits, kind="processing")
+            if not auth_resp.get("ok"):
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "reason":  "credits_insufficient",
+                        "balance": auth_resp.get("balance"),
+                        "needed":  auth_resp.get("needed"),
+                        "tier":    auth_resp.get("tier"),
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            # Si Gateway inaccessible → on laisse passer (pas de blocage total)
+            print(f"[pipeline] pre-authorize failed (non-fatal): {e}", flush=True)
 
     initial_state = {
         "audio_bytes": audio_bytes,
@@ -546,6 +637,22 @@ async def process(
             _lf.flush()
         except Exception as e:
             print(f"[pipeline] Langfuse v4 tracing warning: {e}", flush=True)
+
+    # ── Consomme les credits reels (duree audio exacte via STT segments) ──
+    if user_id is not None:
+        duration_sec = 0
+        segments = result.get("segments") or []
+        if segments:
+            duration_sec = max((s.get("end", 0) for s in segments), default=0)
+        if not duration_sec:
+            duration_sec = (len(audio_bytes) / (8 * 1024))  # fallback estimation
+        credits_real = max(1, int((duration_sec / 60) * 2 + 0.999))  # 2 credits/min (TTS)
+        await _consume_credits(
+            user_id,
+            amount=credits_real,
+            reason=f"pipeline_process:{int(duration_sec)}s:audio_translated",
+            kind="processing",
+        )
 
     return {
         "source_text":        result["source_text"],
