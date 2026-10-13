@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { runPipeline, audioFromBase64 } from "@/lib/api";
-import type { ProcessResult } from "@/lib/api";
+import type { ProcessResult, TranslationSegment } from "@/lib/api";
 import { getMe, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
@@ -256,6 +256,67 @@ interface ResultsViewProps {
   onDownloadTranscript: () => void;
 }
 
+// ── Affichage des segments par speaker (quand diarize=true) ──────────────────
+const SPEAKER_COLORS: Record<string, string> = {
+  A: "#c9a96e", B: "#7eb8c9", C: "#9b7ec9", D: "#7ec9a0",
+  E: "#e8b04a", F: "#e87070", G: "#cd93d0", H: "#8bc9bb",
+};
+
+function speakerColor(id: string): string {
+  return SPEAKER_COLORS[id] || "var(--muted)";
+}
+
+function formatTimestamp(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function SpeakerSegments({ segments }: { segments: TranslationSegment[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      {segments.map((seg, i) => {
+        const color = speakerColor(seg.speaker || "?");
+        return (
+          <div key={i} style={{
+            display: "grid",
+            gridTemplateColumns: "auto 1fr",
+            gap: "12px",
+            paddingBottom: "12px",
+            borderBottom: i < segments.length - 1 ? "1px solid var(--border)" : "none",
+          }}>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start",
+              gap: "4px", minWidth: "90px",
+            }}>
+              <span style={{
+                padding: "2px 10px", borderRadius: "999px",
+                fontSize: "11px", fontWeight: 500, fontFamily: "ui-monospace, monospace",
+                background: `${color}22`,
+                border: `1px solid ${color}66`,
+                color,
+              }}>
+                Intervenant {seg.speaker}
+              </span>
+              <span style={{
+                fontSize: "10px", color: "var(--muted)", opacity: 0.7,
+                fontFamily: "ui-monospace, monospace",
+              }}>
+                {formatTimestamp(seg.start)}
+              </span>
+            </div>
+            <div style={{
+              fontSize: "14px", lineHeight: 1.55, color: "var(--foreground)",
+            }}>
+              {seg.translation}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript }: ResultsViewProps) {
   const latencies = [
     { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
@@ -366,7 +427,11 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
           </div>
         </div>
         <div style={{ padding: "20px 22px" }}>
-          <ExpandableText text={result.translation} color="var(--foreground)" />
+          {result.translation_segments && result.translation_segments.length > 0 ? (
+            <SpeakerSegments segments={result.translation_segments} />
+          ) : (
+            <ExpandableText text={result.translation} color="var(--foreground)" />
+          )}
         </div>
       </div>
 
@@ -436,6 +501,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isHoverDrop, setIsHoverDrop] = useState(false);
   const [targetLang,    setTargetLang]    = useState("en");
+  const [diarize,       setDiarize]       = useState(false);
   // Default configurable par env (bake au build via NEXT_PUBLIC_DEFAULT_WHISPER_MODEL)
   // → local : medium (Docker Desktop limité), prod : large-v3 (Hetzner 62 Go)
   const [whisperModel,  setWhisperModel]  = useState(
@@ -606,7 +672,7 @@ export default function Home() {
     setSubStep("transcribing");
     try {
       const res = await runPipeline(file, {
-        targetLang, llmModel, promptVersion, whisperModel, signal: ctrl.signal,
+        targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
       });
       setResult(res);
       if (res.audio_b64) {
@@ -872,6 +938,32 @@ ${result.translation}
                   {l.label}
                 </button>
               ))}
+            </div>
+
+            {/* Toggle diarisation */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: S.gap16 }}>
+              <button
+                onClick={() => setDiarize(d => !d)}
+                title="Identifier automatiquement les différents intervenants dans l'audio (+1.5 crédit/min)"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "8px",
+                  padding: "6px 14px", borderRadius: "999px", fontSize: "12px",
+                  cursor: "pointer", transition: "all 0.2s",
+                  background: diarize ? "rgba(201,169,110,0.12)" : "var(--surface)",
+                  border: `1px solid ${diarize ? "var(--accent)" : "var(--border)"}`,
+                  color: diarize ? "var(--accent)" : "var(--muted)",
+                }}
+              >
+                <span style={{
+                  width: "14px", height: "14px", borderRadius: "4px",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  background: diarize ? "var(--accent)" : "transparent",
+                  border: `1px solid ${diarize ? "var(--accent)" : "var(--border)"}`,
+                  color: "#0c0c0e", fontSize: "11px", lineHeight: 1,
+                }}>{diarize ? "✓" : ""}</span>
+                Identifier les intervenants
+                <span style={{ fontSize: "10px", opacity: 0.6 }}>+1,5 crédit/min</span>
+              </button>
             </div>
 
             {/* Configuration avancée — collapsible */}

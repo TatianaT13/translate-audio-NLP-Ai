@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 load_dotenv()
 
 from stt.whisper_service import WhisperService
-from stt import openai_backend
+from stt import openai_backend, assemblyai_backend
 
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -112,6 +112,7 @@ async def transcribe(
     model: str = Form(DEFAULT_MODEL),
     language: str = Form("fr"),
     beam_size: int = Form(5),
+    diarize: bool = Form(False),
 ):
     """
     Transcrit un fichier audio (MP3, WAV, M4A...) en texte.
@@ -134,8 +135,23 @@ async def transcribe(
     try:
         convert_audio(tmp_in_path, tmp_wav_path)
 
-        # Bascule dynamique local vs OpenAI selon la config
-        if STT_BACKEND == "openai" and openai_backend.is_available():
+        # Diarisation demandee → force AssemblyAI (seul backend qui la supporte)
+        if diarize and assemblyai_backend.is_available():
+            result = assemblyai_backend.transcribe_with_assemblyai(
+                audio_path=tmp_wav_path,
+                language=language,
+                diarize=True,
+            )
+            used_model = f"assemblyai/{assemblyai_backend.ASSEMBLYAI_MODEL}"
+        elif STT_BACKEND == "assemblyai" and assemblyai_backend.is_available():
+            # Backend AssemblyAI meme sans diarize (sa transcription est top)
+            result = assemblyai_backend.transcribe_with_assemblyai(
+                audio_path=tmp_wav_path,
+                language=language,
+                diarize=False,
+            )
+            used_model = f"assemblyai/{assemblyai_backend.ASSEMBLYAI_MODEL}"
+        elif STT_BACKEND == "openai" and openai_backend.is_available():
             result = openai_backend.transcribe_with_openai(
                 audio_path=tmp_wav_path,
                 language=language,
@@ -162,6 +178,10 @@ async def transcribe(
         "language_probability": result["language_probability"],
         "duration":             result["duration"],
         "segments":             result["segments"],
+        "speakers":             result.get("speakers"),  # None si pas de diarisation
         "model":                used_model,
-        "backend":              STT_BACKEND if STT_BACKEND == "openai" else "local",
+        "backend":              (
+            "assemblyai" if "assemblyai" in used_model
+            else STT_BACKEND if STT_BACKEND in ("openai",) else "local"
+        ),
     })

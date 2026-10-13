@@ -248,13 +248,18 @@ def refund(
 
 
 # ── Pondération business ─────────────────────────────────────────────────────
-def credits_for_pipeline(duration_seconds: float, with_tts: bool = True) -> int:
+def credits_for_pipeline(
+    duration_seconds: float,
+    with_tts: bool = True,
+    with_diarize: bool = False,
+) -> int:
     """Credits consommes pour un job pipeline standard.
 
-    - avec TTS (traduction + voix) : 2 credits par minute d'audio
-    - sans TTS (transcription + traduction texte seul) : 1 credit par minute
+    - transcription seule           : 1 credit/min
+    - avec TTS (traduction + voix)  : 2 credits/min
+    - avec diarisation              : +1.5 credit/min (sur le total)
     Arrondi a l'entier superieur (minimum 1 credit par job).
     """
     minutes = max(duration_seconds / 60, 0)
-    rate = 2 if with_tts else 1
+    rate = (2 if with_tts else 1) + (1.5 if with_diarize else 0)
     return max(1, int(minutes * rate + 0.999))  # ceil

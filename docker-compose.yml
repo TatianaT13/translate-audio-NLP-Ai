@@ -135,6 +135,9 @@ services:
       - STT_BACKEND=${STT_BACKEND:-local}
       - OPENAI_STT_MODEL=${OPENAI_STT_MODEL:-whisper-1}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # AssemblyAI (diarisation on-demand quand diarize=true)
+      - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
+      - ASSEMBLYAI_MODEL=${ASSEMBLYAI_MODEL:-nano}
     volumes:
       - whisper_cache:/home/app/.cache/huggingface
     # large-v3 = ~3 Go de modèle + overhead PyTorch + audio en cours → 6-8 Go

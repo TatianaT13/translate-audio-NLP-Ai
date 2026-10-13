@@ -2,6 +2,14 @@ import { getAccessToken, refreshAccessToken } from "@/lib/auth";
 
 const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8000";
 
+export interface TranslationSegment {
+  speaker:     string;
+  start:       number;
+  end:         number;
+  original:    string;
+  translation: string;
+}
+
 export interface ProcessResult {
   source_text:        string;
   language:           string;
@@ -19,6 +27,9 @@ export interface ProcessResult {
   cost_usd?:          number;
   n_chunks?:          number;
   n_tts_chunks?:      number;
+  // Diarisation (si demandée)
+  translation_segments?: TranslationSegment[] | null;
+  speakers?:             string[] | null;
 }
 
 /** Erreur typée pour un mapping message/action côté UI. */
@@ -75,6 +86,7 @@ export interface RunPipelineOptions {
   llmModel?:      string;
   promptVersion?: string;
   whisperModel?:  string;
+  diarize?:       boolean;        // Identification des intervenants (AssemblyAI)
   signal?:        AbortSignal;   // permet un cancel côté UI
   maxRetries?:    number;         // 502/503/504 uniquement (default: 2)
 }
@@ -103,6 +115,7 @@ export async function runPipeline(
     llmModel:     m = "openai/gpt-4o-mini",
     promptVersion: p = "v1.1",
     whisperModel: w  = "small",
+    diarize       = false,
     signal,
     maxRetries    = 2,
   } = opts;
@@ -116,6 +129,7 @@ export async function runPipeline(
     form.append("llm_model",      m);
     form.append("prompt_version", p);
     form.append("whisper_model",  w);
+    if (diarize) form.append("diarize", "true");
     return form;
   };
 

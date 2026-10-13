@@ -93,13 +93,20 @@ async def _stt_step(state: dict) -> dict:
         resp = await client.post(
             f"{STT_URL}/transcribe",
             files={"file": (state["filename"], state["audio_bytes"], "audio/mpeg")},
-            data={"model": state["whisper_model"], "language": "fr"},
+            data={
+                "model":    state["whisper_model"],
+                "language": "fr",
+                "diarize":  str(state.get("diarize", False)).lower(),
+            },
         )
     resp.raise_for_status()
     data = resp.json()
 
     text = data.get("text", "").strip()
     lang_prob = data.get("language_probability", 0)
+    # Diarisation : conserve les segments avec speakers pour les restituer en sortie
+    state["stt_segments"] = data.get("segments") or []
+    state["stt_speakers"] = data.get("speakers")
 
     if not text:
         raise ValueError("No speech detected in audio.")
@@ -218,28 +225,66 @@ async def _llm_step(state: dict) -> dict:
     llm_start_iso = datetime.now(timezone.utc).isoformat()
 
     source_text = state["source_text"]
-    chunks = _split_into_chunks(source_text, LLM_CHUNK_MAX_CHARS)
-    if len(chunks) > 1:
-        print(f"[pipeline] LLM chunking: {len(source_text)} chars → {len(chunks)} chunks", flush=True)
 
-    translations: list[str] = []
+    # Diarisation : traduire segment par segment pour preserver les speakers
+    translation_segments = None
+    stt_segments = state.get("stt_segments") or []
+    has_diarize = (
+        state.get("diarize")
+        and stt_segments
+        and any(s.get("speaker") for s in stt_segments)
+    )
+
     prompt_tokens = completion_tokens = total_tokens = 0
     cost_usd = 0.0
+    translations: list[str] = []
 
-    async with httpx.AsyncClient(timeout=300) as client:
-        for i, chunk in enumerate(chunks, 1):
-            data = await _translate_chunk(
-                client, chunk, state["target_lang"], state["llm_model"], state["prompt_version"],
-            )
-            translations.append(data["translation"])
-            prompt_tokens     += data.get("prompt_tokens",     0)
-            completion_tokens += data.get("completion_tokens", 0)
-            total_tokens      += data.get("total_tokens",      0)
-            cost_usd          += data.get("cost_usd",          0.0)
-            if len(chunks) > 1:
-                print(f"[pipeline]   chunk {i}/{len(chunks)} traduit ({len(chunk)} chars)", flush=True)
+    if has_diarize:
+        # Un appel LLM par segment → preserve le mapping speaker↔traduction
+        translation_segments = []
+        async with httpx.AsyncClient(timeout=300) as client:
+            for i, seg in enumerate(stt_segments, 1):
+                seg_text = (seg.get("text") or "").strip()
+                if not seg_text:
+                    continue
+                data = await _translate_chunk(
+                    client, seg_text, state["target_lang"], state["llm_model"], state["prompt_version"],
+                )
+                translation_segments.append({
+                    "speaker":     seg.get("speaker"),
+                    "start":       seg.get("start"),
+                    "end":         seg.get("end"),
+                    "original":    seg_text,
+                    "translation": data["translation"],
+                })
+                translations.append(data["translation"])
+                prompt_tokens     += data.get("prompt_tokens",     0)
+                completion_tokens += data.get("completion_tokens", 0)
+                total_tokens      += data.get("total_tokens",      0)
+                cost_usd          += data.get("cost_usd",          0.0)
+                if i % 10 == 0:
+                    print(f"[pipeline]   diar seg {i}/{len(stt_segments)}", flush=True)
+        translation = " ".join(translations)
+        chunks_count = len(stt_segments)
+    else:
+        chunks = _split_into_chunks(source_text, LLM_CHUNK_MAX_CHARS)
+        if len(chunks) > 1:
+            print(f"[pipeline] LLM chunking: {len(source_text)} chars → {len(chunks)} chunks", flush=True)
 
-    translation = " ".join(translations)
+        async with httpx.AsyncClient(timeout=300) as client:
+            for i, chunk in enumerate(chunks, 1):
+                data = await _translate_chunk(
+                    client, chunk, state["target_lang"], state["llm_model"], state["prompt_version"],
+                )
+                translations.append(data["translation"])
+                prompt_tokens     += data.get("prompt_tokens",     0)
+                completion_tokens += data.get("completion_tokens", 0)
+                total_tokens      += data.get("total_tokens",      0)
+                cost_usd          += data.get("cost_usd",          0.0)
+                if len(chunks) > 1:
+                    print(f"[pipeline]   chunk {i}/{len(chunks)} traduit ({len(chunk)} chars)", flush=True)
+        translation = " ".join(translations)
+        chunks_count = len(chunks)
 
     # ── Garde-fou : post-check sur la sortie LLM ─────────────────────────────
     guard = check_output(translation, source_text)
@@ -257,6 +302,7 @@ async def _llm_step(state: dict) -> dict:
     return {
         **state,
         "translation": translation,
+        "translation_segments": translation_segments,
         "latency_llm_ms": round((time.perf_counter() - t0) * 1000),
         "prompt_tokens":     prompt_tokens,
         "completion_tokens": completion_tokens,
@@ -265,7 +311,7 @@ async def _llm_step(state: dict) -> dict:
         "llm_start_iso":     llm_start_iso,
         "llm_end_iso":       datetime.now(timezone.utc).isoformat(),
         "safe_input_text":   source_text[:2000],
-        "n_chunks":          len(chunks),
+        "n_chunks":          chunks_count,
     }
 
 
@@ -396,14 +442,15 @@ def _decode_user_id(auth_header: str | None) -> int | None:
         return None
 
 
-def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True) -> int:
+def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True, with_diarize: bool = False) -> int:
     """Estime les credits requis AVANT d'avoir la duree reelle.
 
     Approximation : 1 Mo de MP3 ≈ 1 min a 128kbps mono, ≈ 2 min a 64kbps.
     On prend l'estimation large (64kbps mono = 8 KB/s) pour ne pas sous-estimer.
+    Pondération : TTS = +2/min, Diarisation = +1.5/min, Transcription = +1/min.
     """
     estimated_minutes = max(audio_bytes / (8 * 1024 * 60), 1)
-    rate = 2 if with_tts else 1
+    rate = (2 if with_tts else 1) + (1.5 if with_diarize else 0)
     return max(1, int(estimated_minutes * rate + 0.999))
 
 
@@ -442,6 +489,7 @@ async def process(
     llm_model: str = Form("openai/gpt-4o-mini"),
     prompt_version: str = Form("v1.1"),
     whisper_model: str = Form("small"),
+    diarize: bool = Form(False),
     authorization: str | None = Header(default=None),
 ):
     """
@@ -467,7 +515,9 @@ async def process(
     # de refus, 402 Payment Required avec le detail du quota manquant. Si
     # succes, on consomme reellement les credits a la fin avec la vraie duree.
     user_id = _decode_user_id(authorization)
-    estimated_credits = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True)
+    estimated_credits = _estimate_credits_from_filesize(
+        len(audio_bytes), with_tts=True, with_diarize=diarize,
+    )
     if user_id is not None:
         try:
             auth_resp = await _pre_authorize(user_id, estimated_credits, kind="processing")
@@ -494,6 +544,7 @@ async def process(
         "llm_model": llm_model,
         "prompt_version": prompt_version,
         "whisper_model": whisper_model,
+        "diarize": diarize,
     }
 
     t_total = time.perf_counter()
@@ -646,11 +697,16 @@ async def process(
             duration_sec = max((s.get("end", 0) for s in segments), default=0)
         if not duration_sec:
             duration_sec = (len(audio_bytes) / (8 * 1024))  # fallback estimation
-        credits_real = max(1, int((duration_sec / 60) * 2 + 0.999))  # 2 credits/min (TTS)
+        rate = 2 + (1.5 if diarize else 0)  # 2 crédits/min TTS, +1.5 si diarisation
+        credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
+        reason = (
+            f"pipeline_process:{int(duration_sec)}s:"
+            + ("audio_translated_diarized" if diarize else "audio_translated")
+        )
         await _consume_credits(
             user_id,
             amount=credits_real,
-            reason=f"pipeline_process:{int(duration_sec)}s:audio_translated",
+            reason=reason,
             kind="processing",
         )
 
@@ -669,4 +725,7 @@ async def process(
         "completion_tokens":  result.get("completion_tokens", 0),
         "total_tokens":       result.get("total_tokens", 0),
         "cost_usd":           result.get("cost_usd", 0.0),
+        # Diarisation : None si pas demandee
+        "translation_segments": result.get("translation_segments"),
+        "speakers":             result.get("stt_speakers"),
     }
