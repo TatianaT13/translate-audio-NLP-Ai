@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "prometheus-fastapi-instrumentator>=7.0",
+    "httpx>=0.27",  # backends OpenAI + AssemblyAI
 ]
 
 [build-system]
