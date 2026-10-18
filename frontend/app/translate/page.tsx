@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { runPipeline, audioFromBase64 } from "@/lib/api";
+import { runPipeline, audioFromBase64, submitPipelineJob, trackJob, ASYNC_SIZE_THRESHOLD } from "@/lib/api";
 import { downloadSRT, segmentsToSrt, downloadPDF } from "@/lib/exports";
 import type { ProcessResult, TranslationSegment } from "@/lib/api";
 import { getMe, refreshAccessToken } from "@/lib/auth";
@@ -571,6 +571,7 @@ export default function Home() {
     durationSec: number | null;
   } | null>(null);
   const [subStep, setSubStep] = useState<SubStep>(null);
+  const [asyncProgress, setAsyncProgress] = useState<number | null>(null);
   const [errorSuggestion, setErrorSuggestion] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -694,9 +695,25 @@ export default function Home() {
     setStep("processing");
     setSubStep("transcribing");
     try {
-      const res = await runPipeline(file, {
-        targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
-      });
+      // Gros fichiers → flow async (job_id + polling). Sinon synchrone comme avant.
+      const useAsync = file.size > ASYNC_SIZE_THRESHOLD;
+      let res;
+      if (useAsync) {
+        const { job_id } = await submitPipelineJob(file, {
+          targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
+        });
+        res = await trackJob(job_id, (job) => {
+          setAsyncProgress(job.progress);
+          if (job.progress >= 15 && job.progress < 70) setSubStep("transcribing");
+          else if (job.progress >= 70 && job.progress < 90) setSubStep("translating");
+          else if (job.progress >= 90) setSubStep("synthesizing");
+        }, { signal: ctrl.signal, intervalMs: 2500 });
+        setAsyncProgress(null);
+      } else {
+        res = await runPipeline(file, {
+          targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
+        });
+      }
       setResult(res);
       if (res.audio_b64) {
         const blob = audioFromBase64(res.audio_b64, res.audio_content_type);
@@ -1284,6 +1301,22 @@ ${result.translation}
               </p>
               <ProcessingTimer />
             </div>
+            {asyncProgress !== null && (
+              <div style={{ maxWidth: "320px", margin: "0 auto 16px" }}>
+                <div style={{
+                  height: "4px", borderRadius: "999px", background: "var(--border)",
+                  overflow: "hidden",
+                }}>
+                  <div style={{
+                    height: "100%", width: `${asyncProgress}%`,
+                    background: "var(--accent)", transition: "width 0.4s ease",
+                  }} />
+                </div>
+                <p style={{ fontSize: "10px", color: "var(--muted)", textAlign: "center", marginTop: "6px" }}>
+                  Gros fichier · {asyncProgress}% · traitement async
+                </p>
+              </div>
+            )}
             <button onClick={cancelRun} style={{
               padding: "6px 14px", borderRadius: "8px", fontSize: "12px",
               background: "transparent", border: "1px solid var(--border)",

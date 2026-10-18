@@ -6,6 +6,7 @@ POST /process  : audio file → { source_text, translation, audio_b64, latencies
 GET  /health   : statut + URLs des services aval
 """
 
+import asyncio
 import base64
 import os
 import time
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from langchain_core.runnables import RunnableLambda
 
+from pipeline import jobs as _jobs
 from pipeline.prompt_guard import check_input, check_output, sandbox_user_text
 
 load_dotenv()
@@ -729,3 +731,178 @@ async def process(
         "translation_segments": result.get("translation_segments"),
         "speakers":             result.get("stt_speakers"),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Jobs async — pour les gros audios (>10 Mo ou >5 min) le client peut submit
+# le travail puis poller /jobs/{id} au lieu de laisser l'HTTP ouverte.
+# Avantage : pas de timeout cote proxy / nginx, UX avec barre de progression.
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _execute_job(
+    job_id:         str,
+    audio_bytes:    bytes,
+    filename:       str,
+    target_lang:    str,
+    llm_model:      str,
+    prompt_version: str,
+    whisper_model:  str,
+    diarize:        bool,
+    user_id:        int | None,
+) -> None:
+    """Executeur de job en background. Met a jour le store a chaque etape."""
+    try:
+        await _jobs.store.update(job_id, status="running", progress=5)
+
+        initial_state = {
+            "audio_bytes":    audio_bytes,
+            "filename":       filename,
+            "target_lang":    target_lang,
+            "llm_model":      llm_model,
+            "prompt_version": prompt_version,
+            "whisper_model":  whisper_model,
+            "diarize":        diarize,
+        }
+        t_total = time.perf_counter()
+
+        # On ne peut pas trivialement observer la progression intra-chain
+        # (STT→LLM→TTS), donc on affiche des paliers coherents : 5 → 85 au
+        # lancement du pipeline, 90 apres completion, 100 apres consume credits.
+        await _jobs.store.update(job_id, progress=15)
+        result = await pipeline_chain.ainvoke(initial_state)
+        await _jobs.store.update(job_id, progress=85)
+
+        latency_total_ms = round((time.perf_counter() - t_total) * 1000)
+
+        # Consomme les credits reels (meme logique que /process)
+        if user_id is not None:
+            duration_sec = 0
+            segments = result.get("segments") or []
+            if segments:
+                duration_sec = max((s.get("end", 0) for s in segments), default=0)
+            if not duration_sec:
+                duration_sec = (len(audio_bytes) / (8 * 1024))
+            rate = 2 + (1.5 if diarize else 0)
+            credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
+            reason = (
+                f"pipeline_process_async:{int(duration_sec)}s:"
+                + ("audio_translated_diarized" if diarize else "audio_translated")
+            )
+            try:
+                await _consume_credits(user_id, amount=credits_real, reason=reason, kind="processing")
+            except Exception as e:
+                print(f"[jobs] credits consume error for user {user_id}: {e}", flush=True)
+
+        await _jobs.store.update(job_id, progress=95)
+
+        response = {
+            "source_text":        result["source_text"],
+            "language":           result["language"],
+            "language_prob":      result["language_prob"],
+            "translation":        result["translation"],
+            "audio_b64":          result["audio_b64"],
+            "audio_content_type": result["audio_content_type"],
+            "latency_stt_ms":     result["latency_stt_ms"],
+            "latency_llm_ms":     result["latency_llm_ms"],
+            "latency_tts_ms":     result["latency_tts_ms"],
+            "latency_total_ms":   latency_total_ms,
+            "prompt_tokens":      result.get("prompt_tokens", 0),
+            "completion_tokens":  result.get("completion_tokens", 0),
+            "total_tokens":       result.get("total_tokens", 0),
+            "cost_usd":           result.get("cost_usd", 0.0),
+            "translation_segments": result.get("translation_segments"),
+            "speakers":             result.get("stt_speakers"),
+        }
+        await _jobs.store.update(job_id, status="done", progress=100, result=response)
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+        await _jobs.store.update(job_id, status="error", error=detail)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        await _jobs.store.update(job_id, status="error", error=f"{type(e).__name__}: {e}")
+
+
+@app.post("/process-async", status_code=202)
+async def process_async(
+    file: UploadFile = File(...),
+    target_lang: str = Form("en"),
+    llm_model: str = Form("openai/gpt-4o-mini"),
+    prompt_version: str = Form("v1.1"),
+    whisper_model: str = Form("small"),
+    diarize: bool = Form(False),
+    authorization: str | None = Header(default=None),
+):
+    """Submit un job async. Retourne un job_id a poller via GET /jobs/{job_id}.
+
+    Les gros fichiers (>10 Mo ou >5 min d'audio) devraient utiliser cet endpoint
+    pour eviter les timeouts reverse-proxy. Le client affiche une barre de
+    progression base sur Job.progress (0-100).
+    """
+    if llm_model in _LEGACY_MODEL_ALIASES:
+        llm_model = _LEGACY_MODEL_ALIASES[llm_model]
+
+    audio_bytes = await file.read()
+    filename    = file.filename or "audio.mp3"
+    user_id     = _decode_user_id(authorization)
+
+    # Pre-authorize credits (meme logique que /process pour cohérence UX)
+    if user_id is not None:
+        estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True, with_diarize=diarize)
+        try:
+            auth_resp = await _pre_authorize(user_id, estimated, kind="processing")
+            if not auth_resp.get("ok"):
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "reason":  "credits_insufficient",
+                        "balance": auth_resp.get("balance"),
+                        "needed":  auth_resp.get("needed"),
+                        "tier":    auth_resp.get("tier"),
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[pipeline] pre-authorize failed (non-fatal): {e}", flush=True)
+
+    # Lance le cleanup au premier job (idempotent)
+    await _jobs.store.start_cleanup()
+
+    job = await _jobs.store.create(user_id=user_id)
+    asyncio.create_task(_execute_job(
+        job_id=job.id,
+        audio_bytes=audio_bytes,
+        filename=filename,
+        target_lang=target_lang,
+        llm_model=llm_model,
+        prompt_version=prompt_version,
+        whisper_model=whisper_model,
+        diarize=diarize,
+        user_id=user_id,
+    ))
+    return {"job_id": job.id, "status": "pending"}
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(job_id: str, authorization: str | None = Header(default=None)):
+    """Retourne l'etat d'un job. Le proprietaire est verifie via JWT."""
+    job = await _jobs.store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job introuvable (expire ou id inconnu)")
+
+    # Securite : seul le proprietaire peut lire son job (sauf jobs anonymes
+    # soumis sans JWT, accessibles via l'id uniquement — opaque uuid4 → OK).
+    caller_id = _decode_user_id(authorization)
+    if job.user_id is not None and caller_id != job.user_id:
+        raise HTTPException(status_code=403, detail="Pas le proprietaire de ce job")
+
+    response = {
+        "job_id":   job.id,
+        "status":   job.status,
+        "progress": job.progress,
+    }
+    if job.status == "done" and job.result:
+        response["result"] = job.result
+    if job.status == "error" and job.error:
+        response["error"] = job.error
+    return response

@@ -170,6 +170,89 @@ export async function runPipeline(
   throw lastErr || new Error("Pipeline error inconnue");
 }
 
+// ── Jobs async (gros fichiers > 15 Mo ou > 5 min) ───────────────────────────
+
+export interface PipelineJob {
+  job_id:   string;
+  status:   "pending" | "running" | "done" | "error";
+  progress: number;              // 0..100
+  result?:  ProcessResult;
+  error?:   string;
+}
+
+/** Submit un job async au pipeline. Retourne {job_id} a poller. */
+export async function submitPipelineJob(
+  file: File | Blob,
+  opts: RunPipelineOptions = {},
+): Promise<{ job_id: string }> {
+  const {
+    targetLang    = "en",
+    llmModel      = "openai/gpt-4o-mini",
+    promptVersion = "v1.1",
+    whisperModel  = "small",
+    diarize       = false,
+    signal,
+  } = opts;
+
+  const form = new FormData();
+  const filename = "name" in file && file.name ? file.name : "audio.mp3";
+  form.append("file",           file, filename);
+  form.append("target_lang",    targetLang);
+  form.append("llm_model",      llmModel);
+  form.append("prompt_version", promptVersion);
+  form.append("whisper_model",  whisperModel);
+  if (diarize) form.append("diarize", "true");
+
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${PIPELINE_URL}/process-async`, {
+    method:  "POST",
+    headers: authHeaders,
+    body:    form,
+    signal,
+  });
+  if (!res.ok) {
+    const raw = await res.text();
+    let detail = ""; try { detail = JSON.parse(raw).detail || ""; } catch { detail = raw; }
+    throw new PipelineError(res.status, detail, raw);
+  }
+  return res.json();
+}
+
+/** Poll l'etat d'un job. Retourne le job state. */
+export async function fetchJobStatus(jobId: string, signal?: AbortSignal): Promise<PipelineJob> {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, { headers: authHeaders, signal });
+  if (!res.ok) {
+    const raw = await res.text();
+    let detail = ""; try { detail = JSON.parse(raw).detail || ""; } catch { detail = raw; }
+    throw new PipelineError(res.status, detail, raw);
+  }
+  return res.json();
+}
+
+/**
+ * Suit un job jusqu'a completion. Appelle onProgress a chaque poll.
+ * Resolveur : le result final (ProcessResult) ou throw PipelineError.
+ */
+export async function trackJob(
+  jobId: string,
+  onProgress?: (job: PipelineJob) => void,
+  opts: { signal?: AbortSignal; intervalMs?: number } = {},
+): Promise<ProcessResult> {
+  const { signal, intervalMs = 2000 } = opts;
+  while (true) {
+    if (signal?.aborted) throw new Error("Suivi annule");
+    const job = await fetchJobStatus(jobId, signal);
+    onProgress?.(job);
+    if (job.status === "done" && job.result)  return job.result;
+    if (job.status === "error") throw new PipelineError(500, job.error || "Erreur job inconnue");
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
+/** Seuil (octets) au-dela duquel l'UI preferera un envoi async. ~15 Mo. */
+export const ASYNC_SIZE_THRESHOLD = 15 * 1024 * 1024;
+
 export function audioFromBase64(b64: string, contentType: string): Blob {
   const binary = atob(b64);
   const bytes  = new Uint8Array(binary.length);
