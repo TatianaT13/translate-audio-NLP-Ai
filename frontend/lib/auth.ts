@@ -31,11 +31,11 @@ export function clearTokens() {
 
 // ── Auth calls ────────────────────────────────────────────────────────────────
 
-export async function register(email: string, password: string) {
+export async function register(email: string, password: string, turnstileToken?: string | null) {
   const res = await fetch(`${GATEWAY_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, turnstile_token: turnstileToken ?? null }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

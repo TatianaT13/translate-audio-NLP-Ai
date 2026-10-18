@@ -14,6 +14,7 @@ def _password_rules(v: str) -> str:
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
+    turnstile_token: str | None = None
 
     @field_validator("password")
     @classmethod

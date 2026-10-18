@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { register, checkPasswordStrength } from "@/lib/auth";
+import { Turnstile, TURNSTILE_SITE_KEY } from "@/components/Turnstile";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -12,6 +13,8 @@ export default function RegisterPage() {
   const [confirm, setConfirm]   = useState("");
   const [error, setError]       = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
+  const [captcha, setCaptcha]   = useState<string | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
 
   const strength = checkPasswordStrength(password);
   const allGood  = strength.length && strength.uppercase && strength.digit;
@@ -21,12 +24,16 @@ export default function RegisterPage() {
     setError(null);
     if (password !== confirm) { setError("Les mots de passe ne correspondent pas"); return; }
     if (!allGood) { setError("Le mot de passe ne respecte pas les critères"); return; }
+    if (TURNSTILE_SITE_KEY && !captcha) { setError("Merci de valider la vérification anti-robot"); return; }
     setLoading(true);
     try {
-      await register(email, password);
+      await register(email, password, captcha);
       router.push("/login?registered=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création du compte");
+      // Un jeton Turnstile ne sert qu'une fois : nouveau widget pour le prochain essai
+      setCaptcha(null);
+      setCaptchaKey(k => k + 1);
     } finally {
       setLoading(false);
     }
@@ -117,6 +124,8 @@ export default function RegisterPage() {
               }}
             />
           </div>
+
+          <Turnstile key={captchaKey} onToken={setCaptcha} />
 
           {error && (
             <div style={{

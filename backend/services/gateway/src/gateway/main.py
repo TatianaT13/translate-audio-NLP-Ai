@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Security, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 from gateway import auth as auth_utils
 from gateway import emails, models, schemas
 from gateway.database import Base, engine, get_db
-from gateway.ratelimit import rate_limit
+from gateway.captcha import verify_turnstile
+from gateway.ratelimit import client_ip, rate_limit
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
 
@@ -162,8 +163,9 @@ def health():
 
 @app.post("/auth/register", status_code=status.HTTP_201_CREATED,
           dependencies=[Depends(rate_limit("register", 5, 3600))])
-def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
+def register(body: schemas.RegisterRequest, request: Request, db: Session = Depends(get_db)):
     """Créer un nouveau compte."""
+    verify_turnstile(body.turnstile_token, client_ip(request))
     if db.query(models.User).filter(models.User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Cet email est déjà utilisé")
 
