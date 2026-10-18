@@ -42,6 +42,7 @@ export function FooterFull() {
       title: "Entreprise",
       links: [
         { label: "À propos", href: "/a-propos" },
+        { label: "Blog",     href: "/blog" },
         { label: "Contact",  href: "/contact" },
       ],
     },
