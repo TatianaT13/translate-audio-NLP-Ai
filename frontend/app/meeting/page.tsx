@@ -245,6 +245,31 @@ export default function MeetingPage() {
     a.click();
   }, [summary]);
 
+  const downloadMeetingPdf = useCallback(async () => {
+    if (!summary) return;
+    const { downloadPDF, diarizedToSrt } = await import("@/lib/exports");
+    const subtitle = `Compte-rendu · ${SUMMARY_LANGS.find(l => l.code === summary.target_lang)?.label} · ${new Date().toLocaleDateString("fr-FR")}`;
+    await downloadPDF({
+      title:       "Compte-rendu de reunion",
+      subtitle,
+      segments:    diarizedResult ? diarizedToSrt(diarizedResult.segments, speakerNames) : undefined,
+      sourceLabel: diarizedResult ? undefined : "Transcript",
+      sourceText:  diarizedResult ? undefined : segments.map(s => s.text).join(" "),
+      targetLabel: "Compte-rendu",
+      targetText:  summary.summary,
+      footerNote:  "Genere par traduction-audio.fr",
+    }, `meeting_${Date.now()}_${summary.target_lang}.pdf`);
+  }, [summary, diarizedResult, speakerNames, segments]);
+
+  const downloadMeetingSrt = useCallback(async () => {
+    if (!diarizedResult || diarizedResult.segments.length === 0) return;
+    const { downloadSRT, diarizedToSrt } = await import("@/lib/exports");
+    downloadSRT(
+      diarizedToSrt(diarizedResult.segments, speakerNames),
+      `meeting_${Date.now()}.srt`,
+    );
+  }, [diarizedResult, speakerNames]);
+
   const downloadTranscript = useCallback(() => {
     const content = segments.map(s => `[${s.ts}] (${s.language}) ${s.text}`).join("\n\n");
     const blob = new Blob([content], { type: "text/plain" });
@@ -558,12 +583,28 @@ export default function MeetingPage() {
               <h2 style={{ fontSize: "11px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 600 }}>
                 Compte-rendu · {SUMMARY_LANGS.find(l => l.code === summary.target_lang)?.label} · {summary.style}
               </h2>
-              <button onClick={downloadMarkdown} style={{
-                padding: "5px 12px", borderRadius: "8px", fontSize: "11px", cursor: "pointer",
-                background: "rgba(201,169,110,0.1)", border: "1px solid var(--accent-dim)", color: "var(--accent)",
-              }}>
-                ⬇ .md
-              </button>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                <button onClick={downloadMarkdown} style={{
+                  padding: "5px 12px", borderRadius: "8px", fontSize: "11px", cursor: "pointer",
+                  background: "rgba(201,169,110,0.1)", border: "1px solid var(--accent-dim)", color: "var(--accent)",
+                }}>
+                  .md
+                </button>
+                <button onClick={downloadMeetingPdf} style={{
+                  padding: "5px 12px", borderRadius: "8px", fontSize: "11px", cursor: "pointer",
+                  background: "rgba(201,169,110,0.1)", border: "1px solid var(--accent-dim)", color: "var(--accent)",
+                }}>
+                  .pdf
+                </button>
+                {diarizedResult && diarizedResult.segments.length > 0 && (
+                  <button onClick={downloadMeetingSrt} style={{
+                    padding: "5px 12px", borderRadius: "8px", fontSize: "11px", cursor: "pointer",
+                    background: "rgba(201,169,110,0.1)", border: "1px solid var(--accent-dim)", color: "var(--accent)",
+                  }}>
+                    .srt
+                  </button>
+                )}
+              </div>
             </div>
             <pre style={{
               whiteSpace: "pre-wrap", fontFamily: "var(--font-body), ui-monospace, monospace",

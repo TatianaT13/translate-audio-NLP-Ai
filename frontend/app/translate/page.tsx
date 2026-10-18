@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { runPipeline, audioFromBase64 } from "@/lib/api";
+import { downloadSRT, segmentsToSrt, downloadPDF } from "@/lib/exports";
 import type { ProcessResult, TranslationSegment } from "@/lib/api";
 import { getMe, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -254,6 +255,8 @@ interface ResultsViewProps {
   onCopy: () => void;
   onDownload: () => void;
   onDownloadTranscript: () => void;
+  onDownloadPdf: () => void;
+  onDownloadSrt: () => void;
 }
 
 // ── Affichage des segments par speaker (quand diarize=true) ──────────────────
@@ -317,7 +320,7 @@ function SpeakerSegments({ segments }: { segments: TranslationSegment[] }) {
   );
 }
 
-function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript }: ResultsViewProps) {
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript, onDownloadPdf, onDownloadSrt }: ResultsViewProps) {
   const latencies = [
     { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
     { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
@@ -411,6 +414,26 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               .txt
             </button>
+            <button onClick={onDownloadPdf} title="Telecharger en PDF" style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", background: "rgba(201,169,110,0.06)",
+              border: "1px solid var(--accent-dim)", color: "var(--accent)",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              .pdf
+            </button>
+            {result.translation_segments && result.translation_segments.length > 0 && (
+              <button onClick={onDownloadSrt} title="Telecharger les sous-titres (.srt)" style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
+                cursor: "pointer", background: "rgba(201,169,110,0.06)",
+                border: "1px solid var(--accent-dim)", color: "var(--accent)",
+              }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                .srt
+              </button>
+            )}
             <button onClick={onCopy} style={{
               display: "flex", alignItems: "center", gap: "6px",
               padding: "4px 12px", borderRadius: "8px", fontSize: "12px",
@@ -827,6 +850,31 @@ ${result.translation}
     a.href = URL.createObjectURL(blob);
     a.download = `traduction_${result.language}_to_${targetLang}_${Date.now()}.txt`;
     a.click();
+  };
+
+  const downloadSrtFile = () => {
+    if (!result?.translation_segments || result.translation_segments.length === 0) {
+      setToast("Pas de segments disponibles pour le SRT (lance avec diarize=on)");
+      return;
+    }
+    downloadSRT(
+      segmentsToSrt(result.translation_segments, { useTranslation: true }),
+      `traduction_${result.language}_to_${targetLang}_${Date.now()}.srt`,
+    );
+  };
+
+  const downloadPdfFile = async () => {
+    if (!result) return;
+    const subtitle = `${result.language.toUpperCase()} -> ${langLabel} · ${new Date().toLocaleDateString("fr-FR")}`;
+    await downloadPDF({
+      title:       "Traduction audio",
+      subtitle,
+      sourceLabel: "Transcription originale",
+      sourceText:  result.source_text,
+      targetLabel: `Traduction (${langLabel})`,
+      targetText:  result.translation,
+      footerNote:  "Genere par traduction-audio.fr",
+    }, `traduction_${result.language}_to_${targetLang}_${Date.now()}.pdf`);
   };
 
   const reset = () => {
@@ -1256,6 +1304,8 @@ ${result.translation}
             onCopy={copyTranslation}
             onDownload={downloadAudio}
             onDownloadTranscript={downloadTranscript}
+            onDownloadPdf={downloadPdfFile}
+            onDownloadSrt={downloadSrtFile}
           />
         )}
 
