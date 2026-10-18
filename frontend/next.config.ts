@@ -18,6 +18,12 @@ const nextConfig: NextConfig = {
       ],
       afterFiles: [
         { source: "/api/:path*",      destination: "http://gateway:8004/:path*" },
+        // Avant /pipeline/:path* (premiere regle qui correspond). Le navigateur
+        // appelle STT et LLM sous /pipeline car nginx y laisse passer l'en-tete
+        // Authorization : sous /stt et /llm, le Basic Auth nginx l'occupe et le
+        // JWT n'arrive jamais au service.
+        { source: "/pipeline/stt/:path*", destination: "http://stt:8001/:path*" },
+        { source: "/pipeline/llm/:path*", destination: "http://llm:8002/:path*" },
         { source: "/pipeline/:path*", destination: "http://pipeline:8000/:path*" },
         { source: "/stt/:path*",      destination: "http://stt:8001/:path*"     },
         { source: "/llm/:path*",      destination: "http://llm:8002/:path*"     },

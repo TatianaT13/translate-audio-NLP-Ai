@@ -20,7 +20,8 @@ services:
       context: ./frontend
       args:
         # NEXT_PUBLIC_* doivent être passées en BUILD ARGS (Next.js les fige au build).
-        # Sur hermes, mets /api, /pipeline, /stt, /llm dans .env → ils sont injectés ici.
+        # Sur hermes : /api, /pipeline, /pipeline/stt, /pipeline/llm dans .env (STT et LLM
+        # sous /pipeline : nginx y laisse passer le JWT, voir next.config.ts).
         NEXT_PUBLIC_GATEWAY_URL:  ${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8004}
         NEXT_PUBLIC_PIPELINE_URL: ${NEXT_PUBLIC_PIPELINE_URL:-http://localhost:8000}
         NEXT_PUBLIC_STT_URL:     ${NEXT_PUBLIC_STT_URL:-http://localhost:8001}
