@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Pipeline Service — Langchain LCEL orchestrator (STT → LLM → TTS)"
 requires-python = ">=3.11"
 dependencies = [
+    "sentry-sdk[fastapi]>=2.0",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "httpx>=0.27",

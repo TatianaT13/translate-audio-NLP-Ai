@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Special_Elite, IBM_Plex_Mono } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
+import { ErrorMonitoring } from "@/components/ErrorMonitoring";
 import "./globals.css";
 
 const specialElite = Special_Elite({
@@ -70,6 +71,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-full flex flex-col">
         {children}
         <Analytics />
+        <ErrorMonitoring />
       </body>
     </html>
   );

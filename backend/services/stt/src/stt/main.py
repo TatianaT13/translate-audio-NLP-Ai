@@ -20,6 +20,20 @@ from stt.whisper_service import WhisperService
 from stt import openai_backend, assemblyai_backend
 from stt.auth import require_caller
 
+# Sentry : inactif sans SENTRY_DSN. Ni corps de requete ni variables locales :
+# send_default_pii=False ne suffit pas, les variables des frames contiennent
+# le corps (mots de passe, transcriptions) et les en-tetes (JWT, IP).
+if os.getenv("SENTRY_DSN"):
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+        send_default_pii=False,
+        max_request_body_size="never",
+        include_local_variables=False,
+        traces_sample_rate=0.0,
+    )
+
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 

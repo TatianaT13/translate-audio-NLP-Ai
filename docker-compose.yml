@@ -39,6 +39,8 @@ services:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://traduction-audio.fr}
         # Cle publique Turnstile (vide = pas de CAPTCHA a l'inscription)
         NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+        # Sentry navigateur (vide = desactive)
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     ports:
       # Bind sur 127.0.0.1 → seul nginx (sur le host) peut joindre le frontend.
       # Le public passe par nginx → https://traduction-audio.fr → 127.0.0.1:3000
@@ -53,6 +55,7 @@ services:
       - NEXT_PUBLIC_PLAUSIBLE_SRC=${NEXT_PUBLIC_PLAUSIBLE_SRC:-https://plausible.io/js/script.js}
       - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://traduction-audio.fr}
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+      - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
     depends_on:
       gateway:
         condition: service_healthy
@@ -94,6 +97,8 @@ services:
       - SUPPORT_EMAIL=${SUPPORT_EMAIL:-contact@traduction-audio.fr}
       # ── Cloudflare Turnstile (vide = CAPTCHA desactive) ───────────────
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
     volumes:
       - gateway_data:/app/data
       - ./outputs/experiments:/app/experiments:ro
@@ -122,6 +127,8 @@ services:
       - GATEWAY_URL=http://gateway:8004
       - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
     depends_on:
       stt:
         condition: service_healthy
@@ -155,6 +162,8 @@ services:
       # AssemblyAI (diarisation on-demand quand diarize=true)
       - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
       - ASSEMBLYAI_MODEL=${ASSEMBLYAI_MODEL:-nano}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       # Acces : JWT utilisateur ou jeton de service interne
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
@@ -185,6 +194,8 @@ services:
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
       - LLM_FALLBACKS=${LLM_FALLBACKS:-openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022}
       - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       # Acces : JWT utilisateur ou jeton de service interne
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
@@ -206,6 +217,8 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - MISTRAL_VOICE_ID=${MISTRAL_VOICE_ID}
       - TTS_BACKEND=${TTS_BACKEND:-mistral}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
     volumes:
       - tts_models:/home/app/.cache/huggingface
     restart: unless-stopped

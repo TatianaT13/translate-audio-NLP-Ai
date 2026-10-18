@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "STT Service — Faster-Whisper transcription"
 requires-python = ">=3.11"
 dependencies = [
+    "sentry-sdk[fastapi]>=2.0",
     "python-jose[cryptography]>=3.3",
     "faster-whisper>=1.0.3",
     "fastapi>=0.111",

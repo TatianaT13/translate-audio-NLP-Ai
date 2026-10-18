@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "TTS Service — Mistral Voxtral or local MMS-TTS fallback"
 requires-python = ">=3.11"
 dependencies = [
+    "sentry-sdk[fastapi]>=2.0",
     "mistralai>=1.0",
     "transformers>=4.40",
     "torch>=2.2",

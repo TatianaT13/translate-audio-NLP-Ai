@@ -33,6 +33,20 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_VOICE_ID = os.getenv("MISTRAL_VOICE_ID", "")
 TTS_BACKEND = os.getenv("TTS_BACKEND", "mistral" if MISTRAL_API_KEY else "local")
 
+# Sentry : inactif sans SENTRY_DSN. Ni corps de requete ni variables locales :
+# send_default_pii=False ne suffit pas, les variables des frames contiennent
+# le corps (mots de passe, transcriptions) et les en-tetes (JWT, IP).
+if os.getenv("SENTRY_DSN"):
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+        send_default_pii=False,
+        max_request_body_size="never",
+        include_local_variables=False,
+        traces_sample_rate=0.0,
+    )
+
 app = FastAPI(title="TTS Service", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Gateway Service — JWT auth + admin dashboard API"
 requires-python = ">=3.11"
 dependencies = [
+    "sentry-sdk[fastapi]>=2.0",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
     "python-jose[cryptography]>=3.3",
