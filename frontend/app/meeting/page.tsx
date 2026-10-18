@@ -4,7 +4,10 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
-import { transcribeChunk, summarizeMeeting, type ChunkTranscript, type SummaryResponse } from "@/lib/meeting";
+import {
+  transcribeChunk, summarizeMeeting, transcribeDiarized, formatDiarizedTranscript,
+  type ChunkTranscript, type SummaryResponse, type DiarizedTranscript, type DiarizedSegment,
+} from "@/lib/meeting";
 import { AppHeader } from "@/components/AppHeader";
 import { FooterMinimal } from "@/components/Footer";
 
@@ -26,6 +29,19 @@ const STYLES = [
 
 const CHUNK_DURATION_MS = 30_000;   // 30s par chunk
 
+const SPEAKER_COLORS: Record<string, string> = {
+  A: "#c9a96e", B: "#7eb8c9", C: "#9b7ec9", D: "#7ec9a0",
+  E: "#e8b04a", F: "#e87070", G: "#cd93d0", H: "#8bc9bb",
+};
+function speakerColor(id: string): string {
+  return SPEAKER_COLORS[id] || "var(--muted)";
+}
+function fmtTs(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 interface TranscriptSegment {
   text:       string;
   language:   string;
@@ -46,10 +62,18 @@ export default function MeetingPage() {
   const [summaryLang, setSummaryLang] = useState("fr");
   const [summaryStyle, setSummaryStyle] = useState<"executive" | "detailed" | "actions_only">("executive");
 
+  // ── Diarisation (identification des intervenants) ────────────────────────
+  const [diarize,          setDiarize]          = useState(false);
+  const [diarizedResult,   setDiarizedResult]   = useState<DiarizedTranscript | null>(null);
+  const [diarizing,        setDiarizing]        = useState(false);
+  const [speakerNames,     setSpeakerNames]     = useState<Record<string, string>>({});
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef        = useRef<MediaStream | null>(null);
   const chunkTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Accumule tous les chunks WebM pour une diarisation fullsize a la fin
+  const allChunksRef     = useRef<Blob[]>([]);
 
   // Auth check
   useEffect(() => {
@@ -69,6 +93,8 @@ export default function MeetingPage() {
     // À chaque dataavailable → envoie chunk au STT
     mr.ondataavailable = async (e) => {
       if (e.data.size < 1000) return;              // ignore les chunks vides
+      // Si diarize activee, on garde tous les blobs pour les ressortir en fin
+      allChunksRef.current.push(e.data);
       try {
         const t = await transcribeChunk(e.data);
         if (t.text.trim().length > 0) {
@@ -103,7 +129,10 @@ export default function MeetingPage() {
     setError(null);
     setSegments([]);
     setSummary(null);
+    setDiarizedResult(null);
+    setSpeakerNames({});
     setElapsedSec(0);
+    allChunksRef.current = [];
     stoppingRef.current = false;
 
     try {
@@ -147,15 +176,56 @@ export default function MeetingPage() {
     };
   }, []);
 
+  // ── Diarisation : lance AssemblyAI sur l'audio complet accumule ───────
+  const runDiarization = useCallback(async (): Promise<DiarizedTranscript | null> => {
+    if (allChunksRef.current.length === 0) return null;
+    setDiarizing(true);
+    try {
+      // Fusionne tous les blobs WebM en un seul fichier (chaque chunk est deja
+      // un WebM complet avec son header grace au pattern stop+restart)
+      const fullBlob = new Blob(allChunksRef.current, { type: "audio/webm" });
+      const diarized = await transcribeDiarized(fullBlob, "fr");
+      setDiarizedResult(diarized);
+      // Init les noms des speakers avec "Intervenant X" par defaut
+      const initNames: Record<string, string> = {};
+      diarized.speakers.forEach(s => { initNames[s] = `Intervenant ${s}`; });
+      setSpeakerNames(initNames);
+      return diarized;
+    } catch (e) {
+      console.error("Diarisation error:", e);
+      setError(e instanceof Error ? `Diarisation echouee : ${e.message}` : "Erreur diarisation");
+      return null;
+    } finally {
+      setDiarizing(false);
+    }
+  }, []);
+
   // ── Summary ───────────────────────────────────────────────────────────
   const generateSummary = useCallback(async () => {
-    const transcript = segments.map(s => s.text).join(" ");
-    if (!transcript) {
-      setError("Aucun transcript à résumer.");
-      return;
-    }
     setStep("summarizing");
     setError(null);
+
+    // Si diarize active : lance d'abord la diarisation complete pour avoir
+    // les speakers, puis construit un transcript "[Alice] ... [Bob] ..."
+    let transcript: string;
+    if (diarize) {
+      const diarized = diarizedResult || await runDiarization();
+      if (!diarized || diarized.segments.length === 0) {
+        setError("Aucun segment diarise.");
+        setStep("stopped");
+        return;
+      }
+      transcript = formatDiarizedTranscript(diarized.segments, speakerNames);
+    } else {
+      transcript = segments.map(s => s.text).join(" ");
+    }
+
+    if (!transcript.trim()) {
+      setError("Aucun transcript à résumer.");
+      setStep("stopped");
+      return;
+    }
+
     try {
       const res = await summarizeMeeting(transcript, summaryLang, summaryStyle);
       setSummary(res);
@@ -164,7 +234,7 @@ export default function MeetingPage() {
       setError(e instanceof Error ? e.message : "Erreur résumé");
       setStep("error");
     }
-  }, [segments, summaryLang, summaryStyle]);
+  }, [segments, summaryLang, summaryStyle, diarize, diarizedResult, speakerNames, runDiarization]);
 
   const downloadMarkdown = useCallback(() => {
     if (!summary) return;
@@ -237,6 +307,32 @@ export default function MeetingPage() {
               <p style={{ fontSize: "11px", color: "var(--muted)", marginTop: "10px" }}>
                 Autorisez l&apos;accès au micro · les chunks sont transcrits en temps réel
               </p>
+
+              {/* Toggle diarisation (a activer AVANT de demarrer) */}
+              <div style={{ marginTop: "20px", display: "flex", justifyContent: "center" }}>
+                <button
+                  onClick={() => setDiarize(d => !d)}
+                  title="Identifier automatiquement les differents intervenants dans la reunion (+1,5 credit/min)"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "8px",
+                    padding: "6px 14px", borderRadius: "999px", fontSize: "12px",
+                    cursor: "pointer", transition: "all 0.2s",
+                    background: diarize ? "rgba(201,169,110,0.12)" : "var(--surface)",
+                    border: `1px solid ${diarize ? "var(--accent)" : "var(--border)"}`,
+                    color: diarize ? "var(--accent)" : "var(--muted)",
+                  }}
+                >
+                  <span style={{
+                    width: "14px", height: "14px", borderRadius: "4px",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    background: diarize ? "var(--accent)" : "transparent",
+                    border: `1px solid ${diarize ? "var(--accent)" : "var(--border)"}`,
+                    color: "#0c0c0e", fontSize: "11px", lineHeight: 1,
+                  }}>{diarize ? "✓" : ""}</span>
+                  Identifier les intervenants
+                  <span style={{ fontSize: "10px", opacity: 0.6 }}>+1,5 crédit/min</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -298,20 +394,46 @@ export default function MeetingPage() {
               maxHeight: "280px", overflowY: "auto",
               display: "flex", flexDirection: "column", gap: "10px",
             }}>
-              {segments.map((s, i) => (
-                <div key={i} style={{ fontSize: "13px", lineHeight: 1.6, color: "var(--foreground)" }}>
-                  <span style={{ fontSize: "10px", color: "var(--muted)", marginRight: "8px", fontFamily: "monospace" }}>
-                    [{s.ts}]
-                  </span>
-                  <span style={{
-                    fontSize: "9px", padding: "1px 6px", borderRadius: "999px",
-                    background: "rgba(201,169,110,0.1)", color: "var(--accent)", marginRight: "8px",
-                  }}>
-                    {s.language.toUpperCase()}
-                  </span>
-                  {s.text}
-                </div>
-              ))}
+              {/* Si diarisation faite : affichage par intervenant avec couleur */}
+              {diarizedResult ? (
+                diarizedResult.segments.map((seg, i) => {
+                  const name = speakerNames[seg.speaker] || `Intervenant ${seg.speaker}`;
+                  const color = speakerColor(seg.speaker);
+                  return (
+                    <div key={i} style={{
+                      display: "grid", gridTemplateColumns: "auto 1fr", gap: "10px",
+                      fontSize: "13px", lineHeight: 1.6, color: "var(--foreground)",
+                    }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                        <span style={{
+                          padding: "1px 8px", borderRadius: "999px", fontSize: "10px", fontWeight: 500,
+                          background: `${color}22`, border: `1px solid ${color}66`, color,
+                          fontFamily: "ui-monospace, monospace", width: "fit-content",
+                        }}>{name}</span>
+                        <span style={{ fontSize: "9px", color: "var(--muted)", opacity: 0.7, fontFamily: "monospace" }}>
+                          {fmtTs(seg.start)}
+                        </span>
+                      </div>
+                      <div>{seg.text}</div>
+                    </div>
+                  );
+                })
+              ) : (
+                segments.map((s, i) => (
+                  <div key={i} style={{ fontSize: "13px", lineHeight: 1.6, color: "var(--foreground)" }}>
+                    <span style={{ fontSize: "10px", color: "var(--muted)", marginRight: "8px", fontFamily: "monospace" }}>
+                      [{s.ts}]
+                    </span>
+                    <span style={{
+                      fontSize: "9px", padding: "1px 6px", borderRadius: "999px",
+                      background: "rgba(201,169,110,0.1)", color: "var(--accent)", marginRight: "8px",
+                    }}>
+                      {s.language.toUpperCase()}
+                    </span>
+                    {s.text}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -354,13 +476,71 @@ export default function MeetingPage() {
               </div>
             </div>
 
-            <button onClick={generateSummary} disabled={step === "summarizing"} style={{
-              width: "100%", padding: "12px", borderRadius: "10px", cursor: step === "summarizing" ? "wait" : "pointer",
+            {/* Si diarisation activee : bouton pour la lancer manuellement AVANT le resume */}
+            {diarize && !diarizedResult && !diarizing && segments.length > 0 && (
+              <button onClick={() => runDiarization()} style={{
+                width: "100%", padding: "10px", borderRadius: "10px", cursor: "pointer",
+                fontSize: "13px", fontWeight: 500, marginBottom: "10px",
+                background: "var(--surface)", border: "1px solid var(--accent-dim)",
+                color: "var(--accent)",
+              }}>
+                🎙 Identifier les intervenants (envoie l&apos;audio complet)
+              </button>
+            )}
+
+            {diarizing && (
+              <p style={{ textAlign: "center", fontSize: "12px", color: "var(--muted)", marginBottom: "10px" }}>
+                Identification des intervenants en cours…
+              </p>
+            )}
+
+            {/* Mapping speakers → noms (apres diarisation) */}
+            {diarizedResult && diarizedResult.speakers.length > 0 && (
+              <div style={{
+                marginBottom: "12px", padding: "14px",
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px",
+              }}>
+                <p style={{
+                  fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase",
+                  color: "var(--muted)", margin: "0 0 10px 0",
+                }}>
+                  {diarizedResult.speakers.length} intervenant{diarizedResult.speakers.length > 1 ? "s" : ""} détecté{diarizedResult.speakers.length > 1 ? "s" : ""} — personnalisez les noms
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
+                  {diarizedResult.speakers.map(sp => (
+                    <div key={sp} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{
+                        padding: "2px 8px", borderRadius: "999px", fontSize: "10px", fontWeight: 500,
+                        background: `${speakerColor(sp)}22`,
+                        border: `1px solid ${speakerColor(sp)}66`,
+                        color: speakerColor(sp),
+                        fontFamily: "ui-monospace, monospace", flexShrink: 0,
+                      }}>{sp}</span>
+                      <input
+                        type="text"
+                        value={speakerNames[sp] || ""}
+                        onChange={e => setSpeakerNames(prev => ({ ...prev, [sp]: e.target.value }))}
+                        placeholder={`Intervenant ${sp}`}
+                        style={{
+                          flex: 1, minWidth: 0, padding: "6px 10px",
+                          background: "var(--background)", border: "1px solid var(--border)",
+                          borderRadius: "8px", fontSize: "13px", color: "var(--foreground)",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button onClick={generateSummary} disabled={step === "summarizing" || diarizing} style={{
+              width: "100%", padding: "12px", borderRadius: "10px", cursor: (step === "summarizing" || diarizing) ? "wait" : "pointer",
               fontSize: "13px", fontWeight: 600,
-              background: step === "summarizing"
+              background: (step === "summarizing" || diarizing)
                 ? "var(--border)"
                 : "linear-gradient(135deg, var(--accent), var(--accent-dim))",
-              color: step === "summarizing" ? "var(--muted)" : "#0c0c0e",
+              color: (step === "summarizing" || diarizing) ? "var(--muted)" : "#0c0c0e",
               border: "none",
             }}>
               {step === "summarizing" ? "Génération en cours…" : "✨ Générer le compte-rendu"}
