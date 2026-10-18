@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from gateway import auth as auth_utils
 from gateway import emails, models, schemas
 from gateway.database import Base, engine, get_db
+from gateway.ratelimit import rate_limit
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
 
@@ -159,7 +160,8 @@ def health():
     return {"status": "ok", "service": "gateway"}
 
 
-@app.post("/auth/register", status_code=status.HTTP_201_CREATED)
+@app.post("/auth/register", status_code=status.HTTP_201_CREATED,
+          dependencies=[Depends(rate_limit("register", 5, 3600))])
 def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
     """Créer un nouveau compte."""
     if db.query(models.User).filter(models.User.email == body.email).first():
@@ -185,7 +187,9 @@ def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
     return {"message": "Compte créé avec succès", "email": user.email}
 
 
-@app.post("/auth/login", response_model=schemas.TokenResponse)
+@app.post("/auth/login", response_model=schemas.TokenResponse,
+          dependencies=[Depends(rate_limit("login-min", 10, 60)),
+                        Depends(rate_limit("login-hour", 50, 3600))])
 def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
     """Connexion — retourne access_token + refresh_token."""
     user = db.query(models.User).filter(models.User.email == body.email).first()
@@ -286,7 +290,7 @@ def change_password(
     return {"message": "Mot de passe modifié. Reconnectez-vous."}
 
 
-@app.post("/auth/forgot-password")
+@app.post("/auth/forgot-password", dependencies=[Depends(rate_limit("forgot", 5, 3600))])
 def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     Demander un lien de réinitialisation.
@@ -320,7 +324,7 @@ def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(g
     return {"message": "Si cet email existe, un lien a été envoyé."}
 
 
-@app.post("/auth/reset-password")
+@app.post("/auth/reset-password", dependencies=[Depends(rate_limit("reset", 20, 3600))])
 def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
     """Réinitialiser le mot de passe avec le token reçu."""
     token_hash = auth_utils.hash_token(body.token)
