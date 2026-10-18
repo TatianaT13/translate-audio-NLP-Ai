@@ -18,6 +18,7 @@ load_dotenv()
 
 from stt.whisper_service import WhisperService
 from stt import openai_backend, assemblyai_backend
+from stt import billing
 from stt.auth import require_caller
 
 # Sentry : inactif sans SENTRY_DSN. Ni corps de requete ni variables locales :
@@ -121,8 +122,9 @@ async def health():
     }
 
 
-@app.post("/transcribe", dependencies=[Depends(require_caller)])
+@app.post("/transcribe")
 async def transcribe(
+    user_id: int | None = Depends(require_caller),
     file: UploadFile = File(...),
     model: str = Form(DEFAULT_MODEL),
     language: str = Form("fr"),
@@ -141,6 +143,8 @@ async def transcribe(
     # détecter le format sur le CONTENU du fichier, pas sur son nom. Résout
     # les cas où un fichier .mp3 contient en fait du M4A/AAC/WebM (enregistreurs
     # iOS/Android) → ffmpeg refuserait de le lire comme MP3 sinon.
+    rate = await billing.rate_for(user_id, diarize) if user_id is not None else 0.0
+
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp_in:
         tmp_in.write(await file.read())
         tmp_in_path = tmp_in.name
@@ -186,6 +190,10 @@ async def transcribe(
     finally:
         Path(tmp_in_path).unlink(missing_ok=True)
         Path(tmp_wav_path).unlink(missing_ok=True)
+
+    if user_id is not None:
+        await billing.charge(user_id, result.get("duration") or 0, rate,
+                             "meeting_diarization" if diarize else "meeting_transcription")
 
     return JSONResponse({
         "text":                 result["text"],

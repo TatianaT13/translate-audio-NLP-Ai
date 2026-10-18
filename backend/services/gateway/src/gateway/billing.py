@@ -349,6 +349,25 @@ def register_routes(app, get_current_user):
         balance = row.processing_balance if req.kind == "processing" else row.live_balance
         return {"ok": True, "balance": balance}
 
+    class ConsumeSecondsRequest(BaseModel):
+        user_id:      int
+        seconds:      float
+        rate_per_min: float
+        reason:       str
+
+    @router.post("/consume-seconds")
+    def consume_seconds(
+        req: ConsumeSecondsRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Debit au prorata d'une duree (reunion transcrite par tranches de 30 s)."""
+        _check_service_token(request.headers.get("x-service-token"))
+        if not (0 <= req.seconds <= 6 * 3600) or not (0 <= req.rate_per_min <= 10):
+            raise HTTPException(status_code=400, detail="Duree ou taux invalide")
+        charged, balance = _credits.consume_seconds(db, req.user_id, req.seconds, req.rate_per_min, req.reason)
+        return {"ok": True, "charged": charged, "balance": balance}
+
     class RefundRequest(BaseModel):
         user_id:   int
         kind:      str

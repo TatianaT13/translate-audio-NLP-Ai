@@ -4,6 +4,14 @@ const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8
 const LLM_URL      = process.env.NEXT_PUBLIC_LLM_URL      || "http://localhost:8002";
 const STT_URL      = process.env.NEXT_PUBLIC_STT_URL      || "http://localhost:8001";
 
+/** Solde de credits epuise (HTTP 402) : le navigateur doit arreter et proposer l'offre Pro. */
+export class CreditsError extends Error {
+  constructor() {
+    super("Crédits épuisés : passez à l'offre Pro pour des comptes-rendus illimités.");
+    this.name = "CreditsError";
+  }
+}
+
 export interface ChunkTranscript {
   text:          string;
   language:      string;
@@ -42,6 +50,7 @@ export async function transcribeChunk(
     method: "POST",
     body: form,
   });
+  if (res.status === 402) throw new CreditsError();
   if (!res.ok) throw new Error(`STT erreur ${res.status}`);
   const data = await res.json();
   return {
@@ -81,6 +90,7 @@ export async function transcribeDiarized(
     method: "POST",
     body: form,
   });
+  if (res.status === 402) throw new CreditsError();
   if (!res.ok) throw new Error(`STT diarize erreur ${res.status}`);
   const data = await res.json();
   return {
@@ -126,6 +136,7 @@ export async function summarizeMeeting(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript, target_lang: targetLang, style }),
   });
+  if (res.status === 402) throw new CreditsError();
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `LLM erreur ${res.status}`);

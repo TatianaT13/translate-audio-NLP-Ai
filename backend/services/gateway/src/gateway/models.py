@@ -92,6 +92,9 @@ class UserCredits(Base):
     # Alerte quota faible deja envoyee pour la periode courante (reset au refill)
     low_credits_alerted = Column(Boolean, default=False, nullable=False)
 
+    # Fraction de credit en attente (milliemes), pour les debits au prorata
+    processing_remainder_milli = Column(Integer, default=0, nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

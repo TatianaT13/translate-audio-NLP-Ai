@@ -14,7 +14,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from llm.auth import require_caller
+from llm import billing
+from llm.auth import require_caller, require_service
 
 load_dotenv()
 
@@ -200,7 +201,7 @@ def health():
     }
 
 
-@app.post("/translate", response_model=TranslateResponse, dependencies=[Depends(require_caller)])
+@app.post("/translate", response_model=TranslateResponse, dependencies=[Depends(require_service)])
 def translate(req: TranslateRequest):
     """
     Traduit un texte via LiteLLM.
@@ -287,7 +288,12 @@ class SummarizeResponse(BaseModel):
     cost_usd:           float = 0.0
 
 
-@app.post("/summarize", response_model=SummarizeResponse, dependencies=[Depends(require_caller)])
+async def _summarize_access(user_id: int | None = Depends(require_caller)) -> None:
+    if user_id is not None:
+        await billing.ensure_can_summarize(user_id)
+
+
+@app.post("/summarize", response_model=SummarizeResponse, dependencies=[Depends(_summarize_access)])
 def summarize_meeting(req: SummarizeRequest):
     """Génère un compte-rendu de réunion à partir d'un transcript."""
     if not req.transcript.strip():

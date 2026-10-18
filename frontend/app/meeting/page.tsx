@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import {
-  transcribeChunk, summarizeMeeting, transcribeDiarized, formatDiarizedTranscript,
+  transcribeChunk, summarizeMeeting, transcribeDiarized, formatDiarizedTranscript, CreditsError,
   type ChunkTranscript, type SummaryResponse, type DiarizedTranscript, type DiarizedSegment,
 } from "@/lib/meeting";
 import { AppHeader } from "@/components/AppHeader";
@@ -87,6 +87,7 @@ export default function MeetingPage() {
   // start() envoie des fragments sans header → Whisper ne peut décoder que le
   // 1er chunk, les suivants sont invalides silencieusement.
   const stoppingRef      = useRef(false);          // évite de redémarrer sur stop volontaire
+  const stopRecordingRef = useRef<() => void>(() => {});
   const buildRecorder = useCallback((stream: MediaStream): MediaRecorder => {
     const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
 
@@ -106,6 +107,11 @@ export default function MeetingPage() {
           }]);
         }
       } catch (err) {
+        if (err instanceof CreditsError) {
+          setError(err.message);
+          stopRecordingRef.current();
+          return;
+        }
         console.error("STT chunk error:", err);
       }
     };
@@ -164,6 +170,7 @@ export default function MeetingPage() {
     streamRef.current?.getTracks().forEach(t => t.stop());
     setStep("stopped");
   }, []);
+  useEffect(() => { stopRecordingRef.current = stopRecording; }, [stopRecording]);
 
   // Cleanup au unmount
   useEffect(() => {
@@ -193,7 +200,8 @@ export default function MeetingPage() {
       return diarized;
     } catch (e) {
       console.error("Diarisation error:", e);
-      setError(e instanceof Error ? `Diarisation echouee : ${e.message}` : "Erreur diarisation");
+      setError(e instanceof CreditsError ? e.message
+        : e instanceof Error ? `Identification des intervenants échouée : ${e.message}` : "Erreur d'identification des intervenants");
       return null;
     } finally {
       setDiarizing(false);
@@ -332,12 +340,16 @@ export default function MeetingPage() {
               <p style={{ fontSize: "11px", color: "var(--muted)", marginTop: "10px" }}>
                 Autorisez l&apos;accès au micro · les chunks sont transcrits en temps réel
               </p>
+              <p style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
+                Offre Découverte : 1 crédit par minute d&apos;enregistrement · illimité avec{" "}
+                <a href="/tarifs" style={{ color: "var(--accent)" }}>Pro</a>
+              </p>
 
               {/* Toggle diarisation (a activer AVANT de demarrer) */}
               <div style={{ marginTop: "20px", display: "flex", justifyContent: "center" }}>
                 <button
                   onClick={() => setDiarize(d => !d)}
-                  title="Identifier automatiquement les differents intervenants dans la reunion (+1,5 credit/min)"
+                  title="Identifier automatiquement les différents intervenants dans la réunion (+1,5 crédit/min)"
                   style={{
                     display: "inline-flex", alignItems: "center", gap: "8px",
                     padding: "6px 14px", borderRadius: "999px", fontSize: "12px",

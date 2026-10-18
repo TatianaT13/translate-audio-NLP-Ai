@@ -65,6 +65,13 @@ def _run_lightweight_migrations() -> None:
                     "BOOLEAN DEFAULT 0 NOT NULL"
                 ))
                 print("[gateway] migration : ajout colonne user_credits.low_credits_alerted", flush=True)
+        if "processing_remainder_milli" not in uc_cols:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE user_credits ADD COLUMN processing_remainder_milli "
+                    "INTEGER DEFAULT 0 NOT NULL"
+                ))
+                print("[gateway] migration : ajout colonne user_credits.processing_remainder_milli", flush=True)
 
 
 _run_lightweight_migrations()

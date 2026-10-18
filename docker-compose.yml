@@ -163,6 +163,7 @@ services:
       # AssemblyAI (diarisation on-demand quand diarize=true)
       - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
       - ASSEMBLYAI_MODEL=${ASSEMBLYAI_MODEL:-nano}
+      - GATEWAY_URL=http://gateway:8004
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       # Acces : JWT utilisateur ou jeton de service interne
@@ -195,6 +196,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
       - LLM_FALLBACKS=${LLM_FALLBACKS:-openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022}
       - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+      - GATEWAY_URL=http://gateway:8004
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
       # Acces : JWT utilisateur ou jeton de service interne

@@ -241,6 +241,32 @@ def consume(
     return row
 
 
+def consume_seconds(
+    db: Session,
+    user_id: int,
+    seconds: float,
+    rate_per_min: float,
+    reason: str,
+) -> tuple[int, int]:
+    """Debite une duree au prorata, en milliemes de credit.
+
+    Une reunion est transcrite par tranches de 30 s : un debit entier par tranche
+    doublerait le prix. La fraction restante est reportee sur l'appel suivant.
+    Solde insuffisant : on debite ce qui reste et on abandonne la fraction (pas
+    de dette). Retourne (credits debites, solde).
+    """
+    row = _get_or_create(db, user_id)
+    milli = row.processing_remainder_milli + round(max(seconds, 0.0) * rate_per_min * 1000 / 60)
+    due, remainder = divmod(milli, 1000)
+    charged = min(due, row.processing_balance)
+    row.processing_remainder_milli = remainder if charged == due else 0
+    if charged > 0:
+        row = consume(db, user_id, "processing", charged, reason)  # commit + alerte solde faible
+    else:
+        db.commit()
+    return charged, row.processing_balance
+
+
 def refund(
     db: Session,
     user_id: int,
