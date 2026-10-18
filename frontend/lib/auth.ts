@@ -75,7 +75,19 @@ export async function logout() {
   clearTokens();
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
+let refreshInFlight: Promise<string | null> | null = null;
+
+// Le gateway invalide l'ancien refresh token a chaque rotation : deux refresh
+// simultanes feraient echouer le second, qui effacerait la session. Les appels
+// concurrents partagent donc le meme refresh.
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<string | null> {
   const refreshToken = localStorage.getItem("refresh_token");
   if (!refreshToken) return null;
 
