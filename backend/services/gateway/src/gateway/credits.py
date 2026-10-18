@@ -233,7 +233,7 @@ def consume(
             from gateway import emails
             user = db.query(models.User).filter(models.User.id == user_id).first()
             if user:
-                emails.send_low_credits_alert(user.email, new_balance, kind="processing")
+                emails.send_low_credits_alert(user.email, new_balance)
         except Exception as e:
             print(f"[credits] low-credits email error for user {user_id}: {e}", flush=True)
 
