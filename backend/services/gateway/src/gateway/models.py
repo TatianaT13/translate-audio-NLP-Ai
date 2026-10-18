@@ -89,6 +89,9 @@ class UserCredits(Base):
     # Trial one-time (10 credits a l'inscription, non renouvelable)
     trial_credits_granted = Column(Boolean, default=False, nullable=False)
 
+    # Alerte quota faible deja envoyee pour la periode courante (reset au refill)
+    low_credits_alerted = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

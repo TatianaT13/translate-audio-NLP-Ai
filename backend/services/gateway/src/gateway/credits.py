@@ -51,6 +51,10 @@ TIER_CONFIG = {
 
 TRIAL_CREDITS = 10  # one-time a l'inscription, pour tous les users
 
+# Seuil (processing credits) sous lequel on envoie un email d'alerte.
+# L'alerte n'est envoyee qu'une fois par periode (reset au refill mensuel).
+LOW_CREDITS_THRESHOLD = 20
+
 Kind = Literal["processing", "live"]
 
 
@@ -170,6 +174,9 @@ def allocate_monthly(
     else:
         row.period_resets_at = datetime.now(timezone.utc) + timedelta(days=30)
 
+    # Reset du flag d'alerte quota : nouvelle periode = user peut retre alerte.
+    row.low_credits_alerted = False
+
 
 def refill_if_due(db: Session, user_id: int, tier: str) -> models.UserCredits:
     """Refill lazy appele au prochain acces si la periode est terminee."""
@@ -216,6 +223,20 @@ def consume(
         reason=reason,
         meta=meta,
     )
+
+    # Alerte quota faible (uniquement sur le compteur processing, qui est le
+    # principal). Envoye une seule fois par periode : le flag est remis a 0
+    # lors du prochain refill mensuel.
+    if kind == "processing" and new_balance < LOW_CREDITS_THRESHOLD and not row.low_credits_alerted:
+        row.low_credits_alerted = True
+        try:
+            from gateway import emails
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                emails.send_low_credits_alert(user.email, new_balance, kind="processing")
+        except Exception as e:
+            print(f"[credits] low-credits email error for user {user_id}: {e}", flush=True)
+
     db.commit()
     return row
 

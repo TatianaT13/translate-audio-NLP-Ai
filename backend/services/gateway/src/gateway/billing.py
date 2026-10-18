@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from gateway import models, credits as _credits
+from gateway import emails, models, credits as _credits
 from gateway.database import get_db
 
 
@@ -249,6 +249,9 @@ def register_routes(app, get_current_user):
             if data.get("customer") and not user.stripe_customer_id:
                 user.stripe_customer_id = data["customer"]
                 db.commit()
+            # Confirmation par email (fire-and-forget)
+            period_iso = user.current_period_end.isoformat() if user.current_period_end else None
+            emails.send_payment_confirmation(user.email, user.subscription_tier or "pro", period_iso)
 
         return JSONResponse({"received": True, "type": event_type})
 

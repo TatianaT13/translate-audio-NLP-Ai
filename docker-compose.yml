@@ -77,6 +77,10 @@ services:
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:3000}
       # Token partage service-to-service (Pipeline -> Gateway /billing/consume)
       - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
+      # ── Emails transactionnels (Resend) ───────────────────────────────
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-traduction-audio.fr <noreply@traduction-audio.fr>}
+      - SUPPORT_EMAIL=${SUPPORT_EMAIL:-contact@traduction-audio.fr}
     volumes:
       - gateway_data:/app/data
       - ./outputs/experiments:/app/experiments:ro

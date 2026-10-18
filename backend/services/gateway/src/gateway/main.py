@@ -18,8 +18,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from gateway import auth as auth_utils
-from gateway import models, schemas
+from gateway import emails, models, schemas
 from gateway.database import Base, engine, get_db
+
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -51,9 +53,16 @@ def _run_lightweight_migrations() -> None:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
 
-    # Les nouvelles tables user_credits + credit_transactions sont creees
-    # automatiquement par Base.metadata.create_all() ci-dessus — rien a faire ici
-    # tant qu'on n'ajoute pas de colonnes a user_credits apres sa premiere creation.
+    # Migration user_credits : flag d'alerte quota faible (ajoute 2026-10)
+    if "user_credits" in inspector.get_table_names():
+        uc_cols = {c["name"] for c in inspector.get_columns("user_credits")}
+        if "low_credits_alerted" not in uc_cols:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE user_credits ADD COLUMN low_credits_alerted "
+                    "BOOLEAN DEFAULT 0 NOT NULL"
+                ))
+                print("[gateway] migration : ajout colonne user_credits.low_credits_alerted", flush=True)
 
 
 _run_lightweight_migrations()
@@ -170,6 +179,8 @@ def register(body: schemas.RegisterRequest, db: Session = Depends(get_db)):
         _credits.grant_trial(db, user.id)
     except Exception as e:
         print(f"[gateway] grant_trial warning for user {user.id}: {e}", flush=True)
+
+    emails.send_welcome(user.email)
 
     return {"message": "Compte créé avec succès", "email": user.email}
 
@@ -299,14 +310,13 @@ def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(g
     db.add(models.PasswordResetToken(user_id=user.id, token_hash=hash_tok, expires_at=expires))
     db.commit()
 
-    reset_url = f"http://localhost:3000/reset-password?token={raw_token}"
+    reset_url = f"{APP_BASE_URL}/reset-password?token={raw_token}"
 
     if DEV_MODE:
-        # En développement : retourner le lien directement
+        # En développement : retourner le lien directement (plus pratique pour tests)
         return {"message": "Lien de réinitialisation (DEV uniquement)", "reset_url": reset_url}
 
-    # TODO production : envoyer l'email via SMTP
-    # send_reset_email(user.email, reset_url)
+    emails.send_reset_password(user.email, reset_url)
     return {"message": "Si cet email existe, un lien a été envoyé."}
 
 
