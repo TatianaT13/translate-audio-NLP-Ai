@@ -8,6 +8,7 @@ GET  /health   : statut + URLs des services aval
 
 import asyncio
 import base64
+import hmac
 import os
 import time
 
@@ -32,6 +33,8 @@ GATEWAY_URL           = os.getenv("GATEWAY_URL", "http://gateway:8004")
 GATEWAY_SERVICE_TOKEN = os.getenv("GATEWAY_SERVICE_TOKEN", "")
 JWT_SECRET            = os.getenv("JWT_SECRET", "")
 JWT_ALGO              = "HS256"
+# STT et LLM exigent ce jeton pour les appels internes (sans JWT utilisateur)
+_SERVICE_HEADERS      = {"x-service-token": GATEWAY_SERVICE_TOKEN}
 
 # ── Langfuse (optionnel — désactivé si clés absentes) ────────────────────────
 _lf = None
@@ -94,6 +97,7 @@ async def _stt_step(state: dict) -> dict:
     async with httpx.AsyncClient(timeout=600) as client:
         resp = await client.post(
             f"{STT_URL}/transcribe",
+            headers=_SERVICE_HEADERS,
             files={"file": (state["filename"], state["audio_bytes"], "audio/mpeg")},
             data={
                 "model":    state["whisper_model"],
@@ -204,6 +208,7 @@ async def _translate_chunk(
     """Traduit un chunk unique via le service LLM. Renvoie le dict de réponse."""
     resp = await client.post(
         f"{LLM_URL}/translate",
+        headers=_SERVICE_HEADERS,
         json={
             "text": sandbox_user_text(text),
             "target_lang": target_lang,
@@ -425,13 +430,28 @@ _LEGACY_MODEL_ALIASES = {
 }
 
 
-def _decode_user_id(auth_header: str | None) -> int | None:
-    """Decode optionnellement un JWT Bearer et extrait le user_id (sub).
+def _authenticate(authorization: str | None, x_service_token: str | None) -> int | None:
+    """user_id pour un JWT valide, None pour un appel interne (jeton de service).
 
-    Retourne None si aucun token ou si invalide : le pipeline tourne alors en
-    mode anonyme (pas de check de credits — c'est un garde-fou gere plus haut
-    par le frontend qui envoie toujours le JWT pour un user connecte).
+    Tout autre appel est refuse : sans ce controle, /pipeline etant public,
+    n'importe qui pourrait traduire sans compte et sans consommer de credits.
     """
+    if _is_service_call(x_service_token):
+        return None
+    user_id = _decode_user_id(authorization)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    return user_id
+
+
+def _is_service_call(x_service_token: str | None) -> bool:
+    # La valeur par defaut du docker-compose est publique (dans le repo) : jamais acceptee.
+    if not GATEWAY_SERVICE_TOKEN or GATEWAY_SERVICE_TOKEN.startswith("change-me"):
+        return False
+    return bool(x_service_token) and hmac.compare_digest(x_service_token, GATEWAY_SERVICE_TOKEN)
+
+
+def _decode_user_id(auth_header: str | None) -> int | None:
     if not auth_header or not auth_header.startswith("Bearer "):
         return None
     token = auth_header.removeprefix("Bearer ").strip()
@@ -493,6 +513,7 @@ async def process(
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
     authorization: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
 ):
     """
     Pipeline complet : audio → transcription → traduction → synthèse vocale.
@@ -516,7 +537,7 @@ async def process(
     # On fait un pre-authorize optimiste base sur la taille du fichier. En cas
     # de refus, 402 Payment Required avec le detail du quota manquant. Si
     # succes, on consomme reellement les credits a la fin avec la vraie duree.
-    user_id = _decode_user_id(authorization)
+    user_id = _authenticate(authorization, x_service_token)
     estimated_credits = _estimate_credits_from_filesize(
         len(audio_bytes), with_tts=True, with_diarize=diarize,
     )
@@ -831,6 +852,7 @@ async def process_async(
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
     authorization: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
 ):
     """Submit un job async. Retourne un job_id a poller via GET /jobs/{job_id}.
 
@@ -843,7 +865,7 @@ async def process_async(
 
     audio_bytes = await file.read()
     filename    = file.filename or "audio.mp3"
-    user_id     = _decode_user_id(authorization)
+    user_id     = _authenticate(authorization, x_service_token)
 
     # Pre-authorize credits (meme logique que /process pour cohérence UX)
     if user_id is not None:
@@ -884,16 +906,17 @@ async def process_async(
 
 
 @app.get("/jobs/{job_id}")
-async def get_job(job_id: str, authorization: str | None = Header(default=None)):
-    """Retourne l'etat d'un job. Le proprietaire est verifie via JWT."""
+async def get_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
+):
+    """Etat d'un job, lisible uniquement par son proprietaire (ou un appel interne)."""
+    caller_id = _authenticate(authorization, x_service_token)
     job = await _jobs.store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable (expire ou id inconnu)")
-
-    # Securite : seul le proprietaire peut lire son job (sauf jobs anonymes
-    # soumis sans JWT, accessibles via l'id uniquement — opaque uuid4 → OK).
-    caller_id = _decode_user_id(authorization)
-    if job.user_id is not None and caller_id != job.user_id:
+    if caller_id is not None and job.user_id is not None and caller_id != job.user_id:
         raise HTTPException(status_code=403, detail="Pas le proprietaire de ce job")
 
     response = {

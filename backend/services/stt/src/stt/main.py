@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -18,6 +18,7 @@ load_dotenv()
 
 from stt.whisper_service import WhisperService
 from stt import openai_backend, assemblyai_backend
+from stt.auth import require_caller
 
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -106,7 +107,7 @@ async def health():
     }
 
 
-@app.post("/transcribe")
+@app.post("/transcribe", dependencies=[Depends(require_caller)])
 async def transcribe(
     file: UploadFile = File(...),
     model: str = Form(DEFAULT_MODEL),

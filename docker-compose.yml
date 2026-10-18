@@ -150,6 +150,9 @@ services:
       # AssemblyAI (diarisation on-demand quand diarize=true)
       - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY:-}
       - ASSEMBLYAI_MODEL=${ASSEMBLYAI_MODEL:-nano}
+      # Acces : JWT utilisateur ou jeton de service interne
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
+      - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
     volumes:
       - whisper_cache:/home/app/.cache/huggingface
     # large-v3 = ~3 Go de modèle + overhead PyTorch + audio en cours → 6-8 Go
@@ -177,6 +180,9 @@ services:
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
       - LLM_FALLBACKS=${LLM_FALLBACKS:-openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022}
       - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+      # Acces : JWT utilisateur ou jeton de service interne
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
+      - GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health').status==200 else 1)"]
@@ -339,6 +345,7 @@ services:
       AIRFLOW__WEBSERVER__WORKERS:            '2'
       AIRFLOW__API__AUTH_BACKENDS:            'airflow.api.auth.backend.basic_auth'
       PIPELINE_URL:                           http://pipeline:8000
+      GATEWAY_SERVICE_TOKEN:                  ${GATEWAY_SERVICE_TOKEN:-change-me-service-token}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./data:/opt/airflow/data:ro

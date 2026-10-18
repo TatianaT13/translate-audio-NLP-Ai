@@ -1,4 +1,4 @@
-import { getAccessToken, refreshAccessToken } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 
 const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8000";
 
@@ -75,12 +75,6 @@ export class PipelineError extends Error {
   }
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  let token = getAccessToken();
-  if (!token) token = await refreshAccessToken();
-  return token ? { "Authorization": `Bearer ${token}` } : {};
-}
-
 export interface RunPipelineOptions {
   targetLang?:    string;
   llmModel?:      string;
@@ -137,12 +131,10 @@ export async function runPipeline(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (signal?.aborted) throw new Error("Requête annulée");
 
-    const authHeaders = await getAuthHeaders();
     let res: Response;
     try {
-      res = await fetch(`${PIPELINE_URL}/process`, {
+      res = await authFetch(`${PIPELINE_URL}/process`, {
         method: "POST",
-        headers: authHeaders,
         body: build(),
         signal,
       });
@@ -203,11 +195,9 @@ export async function submitPipelineJob(
   form.append("whisper_model",  whisperModel);
   if (diarize) form.append("diarize", "true");
 
-  const authHeaders = await getAuthHeaders();
-  const res = await fetch(`${PIPELINE_URL}/process-async`, {
-    method:  "POST",
-    headers: authHeaders,
-    body:    form,
+  const res = await authFetch(`${PIPELINE_URL}/process-async`, {
+    method: "POST",
+    body:   form,
     signal,
   });
   if (!res.ok) {
@@ -220,17 +210,7 @@ export async function submitPipelineJob(
 
 /** Poll l'etat d'un job. Retourne le job state. */
 export async function fetchJobStatus(jobId: string, signal?: AbortSignal): Promise<PipelineJob> {
-  const authHeaders = await getAuthHeaders();
-  let res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, { headers: authHeaders, signal });
-  // L'access token expire au bout de 15 min : un long job le depasse en cours de polling.
-  if (res.status === 401 || res.status === 403) {
-    const fresh = await refreshAccessToken();
-    if (fresh) {
-      res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, {
-        headers: { "Authorization": `Bearer ${fresh}` }, signal,
-      });
-    }
-  }
+  const res = await authFetch(`${PIPELINE_URL}/jobs/${jobId}`, { signal });
   if (!res.ok) {
     const raw = await res.text();
     let detail = ""; try { detail = JSON.parse(raw).detail || ""; } catch { detail = raw; }

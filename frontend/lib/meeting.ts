@@ -1,14 +1,8 @@
-import { getAccessToken, refreshAccessToken } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 
 const PIPELINE_URL = process.env.NEXT_PUBLIC_PIPELINE_URL || "http://localhost:8000";
 const LLM_URL      = process.env.NEXT_PUBLIC_LLM_URL      || "http://localhost:8002";
 const STT_URL      = process.env.NEXT_PUBLIC_STT_URL      || "http://localhost:8001";
-
-async function authHeaders(): Promise<HeadersInit> {
-  let token = getAccessToken();
-  if (!token) token = await refreshAccessToken();
-  return token ? { "Authorization": `Bearer ${token}` } : {};
-}
 
 export interface ChunkTranscript {
   text:          string;
@@ -44,10 +38,8 @@ export async function transcribeChunk(
   form.append("model", whisperModel);
   form.append("language", language);
 
-  const headers = await authHeaders();
-  const res = await fetch(`${STT_URL}/transcribe`, {
+  const res = await authFetch(`${STT_URL}/transcribe`, {
     method: "POST",
-    headers,
     body: form,
   });
   if (!res.ok) throw new Error(`STT erreur ${res.status}`);
@@ -85,10 +77,8 @@ export async function transcribeDiarized(
   form.append("language", language);
   form.append("diarize", "true");
 
-  const headers = await authHeaders();
-  const res = await fetch(`${STT_URL}/transcribe`, {
+  const res = await authFetch(`${STT_URL}/transcribe`, {
     method: "POST",
-    headers,
     body: form,
   });
   if (!res.ok) throw new Error(`STT diarize erreur ${res.status}`);
@@ -131,10 +121,9 @@ export async function summarizeMeeting(
   targetLang: string = "en",
   style: "executive" | "detailed" | "actions_only" = "executive"
 ): Promise<SummaryResponse> {
-  const headers = await authHeaders();
-  const res = await fetch(`${LLM_URL}/summarize`, {
+  const res = await authFetch(`${LLM_URL}/summarize`, {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript, target_lang: targetLang, style }),
   });
   if (!res.ok) {

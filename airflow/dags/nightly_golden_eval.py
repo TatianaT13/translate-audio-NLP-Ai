@@ -71,6 +71,7 @@ def nightly_golden_eval():
                     f"{PIPELINE_URL}/process",
                     files={"file": (Path(audio_path).name, f.read(), "audio/mpeg")},
                     data={"target_lang": TARGET_LANG, "whisper_model": "small"},
+                    headers={"x-service-token": os.environ.get("GATEWAY_SERVICE_TOKEN", "")},
                     timeout=300.0,
                 )
             r.raise_for_status()
