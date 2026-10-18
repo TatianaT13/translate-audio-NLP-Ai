@@ -221,7 +221,16 @@ export async function submitPipelineJob(
 /** Poll l'etat d'un job. Retourne le job state. */
 export async function fetchJobStatus(jobId: string, signal?: AbortSignal): Promise<PipelineJob> {
   const authHeaders = await getAuthHeaders();
-  const res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, { headers: authHeaders, signal });
+  let res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, { headers: authHeaders, signal });
+  // L'access token expire au bout de 15 min : un long job le depasse en cours de polling.
+  if (res.status === 401 || res.status === 403) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      res = await fetch(`${PIPELINE_URL}/jobs/${jobId}`, {
+        headers: { "Authorization": `Bearer ${fresh}` }, signal,
+      });
+    }
+  }
   if (!res.ok) {
     const raw = await res.text();
     let detail = ""; try { detail = JSON.parse(raw).detail || ""; } catch { detail = raw; }
