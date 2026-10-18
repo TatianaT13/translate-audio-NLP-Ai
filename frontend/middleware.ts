@@ -9,6 +9,8 @@ const PUBLIC_PATHS  = [
   "/mentions-legales", "/cgu", "/cgv",
   "/confidentialite", "/cookies", "/contact", "/a-propos",
   "/tarifs",  // page publique + /tarifs/succes + /tarifs/annule
+  "/blog",
+  "/opengraph-image",  // aperçu des liens partagés (réseaux sociaux, messageries)
 ];
 const PUBLIC_EXACT  = ["/"];
 // Préfixes proxyés vers les backends Docker → laisse passer sans auth Next.js
