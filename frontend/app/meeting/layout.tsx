@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Comptes-rendus de reunion",
+  title: "Comptes-rendus de réunion",
   description:
-    "Enregistrez vos reunions, identifiez les intervenants et generez un compte-rendu structure dans la langue de votre choix.",
+    "Enregistrez vos réunions, identifiez les intervenants et générez un compte-rendu structuré, exportable en PDF.",
   alternates: { canonical: "/meeting" },
   openGraph: {
-    title: "Comptes-rendus de reunion — traduction-audio.fr",
-    description: "Diarisation, resume executif, notes par intervenant.",
+    title: "Comptes-rendus de réunion — traduction-audio.fr",
+    description: "Identification des intervenants, résumé, export PDF et SRT.",
     url: "/meeting",
   },
 };

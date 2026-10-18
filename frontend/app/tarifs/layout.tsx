@@ -3,11 +3,11 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Tarifs et abonnements",
   description:
-    "Formules a partir de 9 EUR/mois. Essai gratuit avec 10 credits inclus. Pas d'engagement, resiliation en un clic.",
+    "Pro à 9,90 € par mois ou 99 € par an. 10 crédits offerts à l'inscription, sans carte bancaire. Sans engagement.",
   alternates: { canonical: "/tarifs" },
   openGraph: {
     title: "Tarifs — traduction-audio.fr",
-    description: "Formules a partir de 9 EUR/mois. Essai gratuit.",
+    description: "Pro à 9,90 € par mois. 10 crédits offerts à l'inscription.",
     url: "/tarifs",
   },
 };

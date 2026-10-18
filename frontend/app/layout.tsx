@@ -27,11 +27,11 @@ export const metadata: Metadata = {
     template: "%s — traduction-audio.fr",
   },
   description:
-    "Transcrivez, traduisez et resumez vos audios en 30 langues. Identification des intervenants, voix clonee, comptes-rendus de reunion. Essayez gratuitement.",
+    "Transcrivez vos audios en français et traduisez-les en anglais, espagnol, allemand ou ukrainien, avec voix de synthèse. Comptes-rendus de réunion, identification des intervenants. 10 crédits offerts.",
   keywords: [
     "transcription audio", "traduction audio", "intelligence artificielle",
-    "whisper", "compte-rendu de reunion", "diarisation", "sous-titres",
-    "podcast traduction", "voix IA", "SaaS francais",
+    "whisper", "compte-rendu de réunion", "diarisation", "sous-titres",
+    "traduction français anglais", "voix IA",
   ],
   authors: [{ name: "Tetyana Tarasenko" }],
   creator: "Tetyana Tarasenko",
@@ -51,13 +51,12 @@ export const metadata: Metadata = {
     siteName: "traduction-audio.fr",
     title: "traduction-audio.fr — Transcription et traduction audio par IA",
     description:
-      "Traduisez vos audios en 30 langues. Diarisation, voix clonee, comptes-rendus de reunion. Essayez gratuitement.",
-    // L'image OG est generee automatiquement par app/opengraph-image.tsx (1200x630).
+      "Transcription, traduction et voix de synthèse pour vos audios en français. Comptes-rendus de réunion avec identification des intervenants.",
   },
   twitter: {
     card: "summary_large_image",
     title: "traduction-audio.fr — Transcription et traduction audio par IA",
-    description: "Traduisez vos audios en 30 langues. Essayez gratuitement.",
+    description: "Transcription, traduction et voix de synthèse pour vos audios en français. 10 crédits offerts.",
   },
   icons: {
     icon: "/api/favicon.ico",

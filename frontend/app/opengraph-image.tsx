@@ -25,16 +25,10 @@ export default async function OGImage() {
           Translate any voice, instantly.
         </div>
         <div style={{ fontSize: 28, color: "#a8a295", lineHeight: 1.4, maxWidth: 920 }}>
-          Transcription + traduction + voix cloner — 30 langues. Diarisation, comptes-rendus de reunion.
+          Transcription, traduction et voix de synthèse. Comptes-rendus de réunion avec identification des intervenants.
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 48, fontSize: 20, color: "#c9a96e" }}>
-          <span>Whisper IA</span>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <span>GPT-4o</span>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <span>AssemblyAI</span>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <span>XTTS</span>
+          <span>FR → EN · ES · DE · UK</span>
         </div>
       </div>
     ),
