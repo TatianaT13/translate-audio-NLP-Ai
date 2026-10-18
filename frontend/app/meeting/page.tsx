@@ -250,14 +250,14 @@ export default function MeetingPage() {
     const { downloadPDF, diarizedToSrt } = await import("@/lib/exports");
     const subtitle = `Compte-rendu · ${SUMMARY_LANGS.find(l => l.code === summary.target_lang)?.label} · ${new Date().toLocaleDateString("fr-FR")}`;
     await downloadPDF({
-      title:       "Compte-rendu de reunion",
+      title:       "Compte-rendu de réunion",
       subtitle,
       segments:    diarizedResult ? diarizedToSrt(diarizedResult.segments, speakerNames) : undefined,
       sourceLabel: diarizedResult ? undefined : "Transcript",
       sourceText:  diarizedResult ? undefined : segments.map(s => s.text).join(" "),
       targetLabel: "Compte-rendu",
       targetText:  summary.summary,
-      footerNote:  "Genere par traduction-audio.fr",
+      footerNote:  "Généré par traduction-audio.fr",
     }, `meeting_${Date.now()}_${summary.target_lang}.pdf`);
   }, [summary, diarizedResult, speakerNames, segments]);
 

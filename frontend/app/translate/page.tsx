@@ -414,7 +414,7 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               .txt
             </button>
-            <button onClick={onDownloadPdf} title="Telecharger en PDF" style={{
+            <button onClick={onDownloadPdf} title="Télécharger en PDF" style={{
               display: "flex", alignItems: "center", gap: "6px",
               padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
               cursor: "pointer", background: "rgba(201,169,110,0.06)",
@@ -424,7 +424,7 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
               .pdf
             </button>
             {result.translation_segments && result.translation_segments.length > 0 && (
-              <button onClick={onDownloadSrt} title="Telecharger les sous-titres (.srt)" style={{
+              <button onClick={onDownloadSrt} title="Télécharger les sous-titres (.srt)" style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "4px 10px", borderRadius: "8px", fontSize: "12px",
                 cursor: "pointer", background: "rgba(201,169,110,0.06)",
@@ -871,7 +871,7 @@ ${result.translation}
 
   const downloadSrtFile = () => {
     if (!result?.translation_segments || result.translation_segments.length === 0) {
-      setToast("Pas de segments disponibles pour le SRT (lance avec diarize=on)");
+      setToast("Sous-titres SRT disponibles uniquement avec l'identification des intervenants activée");
       return;
     }
     downloadSRT(
@@ -890,7 +890,7 @@ ${result.translation}
       sourceText:  result.source_text,
       targetLabel: `Traduction (${langLabel})`,
       targetText:  result.translation,
-      footerNote:  "Genere par traduction-audio.fr",
+      footerNote:  "Généré par traduction-audio.fr",
     }, `traduction_${result.language}_to_${targetLang}_${Date.now()}.pdf`);
   };
 

@@ -95,10 +95,39 @@ export interface PdfExportOptions {
  * Mise en page sobre : header, meta, sections, pied de page.
  * jsPDF charge dynamiquement pour alleger le bundle initial.
  */
+// Les polices standard jsPDF ne couvrent que le Latin-1 : sans police Unicode,
+// une traduction en ukrainien (cyrillique) sortirait illisible.
+const FONT = "DejaVu";
+let fontCache: Promise<{ normal: string; bold: string }> | null = null;
+
+async function fetchFontBase64(url: string): Promise<string> {
+  const buf = new Uint8Array(await (await fetch(url)).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 0x8000) {
+    bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+function loadFonts() {
+  if (!fontCache) {
+    fontCache = Promise.all([
+      fetchFontBase64("/fonts/DejaVuSans.ttf"),
+      fetchFontBase64("/fonts/DejaVuSans-Bold.ttf"),
+    ]).then(([normal, bold]) => ({ normal, bold }));
+    fontCache.catch(() => { fontCache = null; });
+  }
+  return fontCache;
+}
+
 export async function downloadPDF(opts: PdfExportOptions, filename: string): Promise<void> {
-  const { jsPDF } = await import("jspdf");
+  const [{ jsPDF }, fonts] = await Promise.all([import("jspdf"), loadFonts()]);
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });
+  doc.addFileToVFS("DejaVuSans.ttf", fonts.normal);
+  doc.addFileToVFS("DejaVuSans-Bold.ttf", fonts.bold);
+  doc.addFont("DejaVuSans.ttf", FONT, "normal");
+  doc.addFont("DejaVuSans-Bold.ttf", FONT, "bold");
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 48;
@@ -107,14 +136,14 @@ export async function downloadPDF(opts: PdfExportOptions, filename: string): Pro
   let y = margin;
 
   // ── Header ──
-  doc.setFont("helvetica", "bold");
+  doc.setFont(FONT, "bold");
   doc.setFontSize(18);
   doc.setTextColor(26, 22, 18);
   doc.text(opts.title, margin, y);
   y += 20;
 
   if (opts.subtitle) {
-    doc.setFont("helvetica", "normal");
+    doc.setFont(FONT, "normal");
     doc.setFontSize(10);
     doc.setTextColor(130, 125, 115);
     doc.text(opts.subtitle, margin, y);
@@ -129,13 +158,13 @@ export async function downloadPDF(opts: PdfExportOptions, filename: string): Pro
 
   // ── Helper pour section texte avec wrapping et saut de page ──
   const addSection = (label: string, body: string, color: [number, number, number]) => {
-    doc.setFont("helvetica", "bold");
+    doc.setFont(FONT, "bold");
     doc.setFontSize(9);
     doc.setTextColor(...color);
     doc.text(label.toUpperCase(), margin, y);
     y += 14;
 
-    doc.setFont("helvetica", "normal");
+    doc.setFont(FONT, "normal");
     doc.setFontSize(11);
     doc.setTextColor(40, 36, 30);
     const lines = doc.splitTextToSize(body, maxW) as string[];
@@ -152,7 +181,7 @@ export async function downloadPDF(opts: PdfExportOptions, filename: string): Pro
 
   // ── Segments speaker (prioritaires si fournis) ──
   if (opts.segments && opts.segments.length > 0) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont(FONT, "bold");
     doc.setFontSize(9);
     doc.setTextColor(201, 169, 110);
     doc.text("TRANSCRIPTION", margin, y);
@@ -165,12 +194,12 @@ export async function downloadPDF(opts: PdfExportOptions, filename: string): Pro
       }
       const speaker = seg.speaker ? `${seg.speaker} ` : "";
       const ts = `[${fmtSrtTime(seg.start).slice(0, 8)}]`;
-      doc.setFont("helvetica", "bold");
+      doc.setFont(FONT, "bold");
       doc.setFontSize(9);
       doc.setTextColor(201, 169, 110);
       doc.text(`${ts} ${speaker}`.trim(), margin, y);
       y += 12;
-      doc.setFont("helvetica", "normal");
+      doc.setFont(FONT, "normal");
       doc.setFontSize(11);
       doc.setTextColor(40, 36, 30);
       const lines = doc.splitTextToSize(seg.text, maxW) as string[];
@@ -194,10 +223,10 @@ export async function downloadPDF(opts: PdfExportOptions, filename: string): Pro
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    doc.setFont("helvetica", "normal");
+    doc.setFont(FONT, "normal");
     doc.setFontSize(8);
     doc.setTextColor(160, 155, 145);
-    const footer = opts.footerNote || "Genere par traduction-audio.fr";
+    const footer = opts.footerNote || "Généré par traduction-audio.fr";
     doc.text(footer, margin, pageH - 24);
     doc.text(`${i} / ${totalPages}`, pageW - margin, pageH - 24, { align: "right" });
   }
