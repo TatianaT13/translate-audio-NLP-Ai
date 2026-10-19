@@ -218,6 +218,7 @@ function DropdownMenu({ user, onNavigate, onChangePwd, onDelete, onLogout }: Dro
     { type: "separator" },
     ...(user.is_admin ? [{ type: "link" as const, label: "Admin",       href: "/admin",     Icon: AdminIcon }] : []),
     { type: "link",   label: "Tarifs & abonnement",     href: "/tarifs",    Icon: CardIcon },
+    { type: "link",   label: "Ma consommation",         href: "/consommation", Icon: CardIcon },
     // Support de soutenance : masque du menu utilisateur (garde sur disque et
     // sur git dans frontend/public/soutenance-pitch.html pour reference).
     // { type: "link",   label: "Support de soutenance", href: "/soutenance-pitch.html", Icon: ExternalLinkIcon },
@@ -468,8 +469,8 @@ function CreditsBadge() {
 
   return (
     <Link
-      href="/tarifs"
-      title={`${balance} crédits restants — cliquez pour voir les offres`}
+      href="/consommation"
+      title={`${balance} crédits restants — voir ma consommation`}
       style={{
         display: "inline-flex", alignItems: "center", gap: "6px",
         padding: "6px 12px", borderRadius: "999px",

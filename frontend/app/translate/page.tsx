@@ -257,6 +257,7 @@ interface ResultsViewProps {
   onDownloadTranscript: () => void;
   onDownloadPdf: () => void;
   onDownloadSrt: () => void;
+  showCost: boolean;   // cout fournisseur en dollars : reserve a l'admin
 }
 
 // ── Affichage des segments par speaker (quand diarize=true) ──────────────────
@@ -320,7 +321,7 @@ function SpeakerSegments({ segments }: { segments: TranslationSegment[] }) {
   );
 }
 
-function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript, onDownloadPdf, onDownloadSrt }: ResultsViewProps) {
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript, onDownloadPdf, onDownloadSrt, showCost }: ResultsViewProps) {
   const latencies = [
     { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
     { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
@@ -480,7 +481,7 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
         })}
 
         {/* Coût LLM (Langfuse pricing) */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
+        {showCost && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "4px 16px" }}>
           <span style={{ fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--accent)" }}>
             {result.cost_usd != null && result.cost_usd > 0
               ? `$${result.cost_usd.toFixed(5)}`
@@ -489,7 +490,7 @@ function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, 
           <span style={{ fontSize: "10px", color: "var(--muted)", letterSpacing: "0.12em" }}>
             Coût {result.total_tokens ? `· ${result.total_tokens} tok` : ""}
           </span>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -855,7 +856,7 @@ Date : ${new Date().toLocaleString("fr-FR")}
 Langue source : ${result.language} (confiance ${(result.language_prob * 100).toFixed(0)}%)
 Langue cible  : ${langLabel}
 Latence totale : ${(result.latency_total_ms / 1000).toFixed(1)}s
-${result.cost_usd != null ? `Coût : $${result.cost_usd.toFixed(6)}\n` : ""}
+${user?.is_admin && result.cost_usd != null ? `Coût : $${result.cost_usd.toFixed(6)}\n` : ""}
 ─── Transcription ───
 ${result.source_text}
 
@@ -1339,6 +1340,7 @@ ${result.translation}
             onDownloadTranscript={downloadTranscript}
             onDownloadPdf={downloadPdfFile}
             onDownloadSrt={downloadSrtFile}
+            showCost={!!user?.is_admin}
           />
         )}
 

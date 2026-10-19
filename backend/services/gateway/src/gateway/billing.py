@@ -284,6 +284,31 @@ def register_routes(app, get_current_user):
             "period_resets_at":      row.period_resets_at.isoformat() if row.period_resets_at else None,
         }
 
+    @router.get("/transactions")
+    def list_transactions(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Historique de consommation du compte connecte (100 derniers mouvements)."""
+        rows = (
+            db.query(models.CreditTransaction)
+            .filter(models.CreditTransaction.user_id == current_user.id,
+                    models.CreditTransaction.kind == "processing")
+            .order_by(models.CreditTransaction.id.desc())
+            .limit(100)
+            .all()
+        )
+        return [
+            {
+                "date":          r.created_at.isoformat() if r.created_at else None,
+                "op":            r.op,
+                "amount":        r.amount,
+                "balance_after": r.balance_after,
+                "reason":        r.reason,
+            }
+            for r in rows
+        ]
+
     # ── Endpoints service-to-service (Pipeline → Gateway) ────────────────
 
     def _check_service_token(x_service_token: str | None) -> None:

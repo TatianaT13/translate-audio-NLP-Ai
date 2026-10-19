@@ -624,7 +624,7 @@ export default function MeetingPage() {
             }}>
               {summary.summary}
             </pre>
-            {summary.cost_usd != null && (
+            {user?.is_admin && summary.cost_usd != null && (
               <p style={{ fontSize: "10px", color: "var(--muted)", marginTop: "14px", textAlign: "right" }}>
                 {summary.total_tokens} tokens · ${summary.cost_usd.toFixed(5)} · {summary.latency_ms}ms
               </p>
