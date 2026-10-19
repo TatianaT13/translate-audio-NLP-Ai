@@ -178,20 +178,22 @@ export default function Landing() {
           onClick={go("/translate")}
         />
 
-        <FeatureCard
-          Icon={MicIcon}
-          eyebrow="Conversation en direct"
-          title="Traduction instantanée"
-          description="Parlez dans votre langue, entendez la réponse dans une autre. Idéal pour un échange face-à-face ou en appel."
-          bullets={[
-            "Conversation à deux sens en temps réel",
-            "Six langues au choix, changement à la volée",
-            "Fonctionne au micro ou en push-to-talk",
-          ]}
-          ctaLabel={user ? "Ouvrir" : "Se connecter"}
-          onClick={go("/live")}
-          badge="Bêta"
-        />
+        {user?.is_admin && (
+          <FeatureCard
+            Icon={MicIcon}
+            eyebrow="Conversation en direct"
+            title="Traduction instantanée"
+            description="Parlez dans votre langue, entendez la réponse dans une autre. Idéal pour un échange face-à-face ou en appel."
+            bullets={[
+              "Conversation à deux sens en temps réel",
+              "Six langues au choix, changement à la volée",
+              "Fonctionne au micro ou en push-to-talk",
+            ]}
+            ctaLabel={user ? "Ouvrir" : "Se connecter"}
+            onClick={go("/live")}
+            badge="Bêta"
+          />
+        )}
 
         <FeatureCard
           Icon={DocumentIcon}

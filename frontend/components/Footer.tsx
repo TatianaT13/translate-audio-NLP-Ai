@@ -33,7 +33,6 @@ export function FooterFull() {
       title: "Produit",
       links: [
         { label: "Traduction",       href: "/translate" },
-        { label: "Traduction live",  href: "/live" },
         { label: "Compte-rendu",     href: "/meeting" },
         { label: "Tarifs",           href: "/tarifs" },
       ],

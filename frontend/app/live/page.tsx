@@ -245,6 +245,24 @@ export default function LivePage() {
   const running = status !== "idle" && status !== "error";
   const mmss = `${String(Math.floor(elapsedSec / 60)).padStart(2, "0")}:${String(elapsedSec % 60).padStart(2, "0")}`;
 
+  if (user && !user.is_admin) {
+    return (
+      <>
+        <AppHeader current="live" />
+        <main style={{ maxWidth: "560px", margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+          <h1 className="font-serif" style={{ fontSize: "28px", color: "var(--foreground)", margin: "0 0 12px" }}>
+            Traduction en direct
+          </h1>
+          <p style={{ color: "var(--muted)", fontSize: "14px", lineHeight: 1.6, margin: "0 0 24px" }}>
+            Cette fonctionnalité sera bientôt disponible. En attendant, vous pouvez traduire un
+            enregistrement ou générer le compte-rendu d&apos;une réunion.
+          </p>
+          <a href="/translate" style={{ color: "var(--accent)", fontSize: "14px" }}>Traduire un audio</a>
+        </main>
+      </>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column" }}>
       <AppHeader current="live" />

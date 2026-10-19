@@ -103,7 +103,7 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
         {/* Nav centrale — feature only */}
         {variant === "feature" && (
           <nav style={{ display: "flex", gap: "4px" }}>
-            {NAV_ITEMS.map(({ key, label, href, Icon }) => {
+            {NAV_ITEMS.filter(({ key }) => key !== "live" || user?.is_admin).map(({ key, label, href, Icon }) => {
               const active = activeKey === key;
               return (
                 <Link key={key} href={href} style={{

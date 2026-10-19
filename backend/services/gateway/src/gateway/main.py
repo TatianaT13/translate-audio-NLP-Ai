@@ -979,6 +979,9 @@ async def realtime_session(current_user: models.User = Depends(get_current_user)
     OPENAI_API_KEY ne sort jamais du serveur. Auth JWT requise pour éviter
     qu'un anon consomme le quota OpenAI.
     """
+    # Reserve a l'admin : session navigateur -> OpenAI en direct, non facturable en credits.
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="La traduction en direct n'est pas encore disponible.")
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY manquante côté serveur")
