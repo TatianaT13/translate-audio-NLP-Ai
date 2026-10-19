@@ -97,6 +97,10 @@ async function doRefresh(): Promise<string | null> {
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
   if (!res.ok) {
+    // Un autre onglet a pu renouveler la session entre-temps (rotation) : son
+    // jeton est valide, on le reprend au lieu de deconnecter tous les onglets.
+    const current = localStorage.getItem("refresh_token");
+    if (current && current !== refreshToken) return getAccessToken();
     clearTokens();
     return null;
   }

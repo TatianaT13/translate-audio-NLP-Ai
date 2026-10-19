@@ -509,11 +509,14 @@ async def _consume_credits(user_id: int, amount: int, reason: str, kind: str = "
     """Appelle Gateway pour décrémenter le solde après succès."""
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
+            r = await client.post(
                 f"{GATEWAY_URL}/billing/consume",
                 json={"user_id": user_id, "kind": kind, "amount": amount, "reason": reason},
                 headers={"x-service-token": GATEWAY_SERVICE_TOKEN},
             )
+        if r.status_code != 200:
+            print(f"[pipeline] consume refuse HTTP {r.status_code} pour user {user_id} "
+                  f"({amount} credits): {r.text[:200]}", flush=True)
     except Exception as e:
         print(f"[pipeline] consume error (non-fatal) for user {user_id}: {e}", flush=True)
 
