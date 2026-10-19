@@ -181,7 +181,10 @@ def allocate_monthly(
 def refill_if_due(db: Session, user_id: int, tier: str) -> models.UserCredits:
     """Refill lazy appele au prochain acces si la periode est terminee."""
     row = _get_or_create(db, user_id)
-    if tier in ("pro", "business") and row.period_resets_at and row.period_resets_at <= datetime.now(timezone.utc):
+    resets_at = row.period_resets_at
+    if resets_at is not None and resets_at.tzinfo is None:
+        resets_at = resets_at.replace(tzinfo=timezone.utc)  # SQLite relit les dates sans fuseau
+    if tier in ("pro", "business") and resets_at and resets_at <= datetime.now(timezone.utc):
         allocate_monthly(db, row, tier)
         db.commit()
     return row
