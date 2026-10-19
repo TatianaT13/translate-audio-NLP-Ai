@@ -118,7 +118,7 @@ export default function ConsommationPage() {
         )}
         <p style={{ fontSize: "12px", color: "var(--muted)", marginTop: "20px", lineHeight: 1.6 }}>
           Les réunions sont décomptées à la durée réelle (0,5 crédit par minute) et débitées par crédit
-          entier : un crédit peut donc apparaître le jour où le cumul atteint une minute pleine.
+          entier, soit 1 crédit toutes les 2 minutes de réunion cumulées.
         </p>
       </main>
       <FooterMinimal />
