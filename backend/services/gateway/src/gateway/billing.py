@@ -109,6 +109,37 @@ class SubscriptionResponse(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+# Modeles au niveau du module : avec `from __future__ import annotations`, FastAPI
+# resout les annotations dans les globals du module. Declares dans register_routes,
+# ils etaient introuvables et le corps etait attendu en parametre d'URL (422).
+class PreAuthorizeRequest(BaseModel):
+    user_id:   int
+    kind:      str      # "processing" | "live"
+    amount:    int
+
+
+class ConsumeRequest(BaseModel):
+    user_id:   int
+    kind:      str
+    amount:    int
+    reason:    str
+    meta:      dict | None = None
+
+
+class ConsumeSecondsRequest(BaseModel):
+    user_id:      int
+    seconds:      float
+    rate_per_min: float
+    reason:       str
+
+
+class RefundRequest(BaseModel):
+    user_id:   int
+    kind:      str
+    amount:    int
+    reason:    str
+
+
 def register_routes(app, get_current_user):
     """Enregistre les routes dans l'app FastAPI parente.
 
@@ -363,11 +394,6 @@ def register_routes(app, get_current_user):
         if not SERVICE_TOKEN or x_service_token != SERVICE_TOKEN:
             raise HTTPException(status_code=401, detail="Service token invalide")
 
-    class PreAuthorizeRequest(BaseModel):
-        user_id:   int
-        kind:      str      # "processing" | "live"
-        amount:    int
-
     @router.post("/pre-authorize")
     def pre_authorize(
         req: PreAuthorizeRequest,
@@ -398,13 +424,6 @@ def register_routes(app, get_current_user):
             "tier":     user.subscription_tier or "free",
         }
 
-    class ConsumeRequest(BaseModel):
-        user_id:   int
-        kind:      str
-        amount:    int
-        reason:    str
-        meta:      dict | None = None
-
     @router.post("/consume")
     def consume_credits(
         req: ConsumeRequest,
@@ -422,12 +441,6 @@ def register_routes(app, get_current_user):
         balance = row.processing_balance if req.kind == "processing" else row.live_balance
         return {"ok": True, "balance": balance}
 
-    class ConsumeSecondsRequest(BaseModel):
-        user_id:      int
-        seconds:      float
-        rate_per_min: float
-        reason:       str
-
     @router.post("/consume-seconds")
     def consume_seconds(
         req: ConsumeSecondsRequest,
@@ -440,12 +453,6 @@ def register_routes(app, get_current_user):
             raise HTTPException(status_code=400, detail="Duree ou taux invalide")
         charged, balance = _credits.consume_seconds(db, req.user_id, req.seconds, req.rate_per_min, req.reason)
         return {"ok": True, "charged": charged, "balance": balance}
-
-    class RefundRequest(BaseModel):
-        user_id:   int
-        kind:      str
-        amount:    int
-        reason:    str
 
     @router.post("/refund")
     def refund_credits(
