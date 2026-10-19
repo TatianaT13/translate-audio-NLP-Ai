@@ -11,11 +11,6 @@ from fastapi import HTTPException
 GATEWAY_URL   = os.getenv("GATEWAY_URL", "http://gateway:8004")
 SERVICE_TOKEN = os.getenv("GATEWAY_SERVICE_TOKEN", "")
 
-# Offres affichees : reunions illimitees en Pro, essai en gratuit (1 credit/min,
-# regle "transcription seule"), identification des intervenants +1,5 credit/min.
-TRANSCRIPTION_RATE_FREE = 1.0
-DIARIZATION_RATE        = 1.5
-
 
 async def _pre_authorize(user_id: int) -> dict | None:
     try:
@@ -43,7 +38,7 @@ def _insufficient(info: dict) -> HTTPException:
 
 
 async def ensure_can_summarize(user_id: int) -> None:
-    """Compte-rendu : illimite en Pro, reserve aux comptes gratuits ayant encore des credits."""
+    """Compte-rendu inclus : toujours en Pro, en gratuit tant qu'il reste des credits."""
     info = await _pre_authorize(user_id)
     if info is None:
         return

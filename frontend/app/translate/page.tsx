@@ -1009,7 +1009,7 @@ ${result.translation}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: S.gap16 }}>
               <button
                 onClick={() => setDiarize(d => !d)}
-                title="Identifier automatiquement les différents intervenants dans l'audio (+1.5 crédit/min)"
+                title="Identifier automatiquement les différents intervenants dans l'audio (+0,5 crédit/min)"
                 style={{
                   display: "inline-flex", alignItems: "center", gap: "8px",
                   padding: "6px 14px", borderRadius: "999px", fontSize: "12px",
@@ -1027,7 +1027,7 @@ ${result.translation}
                   color: "#0c0c0e", fontSize: "11px", lineHeight: 1,
                 }}>{diarize ? "✓" : ""}</span>
                 Identifier les intervenants
-                <span style={{ fontSize: "10px", opacity: 0.6 }}>+1,5 crédit/min</span>
+                <span style={{ fontSize: "10px", opacity: 0.6 }}>+0,5 crédit/min</span>
               </button>
             </div>
 

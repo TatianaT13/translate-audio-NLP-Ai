@@ -341,15 +341,15 @@ export default function MeetingPage() {
                 Autorisez l&apos;accès au micro · les chunks sont transcrits en temps réel
               </p>
               <p style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
-                Offre Découverte : 1 crédit par minute d&apos;enregistrement · illimité avec{" "}
-                <a href="/tarifs" style={{ color: "var(--accent)" }}>Pro</a>
+                0,5 crédit par minute d&apos;enregistrement · compte-rendu inclus ·{" "}
+                <a href="/tarifs" style={{ color: "var(--accent)" }}>voir les tarifs</a>
               </p>
 
               {/* Toggle diarisation (a activer AVANT de demarrer) */}
               <div style={{ marginTop: "20px", display: "flex", justifyContent: "center" }}>
                 <button
                   onClick={() => setDiarize(d => !d)}
-                  title="Identifier automatiquement les différents intervenants dans la réunion (+1,5 crédit/min)"
+                  title="Identifier automatiquement les différents intervenants dans la réunion (+0,5 crédit/min)"
                   style={{
                     display: "inline-flex", alignItems: "center", gap: "8px",
                     padding: "6px 14px", borderRadius: "999px", fontSize: "12px",
@@ -367,7 +367,7 @@ export default function MeetingPage() {
                     color: "#0c0c0e", fontSize: "11px", lineHeight: 1,
                   }}>{diarize ? "✓" : ""}</span>
                   Identifier les intervenants
-                  <span style={{ fontSize: "10px", opacity: 0.6 }}>+1,5 crédit/min</span>
+                  <span style={{ fontSize: "10px", opacity: 0.6 }}>+0,5 crédit/min</span>
                 </button>
               </div>
             </div>

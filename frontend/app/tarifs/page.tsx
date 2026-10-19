@@ -27,10 +27,10 @@ const PLANS: Plan[] = [
     price: "0 €",
     pricePer: "à vie",
     bullets: [
-      "10 traductions audio par mois",
+      "10 crédits offerts à l'inscription (une seule fois)",
+      "Soit environ 5 min de traduction avec voix, ou 20 min de réunion",
+      "Français vers anglais, espagnol, allemand, ukrainien",
       "Fichiers jusqu'à 25 Mo",
-      "5 langues au choix",
-      "Compte-rendu de réunion (essai)",
     ],
     cta: "Commencer gratuitement",
   },
@@ -40,12 +40,12 @@ const PLANS: Plan[] = [
     price: "9,90 €",
     pricePer: "par mois",
     bullets: [
-      "200 traductions par mois",
-      "Fichiers jusqu'à 100 Mo",
-      "Toutes les langues",
-      "Traduction live en temps réel",
-      "Compte-rendus de réunion illimités",
-      "Support prioritaire",
+      "200 crédits par mois",
+      "Soit environ 100 min de traduction avec voix, ou 6 h 40 de réunion",
+      "Crédits non utilisés reportés (jusqu'à 400)",
+      "Comptes-rendus de réunion, export PDF et SRT",
+      "Fichiers jusqu'à 25 Mo",
+      "Support par email",
     ],
     cta: "S'abonner mensuel",
     highlight: true,
@@ -57,10 +57,9 @@ const PLANS: Plan[] = [
     pricePer: "par an",
     savings: "2 mois offerts",
     bullets: [
-      "Tout ce qui est dans Pro mensuel",
+      "Les mêmes 200 crédits par mois",
       "Paiement annuel unique",
-      "2 mois offerts vs mensuel",
-      "Facturation annuelle simplifiée",
+      "2 mois offerts par rapport au mensuel",
     ],
     cta: "S'abonner annuel",
   },
@@ -175,6 +174,36 @@ export default function TarifsPage() {
               maxWidth: "480px", marginLeft: "auto", marginRight: "auto",
             }}>{error}</p>
           )}
+
+          {/* Bareme des credits */}
+          <div style={{
+            marginTop: "56px", maxWidth: "640px", marginLeft: "auto", marginRight: "auto",
+            padding: "24px 28px", borderRadius: "16px",
+            background: "var(--surface)", border: "1px solid var(--border)",
+          }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 14px" }}>
+              Combien coûte un traitement ?
+            </h2>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", color: "var(--muted)" }}>
+              <tbody>
+                {[
+                  ["Traduction audio avec voix de synthèse", "2 crédits / min"],
+                  ["Transcription de réunion", "0,5 crédit / min"],
+                  ["Identification des intervenants (option)", "+ 0,5 crédit / min"],
+                  ["Compte-rendu de réunion", "inclus"],
+                ].map(([label, cost]) => (
+                  <tr key={label} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "10px 0" }}>{label}</td>
+                    <td style={{ padding: "10px 0", textAlign: "right", color: "var(--foreground)", whiteSpace: "nowrap" }}>{cost}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ fontSize: "12px", color: "var(--muted)", margin: "12px 0 0", lineHeight: 1.6 }}>
+              Les crédits sont décomptés à la durée réelle de l&apos;audio. Les crédits Pro non
+              utilisés sont reportés au mois suivant, dans la limite de 400.
+            </p>
+          </div>
 
           {/* Notes */}
           <div style={{ textAlign: "center", marginTop: "56px", maxWidth: "640px", marginLeft: "auto", marginRight: "auto" }}>

@@ -483,10 +483,10 @@ def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True, wit
 
     Approximation : 1 Mo de MP3 ≈ 1 min a 128kbps mono, ≈ 2 min a 64kbps.
     On prend l'estimation large (64kbps mono = 8 KB/s) pour ne pas sous-estimer.
-    Pondération : TTS = +2/min, Diarisation = +1.5/min, Transcription = +1/min.
+    Pondération : TTS = +2/min, Diarisation = +0.5/min, Transcription = +1/min.
     """
     estimated_minutes = max(audio_bytes / (8 * 1024 * 60), 1)
-    rate = (2 if with_tts else 1) + (1.5 if with_diarize else 0)
+    rate = (2 if with_tts else 1) + (0.5 if with_diarize else 0)
     return max(1, int(estimated_minutes * rate + 0.999))
 
 
@@ -734,7 +734,7 @@ async def process(
             duration_sec = max((s.get("end", 0) for s in segments), default=0)
         if not duration_sec:
             duration_sec = (len(audio_bytes) / (8 * 1024))  # fallback estimation
-        rate = 2 + (1.5 if diarize else 0)  # 2 crédits/min TTS, +1.5 si diarisation
+        rate = 2 + (0.5 if diarize else 0)  # 2 crédits/min TTS, +0.5 si diarisation
         credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
         reason = (
             f"pipeline_process:{int(duration_sec)}s:"
@@ -817,7 +817,7 @@ async def _execute_job(
                 duration_sec = max((s.get("end", 0) for s in segments), default=0)
             if not duration_sec:
                 duration_sec = (len(audio_bytes) / (8 * 1024))
-            rate = 2 + (1.5 if diarize else 0)
+            rate = 2 + (0.5 if diarize else 0)
             credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
             reason = (
                 f"pipeline_process_async:{int(duration_sec)}s:"

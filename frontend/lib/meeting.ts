@@ -7,7 +7,7 @@ const STT_URL      = process.env.NEXT_PUBLIC_STT_URL      || "http://localhost:8
 /** Solde de credits epuise (HTTP 402) : le navigateur doit arreter et proposer l'offre Pro. */
 export class CreditsError extends Error {
   constructor() {
-    super("Crédits épuisés : passez à l'offre Pro pour des comptes-rendus illimités.");
+    super("Crédits épuisés : rechargez avec l'offre Pro pour continuer.");
     this.name = "CreditsError";
   }
 }

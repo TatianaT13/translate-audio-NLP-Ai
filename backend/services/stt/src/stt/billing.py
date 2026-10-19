@@ -11,10 +11,9 @@ from fastapi import HTTPException
 GATEWAY_URL   = os.getenv("GATEWAY_URL", "http://gateway:8004")
 SERVICE_TOKEN = os.getenv("GATEWAY_SERVICE_TOKEN", "")
 
-# Offres affichees : reunions illimitees en Pro, essai en gratuit (1 credit/min,
-# regle "transcription seule"), identification des intervenants +1,5 credit/min.
-TRANSCRIPTION_RATE_FREE = 1.0
-DIARIZATION_RATE        = 1.5
+# Bareme affiche sur /tarifs, identique pour toutes les offres.
+TRANSCRIPTION_RATE = 0.5
+DIARIZATION_RATE   = 0.5
 
 
 async def _pre_authorize(user_id: int) -> dict | None:
@@ -47,9 +46,8 @@ async def rate_for(user_id: int, diarize: bool) -> float:
     info = await _pre_authorize(user_id)
     if info is None:
         return 0.0
-    paid = info.get("tier", "free") != "free"
-    rate = DIARIZATION_RATE if diarize else (0.0 if paid else TRANSCRIPTION_RATE_FREE)
-    if rate > 0 and not info.get("ok"):
+    rate = DIARIZATION_RATE if diarize else TRANSCRIPTION_RATE
+    if not info.get("ok"):
         raise _insufficient(info)
     return rate
 
