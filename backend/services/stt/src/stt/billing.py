@@ -57,10 +57,12 @@ async def charge(user_id: int, seconds: float, rate: float, reason: str) -> None
         return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
+            r = await client.post(
                 f"{GATEWAY_URL}/billing/consume-seconds",
                 json={"user_id": user_id, "seconds": seconds, "rate_per_min": rate, "reason": reason},
                 headers={"x-service-token": SERVICE_TOKEN},
             )
+        if r.status_code != 200:
+            print(f"[billing] consume-seconds refuse HTTP {r.status_code} pour user {user_id}: {r.text[:200]}", flush=True)
     except Exception as e:
         print(f"[billing] consume-seconds echoue pour user {user_id}: {e}", flush=True)
