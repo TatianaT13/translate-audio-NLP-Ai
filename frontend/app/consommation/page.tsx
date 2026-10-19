@@ -5,17 +5,19 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { FooterMinimal } from "@/components/Footer";
 import {
-  getCredits, getTransactions, describeTransaction,
-  type CreditsState, type CreditTransaction,
+  getCredits, getTransactions, describeTransaction, getDailyUsage, formatDuration, SERVICE_LABEL,
+  type CreditsState, type CreditTransaction, type DailyUsage,
 } from "@/lib/credits";
 
 export default function ConsommationPage() {
   const [credits, setCredits] = useState<CreditsState | null>(null);
   const [rows, setRows]       = useState<CreditTransaction[] | null>(null);
+  const [usage, setUsage]     = useState<DailyUsage[] | null>(null);
 
   useEffect(() => {
     getCredits().then(setCredits).catch(() => {});
     getTransactions().then(setRows).catch(() => setRows([]));
+    getDailyUsage().then(setUsage).catch(() => setUsage([]));
   }, []);
 
   const fmtDate = (iso: string | null) =>
@@ -53,7 +55,38 @@ export default function ConsommationPage() {
           </div>
         )}
 
-        <h2 style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 12px" }}>Historique</h2>
+        <h2 style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 12px" }}>
+          Utilisation par jour <span style={{ fontWeight: 400, color: "var(--muted)" }}>· 90 derniers jours</span>
+        </h2>
+        {usage !== null && usage.length === 0 && (
+          <p style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "32px" }}>Aucune utilisation pour l&apos;instant.</p>
+        )}
+        {usage !== null && usage.length > 0 && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", marginBottom: "40px" }}>
+            <thead>
+              <tr style={{ color: "var(--muted)", textAlign: "left" }}>
+                <th style={{ padding: "8px 0", fontWeight: 500 }}>Date</th>
+                <th style={{ padding: "8px 0", fontWeight: 500 }}>Service</th>
+                <th style={{ padding: "8px 0", fontWeight: 500, textAlign: "right" }}>Durée</th>
+                <th style={{ padding: "8px 0", fontWeight: 500, textAlign: "right" }}>Crédits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.map((u) => (
+                <tr key={`${u.date}-${u.service}`} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={{ padding: "10px 12px 10px 0", color: "var(--muted)", whiteSpace: "nowrap" }}>
+                    {new Date(u.date + "T12:00:00").toLocaleDateString("fr-FR")}
+                  </td>
+                  <td style={{ padding: "10px 12px 10px 0", color: "var(--foreground)" }}>{SERVICE_LABEL[u.service]}</td>
+                  <td style={{ padding: "10px 0", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatDuration(u)}</td>
+                  <td style={{ padding: "10px 0", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{u.credits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h2 style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 12px" }}>Mouvements de crédits</h2>
         {rows === null && <p style={{ color: "var(--muted)", fontSize: "13px" }}>Chargement…</p>}
         {rows !== null && rows.length === 0 && (
           <p style={{ color: "var(--muted)", fontSize: "13px" }}>Aucun mouvement pour l&apos;instant.</p>
@@ -84,7 +117,8 @@ export default function ConsommationPage() {
           </table>
         )}
         <p style={{ fontSize: "12px", color: "var(--muted)", marginTop: "20px", lineHeight: 1.6 }}>
-          Les réunions sont décomptées à la durée réelle : 0,5 crédit par minute, débité par crédit entier.
+          Les réunions sont décomptées à la durée réelle (0,5 crédit par minute) et débitées par crédit
+          entier : un crédit peut donc apparaître le jour où le cumul atteint une minute pleine.
         </p>
       </main>
       <FooterMinimal />

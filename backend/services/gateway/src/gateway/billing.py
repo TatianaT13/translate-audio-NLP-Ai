@@ -15,8 +15,10 @@ Flow user :
 """
 from __future__ import annotations
 
+import json
 import os
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -293,7 +295,8 @@ def register_routes(app, get_current_user):
         rows = (
             db.query(models.CreditTransaction)
             .filter(models.CreditTransaction.user_id == current_user.id,
-                    models.CreditTransaction.kind == "processing")
+                    models.CreditTransaction.kind == "processing",
+                    models.CreditTransaction.amount != 0)
             .order_by(models.CreditTransaction.id.desc())
             .limit(100)
             .all()
@@ -308,6 +311,51 @@ def register_routes(app, get_current_user):
             }
             for r in rows
         ]
+
+    @router.get("/usage")
+    def usage_by_day(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Utilisation par jour et par service sur 90 jours : duree traitee et credits."""
+        since = datetime.now(timezone.utc) - timedelta(days=90)
+        rows = (
+            db.query(models.CreditTransaction)
+            .filter(models.CreditTransaction.user_id == current_user.id,
+                    models.CreditTransaction.kind == "processing",
+                    models.CreditTransaction.op == "consume",
+                    models.CreditTransaction.created_at >= since)
+            .all()
+        )
+        totals: dict[tuple[str, str], dict] = {}
+        for r in rows:
+            reason = r.reason or ""
+            if reason.startswith("meeting_diarization"):
+                service = "meeting_diarization"
+            elif reason.startswith("meeting_transcription"):
+                service = "meeting_transcription"
+            elif reason.startswith("pipeline_process"):
+                service = "translation_diarized" if "diarized" in reason else "translation"
+            else:
+                service = "other"
+            seconds = None
+            if r.meta:
+                try:
+                    seconds = json.loads(r.meta).get("seconds")
+                except ValueError:
+                    pass
+            if seconds is None:
+                m = re.match(r"pipeline_process(?:_async)?:(\d+)s", reason)
+                seconds = float(m.group(1)) if m else None
+            day = r.created_at.date().isoformat() if r.created_at else "?"
+            t = totals.setdefault((day, service), {"date": day, "service": service, "seconds": 0.0,
+                                                   "seconds_known": True, "credits": 0})
+            t["credits"] += -r.amount
+            if seconds is None:
+                t["seconds_known"] = False
+            else:
+                t["seconds"] += seconds
+        return sorted(totals.values(), key=lambda t: (t["date"], t["service"]), reverse=True)
 
     # ── Endpoints service-to-service (Pipeline → Gateway) ────────────────
 

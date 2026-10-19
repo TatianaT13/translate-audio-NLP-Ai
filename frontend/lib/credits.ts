@@ -54,3 +54,33 @@ export function describeTransaction(t: CreditTransaction): string {
   }
   return t.amount >= 0 ? "Crédit" : "Consommation";
 }
+
+export interface DailyUsage {
+  date:          string;   // YYYY-MM-DD
+  service:       "translation" | "translation_diarized" | "meeting_transcription" | "meeting_diarization" | "other";
+  seconds:       number;
+  seconds_known: boolean;  // false : anciens mouvements enregistres sans duree
+  credits:       number;
+}
+
+export async function getDailyUsage(): Promise<DailyUsage[]> {
+  const res = await authFetch(`${GATEWAY_URL}/billing/usage`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export const SERVICE_LABEL: Record<DailyUsage["service"], string> = {
+  translation:           "Traduction audio",
+  translation_diarized:  "Traduction audio avec intervenants",
+  meeting_transcription: "Transcription de réunion",
+  meeting_diarization:   "Identification des intervenants",
+  other:                 "Autre",
+};
+
+export function formatDuration(u: DailyUsage): string {
+  if (u.seconds <= 0) return "—";
+  const total = Math.round(u.seconds);
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+  const txt = h ? `${h} h ${String(m).padStart(2, "0")}` : m ? (s ? `${m} min ${s} s` : `${m} min`) : `${s} s`;
+  return u.seconds_known ? txt : `≥ ${txt}`;
+}

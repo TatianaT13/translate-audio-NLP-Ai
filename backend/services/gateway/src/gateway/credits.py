@@ -260,9 +260,12 @@ def consume_seconds(
     due, remainder = divmod(milli, 1000)
     charged = min(due, row.processing_balance)
     row.processing_remainder_milli = remainder if charged == due else 0
+    meta = {"seconds": round(max(seconds, 0.0), 1)}  # volume affiche au client
     if charged > 0:
-        row = consume(db, user_id, "processing", charged, reason)  # commit + alerte solde faible
+        row = consume(db, user_id, "processing", charged, reason, meta)  # commit + alerte solde faible
     else:
+        _record_tx(db, user_id, "processing", "consume", amount=0,
+                   balance_after=row.processing_balance, reason=reason, meta=meta)
         db.commit()
     return charged, row.processing_balance
 
