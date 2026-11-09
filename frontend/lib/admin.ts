@@ -83,6 +83,27 @@ async function apiFetch<T>(path: string, init?: RequestInit, _retried = false): 
 
 export const getAdminStats    = () => apiFetch<AdminStats>("/admin/stats");
 export const getAdminUsers    = () => apiFetch<AdminUser[]>("/admin/users");
+
+// Marge par service : crédits débités (revenu) contre coût fournisseur réel.
+export interface MarginRow {
+  service:           string;
+  seconds:           number;
+  credits:           number;
+  untracked_credits: number;   // débits antérieurs au suivi : coût inconnu
+  revenue_eur:       number;
+  cost_eur:          number;
+  margin_pct:        number | null;
+}
+
+export interface MarginsReport {
+  days:             number;
+  credit_value_eur: number;
+  usd_to_eur:       number;
+  services:         MarginRow[];
+  total:            MarginRow;
+}
+
+export const getAdminMargins = (days = 30) => apiFetch<MarginsReport>(`/admin/margins?days=${days}`);
 export const getLangfuseMetrics = () => apiFetch<LangfuseMetrics>("/admin/langfuse/metrics");
 
 export const updateAdminUser = (id: number, body: { is_active?: boolean; is_admin?: boolean }) =>

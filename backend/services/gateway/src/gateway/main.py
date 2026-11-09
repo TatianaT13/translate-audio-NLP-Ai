@@ -425,6 +425,71 @@ def admin_stats(
     return schemas.AdminStatsResponse(total_users=total, active_users=active, admin_users=admins)
 
 
+@app.get("/admin/margins")
+def admin_margins(
+    days: int = 30,
+    _: models.User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Marge par service : credits debites (revenu) contre cout fournisseur reel.
+
+    La marge ne porte que sur les debits dont l'usage est connu ; les credits
+    des debits anterieurs au suivi sont comptes a part (untracked_credits).
+    """
+    import json
+    from gateway import costs
+    from gateway.billing import service_of
+
+    days = max(1, min(days, 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(models.CreditTransaction)
+        .filter(models.CreditTransaction.kind == "processing",
+                models.CreditTransaction.op == "consume",
+                models.CreditTransaction.created_at >= since)
+        .all()
+    )
+
+    def blank(service: str) -> dict:
+        return {"service": service, "seconds": 0.0, "credits": 0, "untracked_credits": 0,
+                "revenue_eur": 0.0, "cost_eur": 0.0}
+
+    by_service: dict[str, dict] = {}
+    total = blank("total")
+    for r in rows:
+        try:
+            meta = json.loads(r.meta) if r.meta else None
+        except ValueError:
+            meta = None
+        cost_usd = costs.usage_cost_usd(meta)
+        for agg in (by_service.setdefault(service_of(r.reason or ""), blank(service_of(r.reason or ""))), total):
+            if cost_usd is None:
+                agg["untracked_credits"] += -r.amount
+                continue
+            agg["seconds"]     += (meta or {}).get("seconds") or 0
+            agg["credits"]     += -r.amount
+            agg["revenue_eur"] += -r.amount * costs.CREDIT_VALUE_EUR
+            agg["cost_eur"]    += cost_usd * costs.USD_TO_EUR
+
+    def finish(agg: dict) -> dict:
+        revenue = agg["revenue_eur"]
+        return {
+            **agg,
+            "seconds":     round(agg["seconds"], 1),
+            "revenue_eur": round(revenue, 4),
+            "cost_eur":    round(agg["cost_eur"], 4),
+            "margin_pct":  round((revenue - agg["cost_eur"]) / revenue * 100, 1) if revenue > 0 else None,
+        }
+
+    return {
+        "days":             days,
+        "credit_value_eur": costs.CREDIT_VALUE_EUR,
+        "usd_to_eur":       costs.USD_TO_EUR,
+        "services":         sorted((finish(a) for a in by_service.values()), key=lambda a: -a["credits"]),
+        "total":            finish(total),
+    }
+
+
 @app.get("/admin/users", response_model=list[schemas.AdminUserResponse])
 def admin_list_users(
     _: models.User = Depends(get_admin_user),

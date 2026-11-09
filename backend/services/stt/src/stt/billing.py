@@ -52,14 +52,15 @@ async def rate_for(user_id: int, diarize: bool) -> float:
     return rate
 
 
-async def charge(user_id: int, seconds: float, rate: float, reason: str) -> None:
+async def charge(user_id: int, seconds: float, rate: float, reason: str, usage: dict | None = None) -> None:
     if rate <= 0 or seconds <= 0:
         return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.post(
                 f"{GATEWAY_URL}/billing/consume-seconds",
-                json={"user_id": user_id, "seconds": seconds, "rate_per_min": rate, "reason": reason},
+                json={"user_id": user_id, "seconds": seconds, "rate_per_min": rate, "reason": reason,
+                      "meta": usage},
                 headers={"x-service-token": SERVICE_TOKEN},
             )
         if r.status_code != 200:
