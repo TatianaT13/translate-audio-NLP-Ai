@@ -126,6 +126,7 @@ async def _stt_step(state: dict) -> dict:
     lang_prob = data.get("language_probability", 0)
     # Diarisation : conserve les segments avec speakers pour les restituer en sortie
     state["stt_segments"] = data.get("segments") or []
+    state["stt_duration"] = data.get("duration") or 0  # secondes, base de la facturation
     state["stt_speakers"] = data.get("speakers")
 
     if not text:
@@ -505,6 +506,21 @@ def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True, wit
     return max(1, int(estimated_minutes * rate + 0.999))
 
 
+def _billable_seconds(result: dict, audio_bytes: int) -> float:
+    """Duree d'audio facturee, en secondes.
+
+    Celle mesuree par le STT ; a defaut la fin du dernier segment ; en dernier
+    recours une estimation sur la taille du fichier (juste pour du MP3 64 kbps
+    seulement : un WAV serait facture 20 fois trop).
+    """
+    duration = result.get("stt_duration") or 0
+    if not duration:
+        duration = max((seg.get("end") or 0 for seg in result.get("stt_segments") or []), default=0)
+    if not duration:
+        duration = audio_bytes / (8 * 1024)
+    return float(duration)
+
+
 async def _reserve_credits(user_id: int, amount: int, kind: str = "processing") -> str:
     """Reserve les credits estimes aupres de la Gateway ; retourne l'id de reservation.
 
@@ -786,14 +802,9 @@ async def process(
         except Exception as e:
             print(f"[pipeline] Langfuse v4 tracing warning: {e}", flush=True)
 
-    # ── Consomme les credits reels (duree audio exacte via STT segments) ──
+    # ── Consomme les credits reels (duree audio mesuree par le STT) ──
     if hold_id is not None:
-        duration_sec = 0
-        segments = result.get("segments") or []
-        if segments:
-            duration_sec = max((s.get("end", 0) for s in segments), default=0)
-        if not duration_sec:
-            duration_sec = (len(audio_bytes) / (8 * 1024))  # fallback estimation
+        duration_sec = _billable_seconds(result, len(audio_bytes))
         rate = 2 + (0.5 if diarize else 0)  # 2 crédits/min TTS, +0.5 si diarisation
         credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
         reason = (
@@ -866,12 +877,7 @@ async def _execute_job(
 
         # Consomme les credits reels (meme logique que /process)
         if hold_id is not None:
-            duration_sec = 0
-            segments = result.get("segments") or []
-            if segments:
-                duration_sec = max((s.get("end", 0) for s in segments), default=0)
-            if not duration_sec:
-                duration_sec = (len(audio_bytes) / (8 * 1024))
+            duration_sec = _billable_seconds(result, len(audio_bytes))
             rate = 2 + (0.5 if diarize else 0)
             credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
             reason = (

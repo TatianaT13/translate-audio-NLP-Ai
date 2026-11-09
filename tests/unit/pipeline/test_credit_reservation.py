@@ -108,3 +108,35 @@ class TestRelease:
     def test_failure_is_swallowed(self, gateway):
         gateway(httpx.ConnectError("down"))
         asyncio.run(main._release_credits("h-1"))
+
+
+class TestBillableSeconds:
+    """La duree facturee est celle de l'audio, pas une estimation sur le poids du fichier."""
+
+    def test_uses_duration_measured_by_stt(self):
+        # 2 min d'audio dans un fichier lourd (WAV) : 120 s, pas 20 min
+        result = {"stt_duration": 120.0, "stt_segments": [{"end": 118.2}]}
+        assert main._billable_seconds(result, audio_bytes=10 * 1024 * 1024) == 120.0
+
+    def test_falls_back_to_last_segment_end(self):
+        result = {"stt_duration": 0, "stt_segments": [{"end": 12.0}, {"end": 95.5}]}
+        assert main._billable_seconds(result, audio_bytes=10 * 1024 * 1024) == 95.5
+
+    def test_falls_back_to_file_size_when_stt_gives_nothing(self):
+        assert main._billable_seconds({}, audio_bytes=8 * 1024 * 60) == 60.0
+
+    def test_stt_step_keeps_the_duration(self, monkeypatch):
+        class FakeStt:
+            def __call__(self, *a, **k): return self
+            async def __aenter__(self): return self
+            async def __aexit__(self, *exc): return False
+            async def post(self, url, **kwargs):
+                return httpx.Response(200, request=httpx.Request("POST", url), json={
+                    "text": "Bonjour à tous, la réunion commence.", "language": "fr",
+                    "language_probability": 0.99, "duration": 652.4,
+                    "segments": [{"start": 0.0, "end": 650.0, "text": "Bonjour à tous, la réunion commence."}],
+                })
+
+        monkeypatch.setattr(main.httpx, "AsyncClient", FakeStt())
+        out = asyncio.run(main._stt_step({"filename": "a.mp3", "audio_bytes": b"x", "whisper_model": "small"}))
+        assert main._billable_seconds(out, audio_bytes=1) == 652.4
