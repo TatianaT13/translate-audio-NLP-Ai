@@ -19,9 +19,12 @@ Tiers :
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Literal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from gateway import models
@@ -54,6 +57,15 @@ TRIAL_CREDITS = 10  # one-time a l'inscription, pour tous les users
 # Seuil (processing credits) sous lequel on envoie un email d'alerte.
 # L'alerte n'est envoyee qu'une fois par periode (reset au refill mensuel).
 LOW_CREDITS_THRESHOLD = 20
+
+# Duree au-dela de laquelle une reservation non reglee cesse de bloquer le solde
+# (pipeline redemarre en plein job). Large : un audio d'1 h prend ~15 min.
+HOLD_TTL = timedelta(hours=2)
+
+# Serialise reserve / settle / release : la gateway est mono-worker, mais ses
+# endpoints sync tournent dans un pool de threads. Sans ce verrou, deux
+# reservations simultanees liraient le meme solde disponible.
+_hold_lock = Lock()
 
 Kind = Literal["processing", "live"]
 
@@ -191,11 +203,88 @@ def refill_if_due(db: Session, user_id: int, tier: str) -> models.UserCredits:
 
 
 # ── Verification + consommation ──────────────────────────────────────────────
+def _balance(row: models.UserCredits, kind: Kind) -> int:
+    return row.processing_balance if kind == "processing" else row.live_balance
+
+
+def held(db: Session, user_id: int, kind: Kind) -> int:
+    """Total des reservations en cours (hors reservations expirees)."""
+    cutoff = datetime.now(timezone.utc) - HOLD_TTL
+    return db.query(func.coalesce(func.sum(models.CreditHold.amount), 0)).filter(
+        models.CreditHold.user_id == user_id,
+        models.CreditHold.kind == kind,
+        models.CreditHold.created_at >= cutoff,
+    ).scalar()
+
+
+def available(db: Session, user_id: int, kind: Kind) -> int:
+    """Solde moins les reservations en cours : ce qu'un nouveau job peut engager."""
+    return _balance(_get_or_create(db, user_id), kind) - held(db, user_id, kind)
+
+
 def has_enough(db: Session, user_id: int, kind: Kind, amount: int) -> bool:
-    """True si l'user a assez de credits pour cette operation."""
-    row = _get_or_create(db, user_id)
-    balance = row.processing_balance if kind == "processing" else row.live_balance
-    return balance >= amount
+    """True si l'user a assez de credits disponibles pour cette operation."""
+    return available(db, user_id, kind) >= amount
+
+
+# ── Reservation (jobs pipeline) ──────────────────────────────────────────────
+def reserve(db: Session, user_id: int, kind: Kind, amount: int) -> str | None:
+    """Reserve `amount` credits pour un job. Retourne l'id de reservation, ou
+    None si le solde disponible ne suffit pas.
+
+    Le solde n'est debite qu'au settle() : deux jobs lances en parallele ne
+    peuvent pas engager deux fois les memes credits.
+    """
+    with _hold_lock:
+        cutoff = datetime.now(timezone.utc) - HOLD_TTL
+        db.query(models.CreditHold).filter(models.CreditHold.created_at < cutoff).delete()
+        if available(db, user_id, kind) < amount:
+            db.commit()
+            return None
+        hold = models.CreditHold(
+            id=str(uuid.uuid4()), user_id=user_id, kind=kind, amount=amount,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(hold)
+        db.commit()
+        return hold.id
+
+
+def settle(
+    db: Session,
+    hold_id: str,
+    amount: int,
+    reason: str,
+    meta: dict | None = None,
+) -> tuple[int, int] | None:
+    """Remplace la reservation par le debit reel. Retourne (debite, solde).
+
+    Le debit reel peut differer de l'estimation reservee. S'il depasse le solde,
+    on debite ce qui reste (pas de dette, comme consume_seconds).
+    Reservation inconnue (deja reglee ou annulee) : None, sans rien debiter —
+    un second appel pour le meme job est donc sans effet.
+    """
+    with _hold_lock:
+        hold = db.get(models.CreditHold, hold_id)
+        if hold is None:
+            return None
+        user_id, kind = hold.user_id, hold.kind
+        row = _get_or_create(db, user_id)
+        charged = min(max(amount, 0), _balance(row, kind))
+        db.delete(hold)
+        if charged > 0:
+            row = consume(db, user_id, kind, charged, reason, meta)  # meme commit que la suppression
+        else:
+            db.commit()
+        return charged, _balance(row, kind)
+
+
+def release(db: Session, hold_id: str) -> bool:
+    """Annule une reservation sans rien debiter (job echoue). Idempotent."""
+    with _hold_lock:
+        deleted = db.query(models.CreditHold).filter(models.CreditHold.id == hold_id).delete()
+        db.commit()
+        return bool(deleted)
 
 
 def consume(

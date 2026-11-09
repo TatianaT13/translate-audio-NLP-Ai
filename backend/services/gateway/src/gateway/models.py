@@ -99,6 +99,23 @@ class UserCredits(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class CreditHold(Base):
+    """Reservation de credits pendant un job pipeline (voir credits.reserve).
+
+    Le solde n'est pas touche tant que le job tourne : la reservation est
+    deduite du solde disponible. settle() la remplace par le debit reel,
+    release() l'annule. Une reservation orpheline (pipeline redemarre en plein
+    job) cesse de compter au bout de credits.HOLD_TTL.
+    """
+    __tablename__ = "credit_holds"
+
+    id         = Column(String, primary_key=True)  # uuid4
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind       = Column(String, nullable=False)    # processing | live
+    amount     = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
 class CreditTransaction(Base):
     """Historique immuable des mouvements de credits (audit + debug).
 
