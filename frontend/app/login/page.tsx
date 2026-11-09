@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { login } from "@/lib/auth";
 
@@ -9,7 +9,6 @@ import { login } from "@/lib/auth";
 // wrapp dans <Suspense> — requis par Next.js 15 des qu'on utilise
 // useSearchParams() dans une page prerender.
 function LoginForm() {
-  const router       = useRouter();
   const searchParams = useSearchParams();
   const nextPath     = searchParams.get("next") || "/";
   const [email, setEmail]       = useState("");
@@ -23,8 +22,13 @@ function LoginForm() {
     setLoading(true);
     try {
       await login(email, password);
-      // ?next=/xxx passe par la landing depuis une card qui necessite auth
-      router.push(nextPath.startsWith("/") ? nextPath : "/");
+      // ?next=/xxx passe par la landing depuis une card qui necessite auth.
+      // Chargement complet, pas router.push : le routeur Next garde en cache les
+      // redirections vers /login recues avant la connexion (prechargement des
+      // liens) et les rejouerait, renvoyant l'utilisateur ici.
+      // On ne suit `next` que s'il reste sur ce site (pas de redirection externe).
+      const target = new URL(nextPath, window.location.origin);
+      window.location.assign(target.origin === window.location.origin ? target.href : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de connexion");
     } finally {

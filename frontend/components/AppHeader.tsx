@@ -106,7 +106,7 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
             {NAV_ITEMS.filter(({ key }) => key !== "live" || user?.is_admin).map(({ key, label, href, Icon }) => {
               const active = activeKey === key;
               return (
-                <Link key={key} href={href} style={{
+                <Link key={key} href={href} prefetch={false} style={{
                   display: "inline-flex", alignItems: "center", gap: "8px",
                   padding: "8px 14px", borderRadius: "10px",
                   fontSize: "13px",
