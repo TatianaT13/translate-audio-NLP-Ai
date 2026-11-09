@@ -140,6 +140,23 @@ class RefundRequest(BaseModel):
     reason:    str
 
 
+class ReserveRequest(BaseModel):
+    user_id:   int
+    kind:      str
+    amount:    int
+
+
+class SettleRequest(BaseModel):
+    hold_id:   str
+    amount:    int
+    reason:    str
+    meta:      dict | None = None
+
+
+class ReleaseRequest(BaseModel):
+    hold_id:   str
+
+
 def register_routes(app, get_current_user):
     """Enregistre les routes dans l'app FastAPI parente.
 
@@ -423,6 +440,61 @@ def register_routes(app, get_current_user):
             "needed":   req.amount,
             "tier":     user.subscription_tier or "free",
         }
+
+    @router.post("/reserve")
+    def reserve_credits(
+        req: ReserveRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Reserve les credits estimes d'un job avant son lancement.
+
+        Contrairement a /pre-authorize (simple lecture), les credits reserves ne
+        sont plus disponibles pour un autre job tant que celui-ci n'a pas appele
+        /settle (succes) ou /release (echec).
+        """
+        _check_service_token(request.headers.get("x-service-token"))
+        if req.kind not in ("processing", "live"):
+            raise HTTPException(status_code=400, detail="kind doit etre 'processing' ou 'live'")
+        if req.amount <= 0:
+            raise HTTPException(status_code=400, detail="amount doit etre positif")
+        user = db.query(models.User).filter(models.User.id == req.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User introuvable")
+        _credits.refill_if_due(db, user.id, user.subscription_tier or "free")
+        hold_id = _credits.reserve(db, user.id, req.kind, req.amount)  # type: ignore[arg-type]
+        row = _credits._get_or_create(db, user.id)
+        return {
+            "ok":       hold_id is not None,
+            "hold_id":  hold_id,
+            "balance":  row.processing_balance if req.kind == "processing" else row.live_balance,
+            "needed":   req.amount,
+            "tier":     user.subscription_tier or "free",
+        }
+
+    @router.post("/settle")
+    def settle_credits(
+        req: SettleRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Debite le cout reel d'un job reussi et leve sa reservation."""
+        _check_service_token(request.headers.get("x-service-token"))
+        settled = _credits.settle(db, req.hold_id, req.amount, req.reason, req.meta)
+        if settled is None:
+            return {"ok": True, "charged": 0, "already_settled": True}
+        charged, balance = settled
+        return {"ok": True, "charged": charged, "balance": balance}
+
+    @router.post("/release")
+    def release_credits(
+        req: ReleaseRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """Annule la reservation d'un job echoue, sans debit."""
+        _check_service_token(request.headers.get("x-service-token"))
+        return {"ok": True, "released": _credits.release(db, req.hold_id)}
 
     @router.post("/consume")
     def consume_credits(

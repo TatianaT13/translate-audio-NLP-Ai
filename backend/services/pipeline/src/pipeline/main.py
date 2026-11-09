@@ -176,6 +176,33 @@ async def _stt_step(state: dict) -> dict:
 # 3000 chars ≈ 750 tokens = petit contexte, traduit vite, coût minimal.
 LLM_CHUNK_MAX_CHARS = int(os.getenv("LLM_CHUNK_MAX_CHARS", "3000"))
 
+# Appels simultanes vers les services LLM / TTS pour un meme job. Borne pour
+# rester sous les limites de debit des fournisseurs (OpenAI, Mistral).
+LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "6"))
+TTS_CONCURRENCY = int(os.getenv("TTS_CONCURRENCY", "3"))
+
+
+async def _map_concurrent(fn, items: list, limit: int) -> list:
+    """Applique `fn` a chaque item avec au plus `limit` appels simultanes.
+
+    Les resultats sont dans l'ordre des items. A la premiere erreur, les appels
+    restants sont annules (inutile de payer la suite d'un job qui echoue) et
+    l'erreur d'origine est relancee telle quelle.
+    """
+    sem = asyncio.Semaphore(max(1, limit))
+
+    async def run(item):
+        async with sem:
+            return await fn(item)
+
+    tasks = [asyncio.create_task(run(item)) for item in items]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for t in tasks:
+            t.cancel()
+        raise
+
 
 def _split_into_chunks(text: str, max_chars: int = LLM_CHUNK_MAX_CHARS) -> list[str]:
     """Découpe le texte en chunks de max_chars caractères, aux frontières de phrases.
@@ -239,7 +266,8 @@ async def _llm_step(state: dict) -> dict:
     """Étape 2 : traduction texte → texte traduit via LLM Service.
 
     Chunking automatique si le texte source dépasse LLM_CHUNK_MAX_CHARS
-    (default 3000). Les chunks sont traduits séquentiellement puis joints.
+    (default 3000). Les chunks sont traduits en parallèle (LLM_CONCURRENCY)
+    puis joints dans l'ordre.
     """
     from datetime import datetime, timezone
     t0 = time.perf_counter()
@@ -256,56 +284,45 @@ async def _llm_step(state: dict) -> dict:
         and any(s.get("speaker") for s in stt_segments)
     )
 
-    prompt_tokens = completion_tokens = total_tokens = 0
-    cost_usd = 0.0
-    translations: list[str] = []
-
     if has_diarize:
         # Un appel LLM par segment → preserve le mapping speaker↔traduction
-        translation_segments = []
-        async with httpx.AsyncClient(timeout=300) as client:
-            for i, seg in enumerate(stt_segments, 1):
-                seg_text = (seg.get("text") or "").strip()
-                if not seg_text:
-                    continue
-                data = await _translate_chunk(
-                    client, seg_text, state["target_lang"], state["llm_model"], state["prompt_version"],
-                )
-                translation_segments.append({
-                    "speaker":     seg.get("speaker"),
-                    "start":       seg.get("start"),
-                    "end":         seg.get("end"),
-                    "original":    seg_text,
-                    "translation": data["translation"],
-                })
-                translations.append(data["translation"])
-                prompt_tokens     += data.get("prompt_tokens",     0)
-                completion_tokens += data.get("completion_tokens", 0)
-                total_tokens      += data.get("total_tokens",      0)
-                cost_usd          += data.get("cost_usd",          0.0)
-                if i % 10 == 0:
-                    print(f"[pipeline]   diar seg {i}/{len(stt_segments)}", flush=True)
-        translation = " ".join(translations)
+        segs = [seg for seg in stt_segments if (seg.get("text") or "").strip()]
+        texts = [seg["text"].strip() for seg in segs]
         chunks_count = len(stt_segments)
     else:
-        chunks = _split_into_chunks(source_text, LLM_CHUNK_MAX_CHARS)
-        if len(chunks) > 1:
-            print(f"[pipeline] LLM chunking: {len(source_text)} chars → {len(chunks)} chunks", flush=True)
+        segs = []
+        texts = _split_into_chunks(source_text, LLM_CHUNK_MAX_CHARS)
+        chunks_count = len(texts)
+    if len(texts) > 1:
+        print(f"[pipeline] LLM: {len(source_text)} chars → {len(texts)} appels "
+              f"({LLM_CONCURRENCY} en parallèle)", flush=True)
 
-        async with httpx.AsyncClient(timeout=300) as client:
-            for i, chunk in enumerate(chunks, 1):
-                data = await _translate_chunk(
-                    client, chunk, state["target_lang"], state["llm_model"], state["prompt_version"],
-                )
-                translations.append(data["translation"])
-                prompt_tokens     += data.get("prompt_tokens",     0)
-                completion_tokens += data.get("completion_tokens", 0)
-                total_tokens      += data.get("total_tokens",      0)
-                cost_usd          += data.get("cost_usd",          0.0)
-                if len(chunks) > 1:
-                    print(f"[pipeline]   chunk {i}/{len(chunks)} traduit ({len(chunk)} chars)", flush=True)
-        translation = " ".join(translations)
-        chunks_count = len(chunks)
+    async with httpx.AsyncClient(timeout=300) as client:
+        results = await _map_concurrent(
+            lambda text: _translate_chunk(
+                client, text, state["target_lang"], state["llm_model"], state["prompt_version"],
+            ),
+            texts,
+            LLM_CONCURRENCY,
+        )
+
+    translation = " ".join(data["translation"] for data in results)
+    prompt_tokens     = sum(data.get("prompt_tokens",     0)   for data in results)
+    completion_tokens = sum(data.get("completion_tokens", 0)   for data in results)
+    total_tokens      = sum(data.get("total_tokens",      0)   for data in results)
+    cost_usd          = sum(data.get("cost_usd",          0.0) for data in results)
+
+    if has_diarize:
+        translation_segments = [
+            {
+                "speaker":     seg.get("speaker"),
+                "start":       seg.get("start"),
+                "end":         seg.get("end"),
+                "original":    text,
+                "translation": data["translation"],
+            }
+            for seg, text, data in zip(segs, texts, results)
+        ]
 
     # ── Garde-fou : post-check sur la sortie LLM ─────────────────────────────
     guard = check_output(translation, source_text)
@@ -356,20 +373,17 @@ async def _tts_step(state: dict) -> dict:
     if len(tts_chunks) > 1:
         print(f"[pipeline] TTS chunking: {len(translation)} chars → {len(tts_chunks)} chunks", flush=True)
 
-    audio_parts: list[bytes] = []
-    content_type_seen = "audio/mpeg"
-
     async with httpx.AsyncClient(timeout=300) as client:
-        for i, chunk in enumerate(tts_chunks, 1):
+
+        async def synthesize(chunk: str) -> httpx.Response:
             resp = await client.post(
                 f"{TTS_URL}/synthesize",
                 json={"text": chunk, "lang": state["target_lang"]},
             )
-
-    # Mistral Voxtral peut renvoyer "guardrail_violation" sur du contenu sensible.
+            # Mistral Voxtral peut renvoyer "guardrail_violation" sur du contenu sensible.
             # Le TTS service ré-emballe les guardrails Mistral en 500 avec le body en clair
-            if not resp.is_success and ("guardrail" in resp.text.lower() or "guardrail_violation" in resp.text.lower()):
-                print(f"[pipeline] TTS guardrail (Mistral) — chunk {i}/{len(tts_chunks)} skipped", flush=True)
+            if not resp.is_success and "guardrail" in resp.text.lower():
+                print("[pipeline] TTS guardrail (Mistral) — synthèse refusée", flush=True)
                 raise HTTPException(
                     status_code=422,
                     detail=(
@@ -378,12 +392,13 @@ async def _tts_step(state: dict) -> dict:
                     ),
                 )
             resp.raise_for_status()
-            audio_parts.append(resp.content)
-            # Voxtral renvoie audio/mpeg, MMS local renvoie audio/wav — on garde le premier vu
-            if i == 1:
-                content_type_seen = resp.headers.get("content-type", "audio/mpeg")
-            if len(tts_chunks) > 1:
-                print(f"[pipeline]   TTS chunk {i}/{len(tts_chunks)} OK ({len(chunk)} chars → {len(resp.content)} bytes)", flush=True)
+            return resp
+
+        responses = await _map_concurrent(synthesize, tts_chunks, TTS_CONCURRENCY)
+
+    audio_parts = [resp.content for resp in responses]
+    # Voxtral renvoie audio/mpeg, MMS local renvoie audio/wav — on garde le premier
+    content_type_seen = responses[0].headers.get("content-type", "audio/mpeg")
 
     # Concaténation naïve des audio bytes (fonctionne pour MP3 et WAV même si
     # techniquement pas parfait pour WAV — un vrai fix demanderait pydub/ffmpeg).
@@ -490,35 +505,88 @@ def _estimate_credits_from_filesize(audio_bytes: int, with_tts: bool = True, wit
     return max(1, int(estimated_minutes * rate + 0.999))
 
 
-async def _pre_authorize(user_id: int, amount: int, kind: str = "processing") -> dict:
-    """Appelle Gateway pour vérifier le solde avant lancement."""
-    async with httpx.AsyncClient(timeout=5) as client:
-        r = await client.post(
-            f"{GATEWAY_URL}/billing/pre-authorize",
-            json={"user_id": user_id, "kind": kind, "amount": amount},
-            headers={"x-service-token": GATEWAY_SERVICE_TOKEN},
-        )
-    if r.status_code == 401:
-        print("[pipeline] WARN: GATEWAY_SERVICE_TOKEN mismatch — credits non checks", flush=True)
-        return {"ok": True, "balance": -1, "needed": amount}
-    r.raise_for_status()
-    return r.json()
+async def _reserve_credits(user_id: int, amount: int, kind: str = "processing") -> str:
+    """Reserve les credits estimes aupres de la Gateway ; retourne l'id de reservation.
 
-
-async def _consume_credits(user_id: int, amount: int, reason: str, kind: str = "processing") -> None:
-    """Appelle Gateway pour décrémenter le solde après succès."""
+    402 si le solde disponible ne suffit pas. 503 si la Gateway ne repond pas :
+    sans reservation on ne lance rien, sinon une panne de la Gateway offrirait
+    des traitements gratuits.
+    """
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.post(
-                f"{GATEWAY_URL}/billing/consume",
-                json={"user_id": user_id, "kind": kind, "amount": amount, "reason": reason},
-                headers={"x-service-token": GATEWAY_SERVICE_TOKEN},
+                f"{GATEWAY_URL}/billing/reserve",
+                json={"user_id": user_id, "kind": kind, "amount": amount},
+                headers=_SERVICE_HEADERS,
             )
-        if r.status_code != 200:
-            print(f"[pipeline] consume refuse HTTP {r.status_code} pour user {user_id} "
-                  f"({amount} credits): {r.text[:200]}", flush=True)
+        r.raise_for_status()
+        data = r.json()
     except Exception as e:
-        print(f"[pipeline] consume error (non-fatal) for user {user_id}: {e}", flush=True)
+        print(f"[pipeline] reserve impossible pour user {user_id}: {e!r}", flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Service de facturation indisponible. Réessayez dans quelques instants.",
+        )
+    if not data.get("ok"):
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "reason":  "credits_insufficient",
+                "balance": data.get("balance"),
+                "needed":  data.get("needed"),
+                "tier":    data.get("tier"),
+            },
+        )
+    return data["hold_id"]
+
+
+_SETTLE_RETRY_DELAYS = (1, 3)  # secondes entre les tentatives
+
+
+async def _settle_credits(hold_id: str, amount: int, reason: str) -> None:
+    """Debite le cout reel et leve la reservation. Ne leve jamais : le resultat
+    est deja calcule, on ne le refuse pas au client pour une erreur de facturation.
+
+    Reessaie en cas d'echec (cote Gateway, un settle rejoue est sans effet).
+    Echec definitif : la reservation expire seule, le job n'est pas facture —
+    d'ou la remontee Sentry.
+    """
+    last_error = ""
+    for delay in (0, *_SETTLE_RETRY_DELAYS):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.post(
+                    f"{GATEWAY_URL}/billing/settle",
+                    json={"hold_id": hold_id, "amount": amount, "reason": reason},
+                    headers=_SERVICE_HEADERS,
+                )
+            if r.status_code == 200:
+                return
+            last_error = f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception as e:
+            last_error = repr(e)
+    msg = f"[pipeline] settle abandonne, job NON FACTURE ({amount} credits, {reason}): {last_error}"
+    print(msg, flush=True)
+    if os.getenv("SENTRY_DSN"):
+        import sentry_sdk
+        sentry_sdk.capture_message(msg, level="error")
+
+
+async def _release_credits(hold_id: str | None) -> None:
+    """Annule la reservation d'un job echoue. Au pire elle expire seule."""
+    if not hold_id:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{GATEWAY_URL}/billing/release",
+                json={"hold_id": hold_id},
+                headers=_SERVICE_HEADERS,
+            )
+    except Exception as e:
+        print(f"[pipeline] release echoue pour {hold_id} (expirera seule): {e!r}", flush=True)
 
 
 @app.post("/process")
@@ -550,32 +618,18 @@ async def process(
     audio_bytes = await file.read()
     filename = file.filename or "audio.mp3"
 
-    # ── Verif credits (si JWT fourni) ─────────────────────────────────────
-    # On fait un pre-authorize optimiste base sur la taille du fichier. En cas
-    # de refus, 402 Payment Required avec le detail du quota manquant. Si
-    # succes, on consomme reellement les credits a la fin avec la vraie duree.
+    # ── Reservation des credits (si JWT fourni) ───────────────────────────
+    # On reserve une estimation basee sur la taille du fichier : 402 si le solde
+    # disponible ne suffit pas, 503 si la Gateway ne repond pas. A la fin, la
+    # reservation est remplacee par le debit reel (vraie duree), ou annulee si
+    # le job echoue.
     user_id = _authenticate(authorization, x_service_token)
-    estimated_credits = _estimate_credits_from_filesize(
-        len(audio_bytes), with_tts=True, with_diarize=diarize,
-    )
+    hold_id = None
     if user_id is not None:
-        try:
-            auth_resp = await _pre_authorize(user_id, estimated_credits, kind="processing")
-            if not auth_resp.get("ok"):
-                raise HTTPException(
-                    status_code=402,
-                    detail={
-                        "reason":  "credits_insufficient",
-                        "balance": auth_resp.get("balance"),
-                        "needed":  auth_resp.get("needed"),
-                        "tier":    auth_resp.get("tier"),
-                    },
-                )
-        except HTTPException:
-            raise
-        except Exception as e:
-            # Si Gateway inaccessible → on laisse passer (pas de blocage total)
-            print(f"[pipeline] pre-authorize failed (non-fatal): {e}", flush=True)
+        estimated_credits = _estimate_credits_from_filesize(
+            len(audio_bytes), with_tts=True, with_diarize=diarize,
+        )
+        hold_id = await _reserve_credits(user_id, estimated_credits, kind="processing")
 
     initial_state = {
         "audio_bytes": audio_bytes,
@@ -592,8 +646,10 @@ async def process(
         result = await pipeline_chain.ainvoke(initial_state)
     except HTTPException:
         # Erreurs déjà formatées par les étapes (garde-fou, TTS guardrail, etc.)
+        await _release_credits(hold_id)
         raise
     except httpx.HTTPStatusError as e:
+        await _release_credits(hold_id)
         import traceback
         print(f"[pipeline] HTTPStatusError: {e.response.status_code} {e.response.text}", flush=True)
         traceback.print_exc()
@@ -611,6 +667,7 @@ async def process(
             )
         raise HTTPException(status_code=502, detail=f"Service error: {e.response.text}")
     except Exception as e:
+        await _release_credits(hold_id)
         import traceback
         print(f"[pipeline] Exception {type(e).__name__}: {e!r}", flush=True)
         traceback.print_exc()
@@ -730,7 +787,7 @@ async def process(
             print(f"[pipeline] Langfuse v4 tracing warning: {e}", flush=True)
 
     # ── Consomme les credits reels (duree audio exacte via STT segments) ──
-    if user_id is not None:
+    if hold_id is not None:
         duration_sec = 0
         segments = result.get("segments") or []
         if segments:
@@ -743,12 +800,7 @@ async def process(
             f"pipeline_process:{int(duration_sec)}s:"
             + ("audio_translated_diarized" if diarize else "audio_translated")
         )
-        await _consume_credits(
-            user_id,
-            amount=credits_real,
-            reason=reason,
-            kind="processing",
-        )
+        await _settle_credits(hold_id, credits_real, reason)
 
     return {
         "source_text":        result["source_text"],
@@ -786,7 +838,7 @@ async def _execute_job(
     prompt_version: str,
     whisper_model:  str,
     diarize:        bool,
-    user_id:        int | None,
+    hold_id:        str | None,
 ) -> None:
     """Executeur de job en background. Met a jour le store a chaque etape."""
     try:
@@ -813,7 +865,7 @@ async def _execute_job(
         latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
         # Consomme les credits reels (meme logique que /process)
-        if user_id is not None:
+        if hold_id is not None:
             duration_sec = 0
             segments = result.get("segments") or []
             if segments:
@@ -826,10 +878,8 @@ async def _execute_job(
                 f"pipeline_process_async:{int(duration_sec)}s:"
                 + ("audio_translated_diarized" if diarize else "audio_translated")
             )
-            try:
-                await _consume_credits(user_id, amount=credits_real, reason=reason, kind="processing")
-            except Exception as e:
-                print(f"[jobs] credits consume error for user {user_id}: {e}", flush=True)
+            await _settle_credits(hold_id, credits_real, reason)
+            hold_id = None  # regle : ne plus l'annuler si la suite echoue
 
         await _jobs.store.update(job_id, progress=95)
 
@@ -853,9 +903,11 @@ async def _execute_job(
         }
         await _jobs.store.update(job_id, status="done", progress=100, result=response)
     except HTTPException as e:
+        await _release_credits(hold_id)
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         await _jobs.store.update(job_id, status="error", error=detail)
     except Exception as e:
+        await _release_credits(hold_id)
         import traceback; traceback.print_exc()
         if os.getenv("SENTRY_DSN"):
             import sentry_sdk
@@ -887,25 +939,11 @@ async def process_async(
     filename    = file.filename or "audio.mp3"
     user_id     = _authenticate(authorization, x_service_token)
 
-    # Pre-authorize credits (meme logique que /process pour cohérence UX)
+    # Reservation des credits (meme logique que /process)
+    hold_id = None
     if user_id is not None:
         estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True, with_diarize=diarize)
-        try:
-            auth_resp = await _pre_authorize(user_id, estimated, kind="processing")
-            if not auth_resp.get("ok"):
-                raise HTTPException(
-                    status_code=402,
-                    detail={
-                        "reason":  "credits_insufficient",
-                        "balance": auth_resp.get("balance"),
-                        "needed":  auth_resp.get("needed"),
-                        "tier":    auth_resp.get("tier"),
-                    },
-                )
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"[pipeline] pre-authorize failed (non-fatal): {e}", flush=True)
+        hold_id = await _reserve_credits(user_id, estimated, kind="processing")
 
     # Lance le cleanup au premier job (idempotent)
     await _jobs.store.start_cleanup()
@@ -920,7 +958,7 @@ async def process_async(
         prompt_version=prompt_version,
         whisper_model=whisper_model,
         diarize=diarize,
-        user_id=user_id,
+        hold_id=hold_id,
     ))
     return {"job_id": job.id, "status": "pending"}
 

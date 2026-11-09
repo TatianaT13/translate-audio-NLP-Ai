@@ -1,0 +1,110 @@
+"""Tests unitaires — facturation cote pipeline (reserve / settle / release).
+
+Verifie surtout les cas de panne : Gateway injoignable ou en erreur. Avant la
+reservation, ces cas laissaient passer le traitement sans le facturer.
+"""
+
+from __future__ import annotations
+
+import asyncio
+
+import httpx
+import pytest
+from fastapi import HTTPException
+
+from pipeline import main
+
+
+class _FakeGateway:
+    """Remplace httpx.AsyncClient : rejoue une liste de reponses / exceptions."""
+
+    def __init__(self, *outcomes):
+        self.outcomes = list(outcomes)
+        self.calls: list[tuple[str, dict]] = []
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json=None, headers=None):
+        self.calls.append((url.rsplit("/", 1)[-1], json))
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        status, body = outcome
+        return httpx.Response(status, json=body, request=httpx.Request("POST", url))
+
+
+@pytest.fixture
+def gateway(monkeypatch):
+    def install(*outcomes) -> _FakeGateway:
+        fake = _FakeGateway(*outcomes)
+        monkeypatch.setattr(main.httpx, "AsyncClient", fake)
+        return fake
+    monkeypatch.setattr(main, "_SETTLE_RETRY_DELAYS", (0, 0))
+    return install
+
+
+class TestReserve:
+    def test_returns_hold_id(self, gateway):
+        gateway((200, {"ok": True, "hold_id": "h-1", "balance": 10, "needed": 4}))
+        assert asyncio.run(main._reserve_credits(1, 4)) == "h-1"
+
+    def test_insufficient_credits_is_402(self, gateway):
+        gateway((200, {"ok": False, "hold_id": None, "balance": 2, "needed": 4, "tier": "free"}))
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(main._reserve_credits(1, 4))
+        assert exc.value.status_code == 402
+        assert exc.value.detail == {"reason": "credits_insufficient", "balance": 2, "needed": 4, "tier": "free"}
+
+    @pytest.mark.parametrize("outcome", [
+        httpx.ConnectError("gateway down"),
+        (500, {"detail": "boom"}),
+        (401, {"detail": "Service token invalide"}),
+    ])
+    def test_gateway_failure_blocks_the_job(self, gateway, outcome):
+        """Pas de reservation, pas de traitement : une panne n'offre rien."""
+        gateway(outcome)
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(main._reserve_credits(1, 4))
+        assert exc.value.status_code == 503
+
+
+class TestSettle:
+    def test_settles_once_on_success(self, gateway):
+        fake = gateway((200, {"ok": True, "charged": 3, "balance": 7}))
+        asyncio.run(main._settle_credits("h-1", 3, "pipeline_process:90s:audio_translated"))
+        assert fake.calls == [("settle", {"hold_id": "h-1", "amount": 3,
+                                          "reason": "pipeline_process:90s:audio_translated"})]
+
+    def test_retries_after_a_failure(self, gateway):
+        fake = gateway(httpx.ConnectError("down"), (500, {}), (200, {"ok": True}))
+        asyncio.run(main._settle_credits("h-1", 3, "job"))
+        assert len(fake.calls) == 3
+
+    def test_gives_up_without_raising(self, gateway):
+        """Le resultat est deja calcule : on ne le refuse pas au client."""
+        fake = gateway(*[httpx.ConnectError("down")] * 3)
+        asyncio.run(main._settle_credits("h-1", 3, "job"))
+        assert len(fake.calls) == 3
+
+
+class TestRelease:
+    def test_releases_the_hold(self, gateway):
+        fake = gateway((200, {"ok": True, "released": True}))
+        asyncio.run(main._release_credits("h-1"))
+        assert fake.calls == [("release", {"hold_id": "h-1"})]
+
+    def test_no_hold_no_call(self, gateway):
+        fake = gateway()
+        asyncio.run(main._release_credits(None))
+        assert fake.calls == []
+
+    def test_failure_is_swallowed(self, gateway):
+        gateway(httpx.ConnectError("down"))
+        asyncio.run(main._release_credits("h-1"))
