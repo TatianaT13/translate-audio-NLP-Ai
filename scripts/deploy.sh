@@ -20,7 +20,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Services par défaut : tous ceux qu'on construit nous-mêmes
-readonly DEFAULT_SERVICES="frontend pipeline llm stt tts gateway watcher"
+readonly DEFAULT_SERVICES="frontend pipeline llm stt tts gateway"
 readonly TARGETS="${*:-$DEFAULT_SERVICES}"
 
 # Couleurs pour lisibilité
