@@ -127,6 +127,8 @@ async def _stt_step(state: dict) -> dict:
     # Diarisation : conserve les segments avec speakers pour les restituer en sortie
     state["stt_segments"] = data.get("segments") or []
     state["stt_duration"] = data.get("duration") or 0  # secondes, base de la facturation
+    state["stt_backend"]  = data.get("backend") or "unknown"
+    state["stt_model"]    = data.get("model")
     state["stt_speakers"] = data.get("speakers")
 
     if not text:
@@ -521,6 +523,20 @@ def _billable_seconds(result: dict, audio_bytes: int) -> float:
     return float(duration)
 
 
+def _usage_meta(result: dict, duration_sec: float) -> dict:
+    """Volumes consommes par le job, enregistres avec le debit. La Gateway en
+    deduit le cout fournisseur reel (les tarifs sont chez elle : gateway.costs)."""
+    return {
+        "seconds":      round(duration_sec, 1),
+        "stt_backend":  result.get("stt_backend") or "unknown",
+        "stt_model":    result.get("stt_model"),
+        "tts_chars":    len(result.get("translation") or ""),
+        # Voxtral renvoie du MP3, le MMS local du WAV
+        "tts_backend":  "local" if "wav" in (result.get("audio_content_type") or "") else "mistral",
+        "llm_cost_usd": result.get("cost_usd") or 0.0,
+    }
+
+
 async def _reserve_credits(user_id: int, amount: int, kind: str = "processing") -> str:
     """Reserve les credits estimes aupres de la Gateway ; retourne l'id de reservation.
 
@@ -559,7 +575,7 @@ async def _reserve_credits(user_id: int, amount: int, kind: str = "processing") 
 _SETTLE_RETRY_DELAYS = (1, 3)  # secondes entre les tentatives
 
 
-async def _settle_credits(hold_id: str, amount: int, reason: str) -> None:
+async def _settle_credits(hold_id: str, amount: int, reason: str, meta: dict | None = None) -> None:
     """Debite le cout reel et leve la reservation. Ne leve jamais : le resultat
     est deja calcule, on ne le refuse pas au client pour une erreur de facturation.
 
@@ -575,7 +591,7 @@ async def _settle_credits(hold_id: str, amount: int, reason: str) -> None:
             async with httpx.AsyncClient(timeout=5) as client:
                 r = await client.post(
                     f"{GATEWAY_URL}/billing/settle",
-                    json={"hold_id": hold_id, "amount": amount, "reason": reason},
+                    json={"hold_id": hold_id, "amount": amount, "reason": reason, "meta": meta},
                     headers=_SERVICE_HEADERS,
                 )
             if r.status_code == 200:
@@ -811,7 +827,7 @@ async def process(
             f"pipeline_process:{int(duration_sec)}s:"
             + ("audio_translated_diarized" if diarize else "audio_translated")
         )
-        await _settle_credits(hold_id, credits_real, reason)
+        await _settle_credits(hold_id, credits_real, reason, _usage_meta(result, duration_sec))
 
     return {
         "source_text":        result["source_text"],
@@ -884,7 +900,7 @@ async def _execute_job(
                 f"pipeline_process_async:{int(duration_sec)}s:"
                 + ("audio_translated_diarized" if diarize else "audio_translated")
             )
-            await _settle_credits(hold_id, credits_real, reason)
+            await _settle_credits(hold_id, credits_real, reason, _usage_meta(result, duration_sec))
             hold_id = None  # regle : ne plus l'annuler si la suite echoue
 
         await _jobs.store.update(job_id, progress=95)

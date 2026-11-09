@@ -7,10 +7,11 @@ import { getMe } from "@/lib/auth";
 import {
   getAdminStats, getAdminUsers, getLangfuseMetrics, updateAdminUser, deleteAdminUser,
   getServicesHealth, getExperiments, synthesizeTTS,
-  getMlflowSummary, getAirflowSummary,
+  getMlflowSummary, getAirflowSummary, getAdminMargins,
   type AdminUser, type AdminStats, type LangfuseMetrics, type LangfuseModelStat,
   type ServiceHealth,
   type ExperimentRun, type ExperimentsResponse, type MlflowSummary, type AirflowSummary,
+  type MarginsReport, type MarginRow,
 } from "@/lib/admin";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -172,6 +173,8 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
         </div>
       </section>
 
+      <MarginsPanel />
+
       {/* Pipeline stats from Langfuse */}
       {langfuse?.connected && (
         <section>
@@ -210,6 +213,88 @@ function OverviewTab({ stats, langfuse }: { stats: AdminStats | null; langfuse: 
         </div>
       )}
     </div>
+  );
+}
+
+// ── Marge par service ─────────────────────────────────────────────────────────
+const SERVICE_LABELS: Record<string, string> = {
+  translation:           "Traduction audio",
+  translation_diarized:  "Traduction + intervenants",
+  meeting_transcription: "Transcription de réunion",
+  meeting_diarization:   "Réunion + intervenants",
+  other:                 "Autre",
+  total:                 "Total",
+};
+
+const eur = (v: number) => `${v.toFixed(2).replace(".", ",")} €`;
+
+function marginColor(pct: number | null) {
+  if (pct === null) return C.muted;
+  return pct >= 60 ? C.green : pct >= 30 ? C.accent : C.red;
+}
+
+function MarginsPanel() {
+  const [report, setReport] = useState<MarginsReport | null>(null);
+  const [error,  setError]  = useState<string | null>(null);
+
+  useEffect(() => {
+    getAdminMargins(30).then(setReport).catch((e) => setError(e instanceof Error ? e.message : "Erreur"));
+  }, []);
+
+  const title = "Marge par service — 30 derniers jours";
+  if (error)   return <Card title={title}><p style={{ fontSize: "12px", color: C.red }}>{error}</p></Card>;
+  if (!report) return <Card title={title}><Loader /></Card>;
+
+  const rows: MarginRow[] = [...report.services, report.total];
+  const cell = { padding: "8px 12px", fontSize: "13px", fontVariantNumeric: "tabular-nums" } as const;
+  const num  = { ...cell, textAlign: "right" } as const;
+
+  return (
+    <Card title={title}>
+      {report.total.credits === 0 ? (
+        <p style={{ fontSize: "12px", color: C.muted }}>
+          Aucun traitement avec coût suivi sur la période.
+        </p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ color: C.muted, fontSize: "11px", textAlign: "left" }}>
+                <th style={cell}>Service</th>
+                <th style={num}>Audio</th>
+                <th style={num}>Crédits</th>
+                <th style={num}>Revenu</th>
+                <th style={num}>Coût réel</th>
+                <th style={num}>Marge</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.service} style={{
+                  borderTop: `1px solid ${C.border}`,
+                  fontWeight: r.service === "total" ? 600 : 400,
+                }}>
+                  <td style={cell}>{SERVICE_LABELS[r.service] ?? r.service}</td>
+                  <td style={num}>{Math.round(r.seconds / 60)} min</td>
+                  <td style={num}>{r.credits}</td>
+                  <td style={num}>{eur(r.revenue_eur)}</td>
+                  <td style={num}>{eur(r.cost_eur)}</td>
+                  <td style={{ ...num, color: marginColor(r.margin_pct) }}>
+                    {r.margin_pct === null ? "—" : `${Math.round(r.margin_pct)} %`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p style={{ fontSize: "11px", color: C.muted, marginTop: "12px", lineHeight: 1.5 }}>
+        Revenu : {report.credit_value_eur.toString().replace(".", ",")} € par crédit (formule annuelle, frais Stripe déduits).
+        Coût : transcription, traduction et voix aux tarifs des fournisseurs, hors serveur.
+        {report.total.untracked_credits > 0 &&
+          ` ${report.total.untracked_credits} crédits débités avant la mise en place du suivi ne sont pas comptés.`}
+      </p>
+    </Card>
   );
 }
 

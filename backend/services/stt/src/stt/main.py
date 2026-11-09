@@ -191,9 +191,14 @@ async def transcribe(
         Path(tmp_in_path).unlink(missing_ok=True)
         Path(tmp_wav_path).unlink(missing_ok=True)
 
+    backend = (
+        "assemblyai" if "assemblyai" in used_model
+        else STT_BACKEND if STT_BACKEND in ("openai",) else "local"
+    )
     if user_id is not None:
         await billing.charge(user_id, result.get("duration") or 0, rate,
-                             "meeting_diarization" if diarize else "meeting_transcription")
+                             "meeting_diarization" if diarize else "meeting_transcription",
+                             usage={"stt_backend": backend, "stt_model": used_model})
 
     return JSONResponse({
         "text":                 result["text"],
@@ -203,8 +208,5 @@ async def transcribe(
         "segments":             result["segments"],
         "speakers":             result.get("speakers"),  # None si pas de diarisation
         "model":                used_model,
-        "backend":              (
-            "assemblyai" if "assemblyai" in used_model
-            else STT_BACKEND if STT_BACKEND in ("openai",) else "local"
-        ),
+        "backend":              backend,
     })

@@ -339,6 +339,7 @@ def consume_seconds(
     seconds: float,
     rate_per_min: float,
     reason: str,
+    usage: dict | None = None,
 ) -> tuple[int, int]:
     """Debite une duree au prorata, en milliemes de credit.
 
@@ -352,7 +353,8 @@ def consume_seconds(
     due, remainder = divmod(milli, 1000)
     charged = min(due, row.processing_balance)
     row.processing_remainder_milli = remainder if charged == due else 0
-    meta = {"seconds": round(max(seconds, 0.0), 1)}  # volume affiche au client
+    # seconds : volume affiche au client ; usage : backend utilise, pour le cout reel
+    meta = {**(usage or {}), "seconds": round(max(seconds, 0.0), 1)}
     if charged > 0:
         row = consume(db, user_id, "processing", charged, reason, meta)  # commit + alerte solde faible
     else:

@@ -131,6 +131,7 @@ class ConsumeSecondsRequest(BaseModel):
     seconds:      float
     rate_per_min: float
     reason:       str
+    meta:         dict | None = None   # usage (backend STT...) pour le cout reel
 
 
 class RefundRequest(BaseModel):
@@ -155,6 +156,17 @@ class SettleRequest(BaseModel):
 
 class ReleaseRequest(BaseModel):
     hold_id:   str
+
+
+def service_of(reason: str) -> str:
+    """Service facture, deduit du motif d'un debit."""
+    if reason.startswith("meeting_diarization"):
+        return "meeting_diarization"
+    if reason.startswith("meeting_transcription"):
+        return "meeting_transcription"
+    if reason.startswith("pipeline_process"):
+        return "translation_diarized" if "diarized" in reason else "translation"
+    return "other"
 
 
 def register_routes(app, get_current_user):
@@ -378,14 +390,7 @@ def register_routes(app, get_current_user):
         totals: dict[tuple[str, str], dict] = {}
         for r in rows:
             reason = r.reason or ""
-            if reason.startswith("meeting_diarization"):
-                service = "meeting_diarization"
-            elif reason.startswith("meeting_transcription"):
-                service = "meeting_transcription"
-            elif reason.startswith("pipeline_process"):
-                service = "translation_diarized" if "diarized" in reason else "translation"
-            else:
-                service = "other"
+            service = service_of(reason)
             seconds = None
             if r.meta:
                 try:
@@ -523,7 +528,9 @@ def register_routes(app, get_current_user):
         _check_service_token(request.headers.get("x-service-token"))
         if not (0 <= req.seconds <= 6 * 3600) or not (0 <= req.rate_per_min <= 10):
             raise HTTPException(status_code=400, detail="Duree ou taux invalide")
-        charged, balance = _credits.consume_seconds(db, req.user_id, req.seconds, req.rate_per_min, req.reason)
+        charged, balance = _credits.consume_seconds(
+            db, req.user_id, req.seconds, req.rate_per_min, req.reason, req.meta,
+        )
         return {"ok": True, "charged": charged, "balance": balance}
 
     @router.post("/refund")
