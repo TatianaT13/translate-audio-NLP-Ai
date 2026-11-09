@@ -20,6 +20,8 @@ docker compose up -d --build
 
 Accès :
 - Frontend : http://localhost:3000
+
+Outillage MLOps (profil `lab`, non démarré par défaut) : `docker compose --profile lab up -d`
 - Grafana : http://localhost:3001 (admin/admin)
 - MLflow : http://localhost:5050
 - Airflow : http://localhost:8080 (admin/admin)
