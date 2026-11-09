@@ -1,7 +1,7 @@
 """Facturation des appels directs du navigateur (page Compte-rendu).
 
 Les appels internes (jeton de service) ne passent pas ici : le pipeline facture
-lui-meme ses traitements. Gateway injoignable : on laisse passer, comme le pipeline.
+lui-meme ses traitements. Gateway injoignable : on laisse passer (le pipeline, lui, refuse).
 """
 import os
 
