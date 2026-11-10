@@ -74,6 +74,10 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - DEV_MODE=${DEV_MODE:-false}
       - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
+      # Historique des traitements : duree de conservation, cle de chiffrement
+      # (vide = cle generee dans le volume gateway_data, fichier history.key)
+      - HISTORY_RETENTION_DAYS=${HISTORY_RETENTION_DAYS:-90}
+      - HISTORY_ENCRYPTION_KEY=${HISTORY_ENCRYPTION_KEY:-}
       - FRONTEND_URLS=http://localhost:3000,http://localhost:3001
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}

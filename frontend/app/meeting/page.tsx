@@ -8,6 +8,7 @@ import {
   transcribeChunk, summarizeMeeting, transcribeDiarized, formatDiarizedTranscript, CreditsError,
   type ChunkTranscript, type SummaryResponse, type DiarizedTranscript, type DiarizedSegment,
 } from "@/lib/meeting";
+import { saveHistory, updateHistory } from "@/lib/history";
 import { AppHeader } from "@/components/AppHeader";
 import { FooterMinimal } from "@/components/Footer";
 
@@ -67,6 +68,8 @@ export default function MeetingPage() {
   const [diarizedResult,   setDiarizedResult]   = useState<DiarizedTranscript | null>(null);
   const [diarizing,        setDiarizing]        = useState(false);
   const [speakerNames,     setSpeakerNames]     = useState<Record<string, string>>({});
+  // Élément d'historique de la réunion en cours (créé au premier compte-rendu)
+  const historyRef = useRef<{ id: string; title: string } | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef        = useRef<MediaStream | null>(null);
@@ -135,6 +138,7 @@ export default function MeetingPage() {
     setError(null);
     setSegments([]);
     setSummary(null);
+    historyRef.current = null;   // nouvelle réunion, nouvel élément d'historique
     setDiarizedResult(null);
     setSpeakerNames({});
     setElapsedSec(0);
@@ -238,11 +242,24 @@ export default function MeetingPage() {
       const res = await summarizeMeeting(transcript, summaryLang, summaryStyle);
       setSummary(res);
       setStep("summarized");
+
+      // Historique : un seul élément par réunion, remplacé si le compte-rendu est régénéré
+      const title = historyRef.current?.title
+        ?? `Réunion du ${new Date().toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}`;
+      const entry = {
+        kind: "meeting" as const, title, lang: summaryLang, duration_s: elapsedSec,
+        content: { transcript, summary: res.summary, summary_style: summaryStyle },
+      };
+      if (historyRef.current) {
+        updateHistory(historyRef.current.id, entry);
+      } else {
+        saveHistory(entry).then((saved) => { if (saved) historyRef.current = { id: saved.id, title }; });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur résumé");
       setStep("error");
     }
-  }, [segments, summaryLang, summaryStyle, diarize, diarizedResult, speakerNames, runDiarization]);
+  }, [segments, summaryLang, summaryStyle, diarize, diarizedResult, speakerNames, runDiarization, elapsedSec]);
 
   const downloadMarkdown = useCallback(() => {
     if (!summary) return;

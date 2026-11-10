@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from gateway.database import Base
@@ -111,6 +111,24 @@ class UserCredits(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class HistoryItem(Base):
+    """Resultat d'un traitement, conserve pour l'utilisateur (voir gateway.history).
+
+    payload : contenu chiffre (transcription, traduction, compte-rendu). Seuls
+    le titre, le type et la date sont en clair, pour afficher la liste.
+    """
+    __tablename__ = "history_items"
+
+    id         = Column(String, primary_key=True)   # uuid4 : non devinable, jamais reutilise
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind       = Column(String, nullable=False)     # translation | meeting
+    title      = Column(String, nullable=False)
+    lang       = Column(String, nullable=True)      # langue cible / langue du compte-rendu
+    duration_s = Column(Integer, nullable=True)
+    payload    = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class CreditHold(Base):

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { runPipeline, audioFromBase64, submitPipelineJob, trackJob, ASYNC_SIZE_THRESHOLD } from "@/lib/api";
 import { downloadSRT, segmentsToSrt, downloadPDF } from "@/lib/exports";
 import type { ProcessResult, TranslationSegment } from "@/lib/api";
+import { saveHistory } from "@/lib/history";
 import { getMe, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
@@ -718,6 +719,18 @@ export default function Home() {
         });
       }
       setResult(res);
+      // Historique : en arrière-plan, sans retarder l'affichage (l'audio n'est pas conservé)
+      saveHistory({
+        kind:  "translation",
+        title: file instanceof File && file.name ? file.name : "Enregistrement micro",
+        lang:  targetLang,
+        content: {
+          source_text: res.source_text,
+          translation: res.translation,
+          language:    res.language,
+          segments:    res.translation_segments ?? null,
+        },
+      });
       if (res.audio_b64) {
         const blob = audioFromBase64(res.audio_b64, res.audio_content_type);
         audioBlobRef.current = blob;
