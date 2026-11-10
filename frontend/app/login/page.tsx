@@ -11,6 +11,7 @@ import { login } from "@/lib/auth";
 function LoginForm() {
   const searchParams = useSearchParams();
   const nextPath     = searchParams.get("next") || "/";
+  const registered   = searchParams.get("registered");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]       = useState<string | null>(null);
@@ -92,6 +93,18 @@ function LoginForm() {
             style={inputStyle}
           />
         </div>
+
+        {registered && !error && (
+          <div style={{
+            padding: "12px 16px", borderRadius: "12px", fontSize: "13px", lineHeight: 1.5,
+            background: "rgba(126,201,160,0.08)", border: "1px solid rgba(126,201,160,0.25)",
+            color: "#7ec9a0",
+          }}>
+            {registered === "verify"
+              ? "Compte créé. Ouvrez l'email que nous venons de vous envoyer pour confirmer votre adresse et recevoir vos crédits offerts."
+              : "Compte créé. Vous pouvez vous connecter."}
+          </div>
+        )}
 
         {error && (
           <div style={{

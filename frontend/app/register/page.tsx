@@ -27,8 +27,8 @@ export default function RegisterPage() {
     if (TURNSTILE_SITE_KEY && !captcha) { setError("Merci de valider la vérification anti-robot"); return; }
     setLoading(true);
     try {
-      await register(email, password, captcha);
-      router.push("/login?registered=1");
+      const created = await register(email, password, captcha);
+      router.push(created.verification_required ? "/login?registered=verify" : "/login?registered=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création du compte");
       // Un jeton Turnstile ne sert qu'une fois : nouveau widget pour le prochain essai

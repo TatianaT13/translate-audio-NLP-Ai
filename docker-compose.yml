@@ -73,6 +73,7 @@ services:
     environment:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - DEV_MODE=${DEV_MODE:-false}
+      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
       - FRONTEND_URLS=http://localhost:3000,http://localhost:3001
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
