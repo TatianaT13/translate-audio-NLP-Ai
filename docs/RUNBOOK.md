@@ -266,6 +266,28 @@ docker compose up -d --force-recreate gateway pipeline llm tts watcher
 
 ---
 
+## 5 ter. Disque plein : la Gateway ne démarre plus
+
+**Symptôme** : après un déploiement, `container traudio-gateway-1 is unhealthy`, et dans
+`docker compose logs gateway` : `sqlite3.OperationalError: database or disk is full`.
+
+**Cause** : des images Docker et du cache de construction accumulés. `deploy.sh` les
+nettoie désormais à chaque déploiement et refuse de démarrer sous 10 Go libres.
+
+**Fix** :
+```bash
+df -h /
+docker system df
+docker image prune -f        # images sans nom, remplacées par un build plus récent
+docker builder prune -f      # cache de construction
+docker compose up -d
+```
+
+⚠️ Ne jamais lancer `docker system prune --volumes` ni `docker volume prune` : conteneurs
+arrêtés, ces commandes effaceraient le volume qui contient la base des comptes et des crédits.
+
+---
+
 ## 5 bis. Rembourser un client qui se rétracte (14 jours)
 
 Les CGV (art. 6) accordent 14 jours pour se rétracter, avec remboursement intégral.
