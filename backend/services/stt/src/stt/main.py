@@ -19,6 +19,7 @@ load_dotenv()
 from stt.whisper_service import WhisperService
 from stt import openai_backend, assemblyai_backend
 from stt import billing
+from stt import uploads
 from stt.auth import require_caller
 
 # Sentry : inactif sans SENTRY_DSN. Ni corps de requete ni variables locales :
@@ -37,6 +38,7 @@ if os.getenv("SENTRY_DSN"):
 
 app = FastAPI(title="STT Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.middleware("http")(uploads.reject_oversized_body)
 
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
@@ -145,8 +147,9 @@ async def transcribe(
     # iOS/Android) → ffmpeg refuserait de le lire comme MP3 sinon.
     rate = await billing.rate_for(user_id, diarize) if user_id is not None else 0.0
 
+    audio = await uploads.read_capped(file)
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp_in:
-        tmp_in.write(await file.read())
+        tmp_in.write(audio)
         tmp_in_path = tmp_in.name
 
     tmp_wav_path = tmp_in_path + ".wav"

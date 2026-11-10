@@ -14,12 +14,13 @@ import time
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from langchain_core.runnables import RunnableLambda
 
 from pipeline import jobs as _jobs
+from pipeline import uploads
 from pipeline.prompt_guard import check_input, check_output, sandbox_user_text
 
 load_dotenv()
@@ -92,6 +93,7 @@ app = FastAPI(title="Pipeline Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+app.middleware("http")(uploads.reject_oversized_body)
 
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
@@ -621,6 +623,59 @@ async def _release_credits(hold_id: str | None) -> None:
         print(f"[pipeline] release echoue pour {hold_id} (expirera seule): {e!r}", flush=True)
 
 
+# ── Limites de charge ────────────────────────────────────────────────────────
+# Chaque job garde son audio en memoire et lance des appels en parallele vers
+# les fournisseurs. Sans plafond, un afflux de demandes sature la RAM du serveur
+# et les quotas des API : on borne donc le nombre de jobs en cours, les suivants
+# attendent leur tour.
+MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "8"))
+MAX_JOBS_PER_USER   = int(os.getenv("MAX_JOBS_PER_USER", "2"))
+
+_job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+_user_jobs: dict[int, int] = {}   # user_id -> jobs en cours ou en attente
+
+
+def _enter_user(user_id: int | None) -> None:
+    """Compte un job de plus pour ce compte ; 429 s'il en a deja trop."""
+    if user_id is None:
+        return
+    if _user_jobs.get(user_id, 0) >= MAX_JOBS_PER_USER:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Tu as déjà {MAX_JOBS_PER_USER} traitements en cours. Attends la fin de l'un d'eux.",
+        )
+    _user_jobs[user_id] = _user_jobs.get(user_id, 0) + 1
+
+
+def _leave_user(user_id: int | None) -> None:
+    if user_id is None:
+        return
+    remaining = _user_jobs.get(user_id, 0) - 1
+    if remaining > 0:
+        _user_jobs[user_id] = remaining
+    else:
+        _user_jobs.pop(user_id, None)
+
+
+async def _job_owner(
+    authorization: str | None = Header(default=None),
+    x_service_token: str | None = Header(default=None),
+):
+    """Dependance : authentifie l'appelant et lui compte un job le temps de la requete."""
+    user_id = _authenticate(authorization, x_service_token)
+    _enter_user(user_id)
+    try:
+        yield user_id
+    finally:
+        _leave_user(user_id)
+
+
+async def _run_pipeline(initial_state: dict) -> dict:
+    """Execute la chaine STT → LLM → TTS quand un creneau se libere."""
+    async with _job_slots:
+        return await pipeline_chain.ainvoke(initial_state)
+
+
 @app.post("/process")
 async def process(
     file: UploadFile = File(...),
@@ -629,8 +684,7 @@ async def process(
     prompt_version: str = Form("v1.1"),
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
-    authorization: str | None = Header(default=None),
-    x_service_token: str | None = Header(default=None),
+    user_id: int | None = Depends(_job_owner),
 ):
     """
     Pipeline complet : audio → transcription → traduction → synthèse vocale.
@@ -647,7 +701,7 @@ async def process(
         print(f"[pipeline] Model alias: {llm_model} → {aliased} (client outdated)", flush=True)
         llm_model = aliased
 
-    audio_bytes = await file.read()
+    audio_bytes = await uploads.read_capped(file)
     filename = file.filename or "audio.mp3"
 
     # ── Reservation des credits (si JWT fourni) ───────────────────────────
@@ -655,7 +709,6 @@ async def process(
     # disponible ne suffit pas, 503 si la Gateway ne repond pas. A la fin, la
     # reservation est remplacee par le debit reel (vraie duree), ou annulee si
     # le job echoue.
-    user_id = _authenticate(authorization, x_service_token)
     hold_id = None
     if user_id is not None:
         estimated_credits = _estimate_credits_from_filesize(
@@ -675,7 +728,7 @@ async def process(
 
     t_total = time.perf_counter()
     try:
-        result = await pipeline_chain.ainvoke(initial_state)
+        result = await _run_pipeline(initial_state)
     except HTTPException:
         # Erreurs déjà formatées par les étapes (garde-fou, TTS guardrail, etc.)
         await _release_credits(hold_id)
@@ -866,6 +919,7 @@ async def _execute_job(
     whisper_model:  str,
     diarize:        bool,
     hold_id:        str | None,
+    user_id:        int | None,
 ) -> None:
     """Executeur de job en background. Met a jour le store a chaque etape."""
     try:
@@ -886,7 +940,7 @@ async def _execute_job(
         # (STT→LLM→TTS), donc on affiche des paliers coherents : 5 → 85 au
         # lancement du pipeline, 90 apres completion, 100 apres consume credits.
         await _jobs.store.update(job_id, progress=15)
-        result = await pipeline_chain.ainvoke(initial_state)
+        result = await _run_pipeline(initial_state)
         await _jobs.store.update(job_id, progress=85)
 
         latency_total_ms = round((time.perf_counter() - t_total) * 1000)
@@ -935,6 +989,8 @@ async def _execute_job(
             import sentry_sdk
             sentry_sdk.capture_exception(e)
         await _jobs.store.update(job_id, status="error", error=f"{type(e).__name__}: {e}")
+    finally:
+        _leave_user(user_id)
 
 
 @app.post("/process-async", status_code=202)
@@ -957,20 +1013,27 @@ async def process_async(
     if llm_model in _LEGACY_MODEL_ALIASES:
         llm_model = _LEGACY_MODEL_ALIASES[llm_model]
 
-    audio_bytes = await file.read()
+    audio_bytes = await uploads.read_capped(file)
     filename    = file.filename or "audio.mp3"
     user_id     = _authenticate(authorization, x_service_token)
 
-    # Reservation des credits (meme logique que /process)
-    hold_id = None
-    if user_id is not None:
-        estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True, with_diarize=diarize)
-        hold_id = await _reserve_credits(user_id, estimated, kind="processing")
+    # Le job survit a la requete : son compteur est libere par _execute_job,
+    # ou ici si le job n'a pas pu etre lance.
+    _enter_user(user_id)
+    try:
+        # Reservation des credits (meme logique que /process)
+        hold_id = None
+        if user_id is not None:
+            estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True, with_diarize=diarize)
+            hold_id = await _reserve_credits(user_id, estimated, kind="processing")
 
-    # Lance le cleanup au premier job (idempotent)
-    await _jobs.store.start_cleanup()
+        # Lance le cleanup au premier job (idempotent)
+        await _jobs.store.start_cleanup()
 
-    job = await _jobs.store.create(user_id=user_id)
+        job = await _jobs.store.create(user_id=user_id)
+    except BaseException:
+        _leave_user(user_id)
+        raise
     asyncio.create_task(_execute_job(
         job_id=job.id,
         audio_bytes=audio_bytes,
@@ -981,6 +1044,7 @@ async def process_async(
         whisper_model=whisper_model,
         diarize=diarize,
         hold_id=hold_id,
+        user_id=user_id,
     ))
     return {"job_id": job.id, "status": "pending"}
 

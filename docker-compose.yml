@@ -127,6 +127,10 @@ services:
       - STT_URL=http://stt:8001
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
+      # Limites de charge : taille d'un fichier, jobs simultanes (serveur / compte)
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
+      - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-8}
+      - MAX_JOBS_PER_USER=${MAX_JOBS_PER_USER:-2}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -164,6 +168,7 @@ services:
       # 10-20x plus rapide qu'un Whisper CPU self-hosted).
       # Laisser 'local' pour utiliser Faster-Whisper self-hosted.
       - STT_BACKEND=${STT_BACKEND:-local}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
       - OPENAI_STT_MODEL=${OPENAI_STT_MODEL:-whisper-1}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # AssemblyAI (diarisation on-demand quand diarize=true)
