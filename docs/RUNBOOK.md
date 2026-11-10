@@ -268,16 +268,31 @@ docker compose up -d --force-recreate gateway pipeline llm tts watcher
 
 ## 6. Backup / Restore
 
-### Backup DB gateway (users)
+### Sauvegarde de la base des comptes et des crédits
+
 ```bash
-docker compose exec gateway python3 -c "
-import sqlite3, json
-c = sqlite3.connect('/app/data/auth.db')
-users = [dict(zip([col[0] for col in c.execute('SELECT * FROM users').description],
-                  row)) for row in c.execute('SELECT * FROM users')]
-print(json.dumps(users, default=str, indent=2))
-" > backup_users_$(date +%Y%m%d).json
+./scripts/backup_db.sh        # copie cohérente à chaud, vérifiée, dans ~/backups/traudio
 ```
+
+À planifier une fois sur le serveur (`crontab -e`) :
+```
+0 3 * * * cd ~/traudio && ./scripts/backup_db.sh >> ~/backups/traudio/backup.log 2>&1
+```
+
+Les copies de plus de 30 jours sont supprimées (`BACKUP_KEEP_DAYS`). Une sauvegarde
+restée sur le serveur ne protège pas d'une panne du serveur : recopier régulièrement
+`~/backups/traudio` ailleurs.
+
+### Restauration
+
+```bash
+gunzip -k ~/backups/traudio/auth_AAAAMMJJ_HHMMSS.db.gz
+docker compose stop gateway
+docker compose cp ~/backups/traudio/auth_AAAAMMJJ_HHMMSS.db gateway:/app/data/auth.db
+docker compose start gateway
+```
+
+Tout ce qui a été créé après la sauvegarde (comptes, débits de crédits) est perdu.
 
 ### Backup MLflow (runs)
 ```bash
