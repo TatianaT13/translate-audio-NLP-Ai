@@ -23,8 +23,9 @@ export default function Cookies() {
       <h3>Cookies strictement nécessaires (sans consentement)</h3>
       <p>Ces cookies sont indispensables au fonctionnement du Service et ne peuvent être désactivés :</p>
       <ul>
-        <li><strong>access_token</strong> — authentification de session, durée : 7 jours</li>
-        <li><strong>refresh_token</strong> (localStorage) — renouvellement du token d&apos;accès, durée : 7 jours</li>
+        <li><strong>access_token</strong> — authentification de session, inaccessible aux scripts de la page (HttpOnly), durée : 15 minutes</li>
+        <li><strong>refresh_token</strong> — renouvellement de la session, inaccessible aux scripts de la page (HttpOnly), durée : 7 jours</li>
+        <li><strong>session</strong> — indique qu&apos;une session est ouverte, sans contenir d&apos;identifiant, durée : 7 jours</li>
         <li><strong>préférences utilisateur</strong> (localStorage) — langue cible, mode de vitesse audio, etc.</li>
       </ul>
 

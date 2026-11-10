@@ -15,7 +15,7 @@ import time
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -105,8 +105,12 @@ async def _lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Pipeline Service", version="1.0.0", lifespan=_lifespan)
+# En production le navigateur passe par le proxy du site (meme origine) : le CORS
+# ne sert qu'en developpement local, ou le site et les services ont des ports
+# differents. Origine explicite obligatoire pour que le cookie de session passe.
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 app.middleware("http")(uploads.reject_oversized_body)
 
@@ -501,8 +505,13 @@ _LEGACY_MODEL_ALIASES = {
 }
 
 
-def _authenticate(authorization: str | None, x_service_token: str | None) -> int | None:
+def _authenticate(
+    authorization: str | None, x_service_token: str | None, session_token: str | None = None,
+) -> int | None:
     """user_id pour un JWT valide, None pour un appel interne (jeton de service).
+
+    Le JWT vient de l'en-tete Authorization (clients d'API) ou du cookie de
+    session pose par la Gateway (navigateur).
 
     Tout autre appel est refuse : sans ce controle, /pipeline etant public,
     n'importe qui pourrait traduire sans compte et sans consommer de credits.
@@ -510,6 +519,8 @@ def _authenticate(authorization: str | None, x_service_token: str | None) -> int
     if _is_service_call(x_service_token):
         return None
     user_id = _decode_user_id(authorization)
+    if user_id is None and session_token:
+        user_id = _decode_user_id(f"Bearer {session_token}")
     if user_id is None:
         raise HTTPException(status_code=401, detail="Authentification requise")
     return user_id
@@ -723,9 +734,10 @@ def _leave_user(user_id: int | None) -> None:
 async def _job_owner(
     authorization: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
 ):
     """Dependance : authentifie l'appelant et lui compte un job le temps de la requete."""
-    user_id = _authenticate(authorization, x_service_token)
+    user_id = _authenticate(authorization, x_service_token, access_token)
     _enter_user(user_id)
     try:
         yield user_id
@@ -1122,6 +1134,7 @@ async def process_async(
     with_tts: bool = Form(True),
     authorization: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
 ):
     """Submit un job async. Retourne un job_id a poller via GET /jobs/{job_id}.
 
@@ -1134,7 +1147,7 @@ async def process_async(
 
     audio_bytes = await uploads.read_capped(file)
     filename    = file.filename or "audio.mp3"
-    user_id     = _authenticate(authorization, x_service_token)
+    user_id     = _authenticate(authorization, x_service_token, access_token)
 
     # Le job survit a la requete : son compteur est libere par _execute_job,
     # ou ici si le job n'a pas pu etre lance.
@@ -1174,9 +1187,10 @@ async def get_job(
     job_id: str,
     authorization: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
 ):
     """Etat d'un job, lisible uniquement par son proprietaire (ou un appel interne)."""
-    caller_id = _authenticate(authorization, x_service_token)
+    caller_id = _authenticate(authorization, x_service_token, access_token)
     job = await _jobs.store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable (expire ou id inconnu)")

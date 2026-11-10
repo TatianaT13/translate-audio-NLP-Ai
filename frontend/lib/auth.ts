@@ -9,26 +9,26 @@ export interface User {
   created_at: string;
 }
 
-// ── Token storage ─────────────────────────────────────────────────────────────
+// ── Session ───────────────────────────────────────────────────────────────────
+// Les jetons vivent dans des cookies HttpOnly posés par la Gateway : le
+// JavaScript de la page ne peut pas les lire, donc un script injecté non plus.
+// Seul le témoin `session` (aucun secret) est lisible ici, pour savoir s'il
+// vaut la peine d'interroger l'API.
 
-export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token");
+function hasSession(): boolean {
+  return typeof document !== "undefined" && /(?:^|;\s*)session=1/.test(document.cookie);
 }
 
-export function setTokens(accessToken: string, refreshToken: string) {
-  localStorage.setItem("access_token", accessToken);
-  localStorage.setItem("refresh_token", refreshToken);
-  // Cookie pour le middleware Next.js — aligné sur le refresh token (7j).
-  // La vraie validation JWT reste faite par le gateway ; le cookie ne sert
-  // qu'à savoir "présence de session" pour l'auth-gate côté SSR/middleware.
-  document.cookie = `access_token=${accessToken}; path=/; max-age=604800; SameSite=Strict`;
+function clearSessionMarker() {
+  document.cookie = "session=; path=/; max-age=0";
 }
 
-export function clearTokens() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  document.cookie = "access_token=; path=/; max-age=0";
+/** Efface les jetons que les anciennes versions du site stockaient dans le navigateur. */
+function dropLegacyTokens() {
+  try {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+  } catch {}
 }
 
 // ── Auth calls ────────────────────────────────────────────────────────────────
@@ -46,9 +46,10 @@ export async function register(email: string, password: string, turnstileToken?:
   return res.json();
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string): Promise<void> {
   const res = await fetch(`${GATEWAY_URL}/auth/login`, {
     method: "POST",
+    credentials: "include",   // la réponse pose les cookies de session
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
@@ -56,112 +57,71 @@ export async function login(email: string, password: string) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Email ou mot de passe incorrect");
   }
-  const data = await res.json();
-  setTokens(data.access_token, data.refresh_token);
-  return data;
+  dropLegacyTokens();
 }
 
 export async function logout() {
-  const refreshToken = localStorage.getItem("refresh_token");
-  const accessToken  = getAccessToken();
-  if (refreshToken && accessToken) {
-    await fetch(`${GATEWAY_URL}/auth/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    }).catch(() => {});
-  }
-  clearTokens();
+  await fetch(`${GATEWAY_URL}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+  dropLegacyTokens();
+  clearSessionMarker();   // même si le serveur n'a pas répondu
 }
 
-let refreshInFlight: Promise<string | null> | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
 
-// Le gateway invalide l'ancien refresh token a chaque rotation : deux refresh
-// simultanes feraient echouer le second, qui effacerait la session. Les appels
-// concurrents partagent donc le meme refresh.
-export function refreshAccessToken(): Promise<string | null> {
+// La Gateway invalide l'ancien refresh token à chaque rotation : deux refresh
+// simultanés feraient échouer le second. Les appels concurrents partagent donc
+// le même refresh.
+export function refreshAccessToken(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = doRefresh().finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
 }
 
-async function doRefresh(): Promise<string | null> {
-  const refreshToken = localStorage.getItem("refresh_token");
-  if (!refreshToken) return null;
-
-  const res = await fetch(`${GATEWAY_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-  if (!res.ok) {
-    // Un autre onglet a pu renouveler la session entre-temps (rotation) : son
-    // jeton est valide, on le reprend au lieu de deconnecter tous les onglets.
-    const current = localStorage.getItem("refresh_token");
-    if (current && current !== refreshToken) return getAccessToken();
-    clearTokens();
-    return null;
+async function doRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/auth/refresh`, { method: "POST", credentials: "include" });
+    return res.ok;
+  } catch {
+    return false;
   }
-  const data = await res.json();
-  setTokens(data.access_token, data.refresh_token);
-  return data.access_token;
 }
 
 export async function getMe(): Promise<User | null> {
-  let token = getAccessToken();
-  if (!token) return null;
-  let res = await fetch(`${GATEWAY_URL}/auth/me`, {
-    headers: { "Authorization": `Bearer ${token}` },
-  });
-  // Access token expiré (JWT 15min) — tente un refresh silencieux avec
-  // le refresh token (7j) avant d'abandonner. Sinon le menu utilisateur
-  // disparaît sans raison visible pour l'user encore actif.
-  if (res.status === 401) {
-    token = await refreshAccessToken();
-    if (!token) return null;
-    res = await fetch(`${GATEWAY_URL}/auth/me`, {
-      headers: { "Authorization": `Bearer ${token}` },
-    });
-  }
+  if (!hasSession()) return null;   // visiteur non connecté : pas d'appel inutile
+  const res = await authFetch(`${GATEWAY_URL}/auth/me`);
   if (!res.ok) return null;
   return res.json();
 }
 
-// Appelle une URL avec Bearer JWT. En cas de 401, refresh silencieux et retry.
-// À utiliser depuis les composants pour tout call vers Gateway ou Pipeline.
+/**
+ * fetch authentifié par les cookies de session. Sur un 401 (access token
+ * expiré, 15 min), renouvelle la session puis rejoue la requête une fois.
+ */
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  let token = getAccessToken();
-  const headers = new Headers(init.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  let res = await fetch(url, { ...init, headers });
-  if (res.status === 401) {
-    token = await refreshAccessToken();
-    if (!token) return res;
-    headers.set("Authorization", `Bearer ${token}`);
-    res = await fetch(url, { ...init, headers });
+  const opts: RequestInit = { ...init, credentials: "include" };
+  let res = await fetch(url, opts);
+  if (res.status === 401 && hasSession()) {
+    const renewed = await refreshAccessToken();
+    // On rejoue même si le refresh a échoué : un autre onglet a pu renouveler
+    // la session entre-temps, et ses cookies sont partagés.
+    res = await fetch(url, opts);
+    if (res.status === 401 && !renewed) clearSessionMarker();   // session terminée
   }
   return res;
 }
 
 export async function changePassword(oldPassword: string, newPassword: string) {
-  const token = getAccessToken();
-  const res = await fetch(`${GATEWAY_URL}/auth/change-password`, {
+  const res = await authFetch(`${GATEWAY_URL}/auth/change-password`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Erreur lors du changement de mot de passe");
   }
-  clearTokens();
+  clearSessionMarker();   // la Gateway a fermé la session : il faut se reconnecter
   return res.json();
 }
 
@@ -214,16 +174,13 @@ export async function resendVerification(): Promise<{ message: string }> {
 }
 
 export async function deleteAccount() {
-  const token = getAccessToken();
-  const res = await fetch(`${GATEWAY_URL}/auth/account`, {
-    method: "DELETE",
-    headers: { "Authorization": `Bearer ${token}` },
-  });
+  const res = await authFetch(`${GATEWAY_URL}/auth/account`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Erreur lors de la suppression du compte");
   }
-  clearTokens();
+  dropLegacyTokens();
+  clearSessionMarker();
 }
 
 // ── Password strength ─────────────────────────────────────────────────────────

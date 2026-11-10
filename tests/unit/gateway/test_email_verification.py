@@ -45,6 +45,7 @@ def _register() -> tuple[str, dict]:
 
 def _login(email: str) -> dict:
     token = client.post("/auth/login", json={"email": email, "password": PASSWORD}).json()["access_token"]
+    client.cookies.clear()      # ces tests s'authentifient par en-tete, pas par cookie de session
     return {"Authorization": f"Bearer {token}"}
 
 

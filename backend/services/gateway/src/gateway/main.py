@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -172,14 +172,43 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 # ── Auth dependency ────────────────────────────────────────────────────────────
 
+# ── Session du navigateur : cookies HttpOnly ─────────────────────────────────
+# Les jetons ne sont plus stockes dans le localStorage du navigateur, ou un
+# script injecte dans la page (XSS) pouvait les lire et emporter la session.
+# HttpOnly les rend invisibles au JavaScript ; SameSite=Lax empeche un autre
+# site de les faire envoyer dans une requete qui modifie des donnees.
+ACCESS_COOKIE, REFRESH_COOKIE, SESSION_COOKIE = "access_token", "refresh_token", "session"
+_COOKIE_SECURE  = APP_BASE_URL.startswith("https://")
+_REFRESH_MAX_AGE = auth_utils.REFRESH_TOKEN_EXPIRE_DAYS * 86400
+
+
+def _set_session_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    common = {"httponly": True, "secure": _COOKIE_SECURE, "samesite": "lax", "path": "/"}
+    response.set_cookie(ACCESS_COOKIE, access_token,
+                        max_age=auth_utils.ACCESS_TOKEN_EXPIRE_MINUTES * 60, **common)
+    response.set_cookie(REFRESH_COOKIE, refresh_token, max_age=_REFRESH_MAX_AGE, **common)
+    # Temoin lisible par le site (aucun secret) : « une session existe », pour
+    # la redirection vers /login et pour ne pas interroger l'API sans session.
+    response.set_cookie(SESSION_COOKIE, "1", max_age=_REFRESH_MAX_AGE,
+                        secure=_COOKIE_SECURE, samesite="lax", path="/")
+
+
+def _clear_session_cookies(response: Response) -> None:
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE, SESSION_COOKIE):
+        response.delete_cookie(name, path="/")
+
+
 def get_current_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer_scheme)],
     db: Session = Depends(get_db),
 ) -> models.User:
-    if not credentials:
+    # En-tete Authorization (clients d'API, tests) ou cookie de session (navigateur)
+    token = credentials.credentials if credentials else request.cookies.get(ACCESS_COOKIE)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Non authentifié")
 
-    payload = auth_utils.decode_access_token(credentials.credentials)
+    payload = auth_utils.decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalide ou expiré")
 
@@ -299,8 +328,8 @@ def resend_verification(
 @app.post("/auth/login", response_model=schemas.TokenResponse,
           dependencies=[Depends(rate_limit("login-min", 10, 60)),
                         Depends(rate_limit("login-hour", 50, 3600))])
-def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Connexion — retourne access_token + refresh_token."""
+def login(body: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)):
+    """Connexion — pose les cookies de session et retourne access_token + refresh_token."""
     user = db.query(models.User).filter(models.User.email == body.email).first()
 
     if not user or not auth_utils.verify_password(body.password, user.hashed_password):
@@ -316,31 +345,52 @@ def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
     db.add(models.RefreshToken(user_id=user.id, token_hash=hash_ref, expires_at=expires))
     db.commit()
 
+    _set_session_cookies(response, access_token, raw_refresh)
     return schemas.TokenResponse(access_token=access_token, refresh_token=raw_refresh)
 
 
 @app.post("/auth/logout")
 def logout(
-    body: schemas.RefreshRequest,
-    current_user: models.User = Depends(get_current_user),
+    request: Request,
+    response: Response,
+    body: schemas.RefreshRequest | None = None,
     db: Session = Depends(get_db),
 ):
-    """Révoquer le refresh token actuel."""
-    token_hash = auth_utils.hash_token(body.refresh_token)
-    rt = db.query(models.RefreshToken).filter(
-        models.RefreshToken.token_hash == token_hash,
-        models.RefreshToken.user_id   == current_user.id,
-    ).first()
-    if rt:
-        rt.revoked = True
-        db.commit()
+    """Révoque le refresh token (cookie ou corps) et efface les cookies de session.
+
+    Sans authentification par access token : on doit pouvoir se déconnecter
+    même quand il a expiré. Le refresh token suffit à désigner la session.
+    """
+    raw = body.refresh_token if body else request.cookies.get(REFRESH_COOKIE)
+    if raw:
+        rt = db.query(models.RefreshToken).filter(
+            models.RefreshToken.token_hash == auth_utils.hash_token(raw),
+        ).first()
+        if rt:
+            rt.revoked = True
+            db.commit()
+    _clear_session_cookies(response)
     return {"message": "Déconnecté"}
 
 
-@app.post("/auth/refresh", response_model=schemas.TokenResponse)
-def refresh(body: schemas.RefreshRequest, db: Session = Depends(get_db)):
-    """Renouveler l'access token via refresh token."""
-    token_hash = auth_utils.hash_token(body.refresh_token)
+@app.post("/auth/refresh")
+def refresh(
+    request: Request,
+    response: Response,
+    body: schemas.RefreshRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    """Renouveler l'access token via refresh token.
+
+    Navigateur : le refresh token vient du cookie, les nouveaux jetons repartent
+    en cookies et ne figurent pas dans la réponse (un script de la page ne doit
+    pas pouvoir les lire). Client d'API : jeton dans le corps, jetons en réponse.
+    """
+    from_cookie = body is None
+    raw = request.cookies.get(REFRESH_COOKIE) if from_cookie else body.refresh_token
+    if not raw:
+        raise HTTPException(status_code=401, detail="Refresh token invalide")
+    token_hash = auth_utils.hash_token(raw)
     rt = db.query(models.RefreshToken).filter(
         models.RefreshToken.token_hash == token_hash,
         models.RefreshToken.revoked    == False,  # noqa: E712
@@ -364,6 +414,9 @@ def refresh(body: schemas.RefreshRequest, db: Session = Depends(get_db)):
     db.add(models.RefreshToken(user_id=user.id, token_hash=hash_ref, expires_at=expires))
     db.commit()
 
+    if from_cookie:
+        _set_session_cookies(response, access_token, raw_refresh)
+        return {"ok": True}
     return schemas.TokenResponse(access_token=access_token, refresh_token=raw_refresh)
 
 
@@ -382,6 +435,7 @@ def me(current_user: models.User = Depends(get_current_user)):
 @app.post("/auth/change-password")
 def change_password(
     body: schemas.ChangePasswordRequest,
+    response: Response,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -397,6 +451,7 @@ def change_password(
     ).update({"revoked": True})
 
     db.commit()
+    _clear_session_cookies(response)
     return {"message": "Mot de passe modifié. Reconnectez-vous."}
 
 
@@ -467,6 +522,7 @@ def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get
 
 @app.delete("/auth/account")
 def delete_account(
+    response: Response,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -475,6 +531,7 @@ def delete_account(
     _delete_user_data(db, current_user.id)
     db.delete(current_user)
     db.commit()
+    _clear_session_cookies(response)
     return {"message": "Compte supprimé définitivement"}
 
 

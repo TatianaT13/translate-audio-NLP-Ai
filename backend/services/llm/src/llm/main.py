@@ -201,7 +201,11 @@ if os.getenv("SENTRY_DSN"):
     )
 
 app = FastAPI(title="LLM Service", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS utile en developpement local seulement (en production : meme origine via le proxy du site)
+app.add_middleware(
+    CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+)
 
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
