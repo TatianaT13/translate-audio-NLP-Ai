@@ -132,6 +132,8 @@ services:
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
       - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-8}
       - MAX_JOBS_PER_USER=${MAX_JOBS_PER_USER:-2}
+      # Jobs async gardes sur disque : ils survivent a un redeploiement
+      - JOBS_DIR=/app/jobs
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -141,6 +143,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+    volumes:
+      - pipeline_jobs:/app/jobs
     depends_on:
       stt:
         condition: service_healthy
@@ -418,6 +422,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  pipeline_jobs:
   whisper_cache:
   tts_models:
   gateway_data:

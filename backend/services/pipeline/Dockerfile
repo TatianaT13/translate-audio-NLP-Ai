@@ -14,6 +14,8 @@ RUN groupadd -r app && useradd -r -g app -u 1000 -m app
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app src/ /app/src/
+# Jobs async persistes (volume) : le dossier doit appartenir a l'utilisateur app
+RUN mkdir -p /app/jobs && chown app:app /app/jobs
 USER app
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH=/app/src \

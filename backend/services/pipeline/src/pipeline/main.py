@@ -8,6 +8,7 @@ GET  /health   : statut + URLs des services aval
 
 import asyncio
 import base64
+import contextlib
 import hmac
 import os
 import time
@@ -89,7 +90,19 @@ if os.getenv("SENTRY_DSN"):
         traces_sample_rate=0.0,
     )
 
-app = FastAPI(title="Pipeline Service", version="1.0.0")
+@contextlib.asynccontextmanager
+async def _lifespan(_: FastAPI):
+    """Au demarrage : rend les credits reserves par les jobs qu'un redemarrage a
+    interrompus (sinon ils resteraient bloques jusqu'a l'expiration de la
+    reservation) et relance l'eviction des jobs expires."""
+    for hold_id in _jobs.store.interrupted_holds:
+        await _release_credits(hold_id)
+    _jobs.store.interrupted_holds.clear()
+    await _jobs.store.start_cleanup()
+    yield
+
+
+app = FastAPI(title="Pipeline Service", version="1.0.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -1030,7 +1043,7 @@ async def process_async(
         # Lance le cleanup au premier job (idempotent)
         await _jobs.store.start_cleanup()
 
-        job = await _jobs.store.create(user_id=user_id)
+        job = await _jobs.store.create(user_id=user_id, hold_id=hold_id)
     except BaseException:
         _leave_user(user_id)
         raise
