@@ -54,6 +54,9 @@ class Job:
     started_at: float | None           = None
     ended_at:   float | None           = None
     hold_id:    str | None             = None       # reservation de credits du job
+    # Etapes deja terminees d'un job en cours (transcription, puis traduction).
+    # En memoire seulement : remplace par result a la fin.
+    partial:    dict[str, Any] | None  = None
 
 
 class JobStore:
@@ -91,6 +94,7 @@ class JobStore:
             return
         meta = asdict(job)
         meta.pop("result")
+        meta.pop("partial")
         try:
             self._write_json(self._meta_path(job.id), meta)
         except OSError as e:
@@ -163,6 +167,7 @@ class JobStore:
         progress: int | None             = None,
         result:   dict[str, Any] | None  = None,
         error:    str | None             = None,
+        partial:  dict[str, Any] | None  = None,
     ) -> None:
         if result is not None and self._dir is not None:
             # Ecrit avant de publier le statut "done" : un client qui poll ne
@@ -188,6 +193,10 @@ class JobStore:
                 job.result = result
             if error is not None:
                 job.error = error
+            if partial is not None:
+                job.partial = partial
+            if status in ("done", "error"):
+                job.partial = None
             if status is not None:
                 self._save_meta(job)
 

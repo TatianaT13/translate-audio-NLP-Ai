@@ -40,10 +40,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check access_token cookie (set by JS after login)
-  const token = request.cookies.get("access_token")?.value;
+  // Témoin de session posé par la Gateway à la connexion (7 jours). La vraie
+  // vérification reste faite par l'API ; ici on évite seulement d'afficher une
+  // page protégée à un visiteur sans session.
+  const session = request.cookies.get("session")?.value;
 
-  if (!token) {
+  if (!session) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

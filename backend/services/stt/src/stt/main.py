@@ -4,6 +4,7 @@ POST /transcribe  : audio file -> texte transcrit
 GET  /health      : statut du service
 """
 
+import asyncio
 import os
 import subprocess
 import tempfile
@@ -17,7 +18,7 @@ from fastapi.responses import JSONResponse
 load_dotenv()
 
 from stt.whisper_service import WhisperService
-from stt import openai_backend, assemblyai_backend
+from stt import backends, groq_backend, openai_backend
 from stt import billing
 from stt import uploads
 from stt.auth import require_caller
@@ -37,7 +38,11 @@ if os.getenv("SENTRY_DSN"):
     )
 
 app = FastAPI(title="STT Service", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS utile en developpement local seulement (en production : meme origine via le proxy du site)
+app.add_middleware(
+    CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+)
 app.middleware("http")(uploads.reject_oversized_body)
 
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -46,8 +51,9 @@ Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose
 _whisper_cache: dict[str, WhisperService] = {}
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "small")
 
-# STT_BACKEND : "local" (Faster-Whisper self-hosted) ou "openai" (Whisper API).
-# openai est 10-20x plus rapide, ~0.006 USD/min, ideal en prod commerciale.
+# STT_BACKEND : "local" (Faster-Whisper self-hosted), "openai" (Whisper API,
+# ~0.006 USD/min) ou "groq" (meme modele Whisper, bien plus rapide et ~9x moins
+# cher, avec repli sur OpenAI en cas d'echec).
 # local reste utile pour la demo LLMOps ou pour minimiser les couts variables
 # a fort volume constant.
 STT_BACKEND = os.getenv("STT_BACKEND", "local").lower()
@@ -112,15 +118,33 @@ def get_whisper(model_name: str) -> WhisperService:
     return _whisper_cache[model_name]
 
 
+def _transcribe_blocking(
+    tmp_in_path: str, tmp_wav_path: str, model: str, language: str, beam_size: int, diarize: bool,
+) -> tuple[dict, str, str]:
+    """Convertit puis transcrit : (resultat, modele utilise, fournisseur)."""
+    convert_audio(tmp_in_path, tmp_wav_path)
+    remote = backends.transcribe_remote(tmp_wav_path, language, diarize, STT_BACKEND)
+    if remote is not None:
+        return remote
+    svc = get_whisper(model)
+    result = svc.transcribe_wav_with_segments(
+        wav_path=tmp_wav_path,
+        language=None if language == "auto" else language,
+        beam_size=beam_size,
+    )
+    return result, model, "local"
+
+
 @app.get("/health")
 async def health():
     """Async pour répondre immédiatement même si le thread pool est saturé
     par les transcriptions Whisper en cours."""
     return {
         "status":        "ok",
-        "backend":       "openai" if (STT_BACKEND == "openai" and openai_backend.is_available()) else "local",
+        "backend":       backends.active(STT_BACKEND),
         "loaded_models": list(_whisper_cache.keys()),
-        "openai_model":  openai_backend.OPENAI_STT_MODEL if STT_BACKEND == "openai" else None,
+        "openai_model":  openai_backend.OPENAI_STT_MODEL if STT_BACKEND in ("openai", "groq") else None,
+        "groq_model":    groq_backend.GROQ_STT_MODEL if STT_BACKEND == "groq" else None,
     }
 
 
@@ -155,49 +179,17 @@ async def transcribe(
     tmp_wav_path = tmp_in_path + ".wav"
 
     try:
-        convert_audio(tmp_in_path, tmp_wav_path)
-
-        # Diarisation demandee → force AssemblyAI (seul backend qui la supporte)
-        if diarize and assemblyai_backend.is_available():
-            result = assemblyai_backend.transcribe_with_assemblyai(
-                audio_path=tmp_wav_path,
-                language=language,
-                diarize=True,
-            )
-            used_model = f"assemblyai/{assemblyai_backend.ASSEMBLYAI_MODEL}"
-        elif STT_BACKEND == "assemblyai" and assemblyai_backend.is_available():
-            # Backend AssemblyAI meme sans diarize (sa transcription est top)
-            result = assemblyai_backend.transcribe_with_assemblyai(
-                audio_path=tmp_wav_path,
-                language=language,
-                diarize=False,
-            )
-            used_model = f"assemblyai/{assemblyai_backend.ASSEMBLYAI_MODEL}"
-        elif STT_BACKEND == "openai" and openai_backend.is_available():
-            result = openai_backend.transcribe_with_openai(
-                audio_path=tmp_wav_path,
-                language=language,
-            )
-            used_model = openai_backend.OPENAI_STT_MODEL
-        else:
-            svc = get_whisper(model)
-            lang_arg = None if language == "auto" else language
-            result = svc.transcribe_wav_with_segments(
-                wav_path=tmp_wav_path,
-                language=lang_arg,
-                beam_size=beam_size,
-            )
-            used_model = model
+        # Conversion et transcription sont bloquantes (ffmpeg, appels HTTP, modele
+        # local) : dans un thread, pour que le service traite plusieurs audios a la fois.
+        result, used_model, backend = await asyncio.to_thread(
+            _transcribe_blocking, tmp_in_path, tmp_wav_path, model, language, beam_size, diarize,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         Path(tmp_in_path).unlink(missing_ok=True)
         Path(tmp_wav_path).unlink(missing_ok=True)
 
-    backend = (
-        "assemblyai" if "assemblyai" in used_model
-        else STT_BACKEND if STT_BACKEND in ("openai",) else "local"
-    )
     if user_id is not None:
         await billing.charge(user_id, result.get("duration") or 0, rate,
                              "meeting_diarization" if diarize else "meeting_transcription",

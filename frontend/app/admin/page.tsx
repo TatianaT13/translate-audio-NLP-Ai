@@ -222,6 +222,7 @@ const SERVICE_LABELS: Record<string, string> = {
   translation_diarized:  "Traduction + intervenants",
   meeting_transcription: "Transcription de réunion",
   meeting_diarization:   "Réunion + intervenants",
+  voice:                 "Voix de synthèse",
   other:                 "Autre",
   total:                 "Total",
 };

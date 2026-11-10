@@ -28,7 +28,7 @@ const PLANS: Plan[] = [
     pricePer: "à vie",
     bullets: [
       "10 crédits offerts à l'inscription (une seule fois)",
-      "Soit environ 5 min de traduction avec voix, ou 20 min de réunion",
+      "Soit environ 10 min de traduction (5 min avec la voix), ou 20 min de réunion",
       "Français vers anglais, espagnol, allemand, ukrainien",
       "Fichiers jusqu'à 25 Mo",
     ],
@@ -41,7 +41,7 @@ const PLANS: Plan[] = [
     pricePer: "par mois",
     bullets: [
       "200 crédits par mois",
-      "Soit environ 100 min de traduction avec voix, ou 6 h 40 de réunion",
+      "Soit environ 200 min de traduction (100 min avec la voix), ou 6 h 40 de réunion",
       "Crédits non utilisés reportés (jusqu'à 400)",
       "Comptes-rendus de réunion, export PDF et SRT",
       "Fichiers jusqu'à 25 Mo",
@@ -187,7 +187,8 @@ export default function TarifsPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", color: "var(--muted)" }}>
               <tbody>
                 {[
-                  ["Traduction audio avec voix de synthèse", "2 crédits / min"],
+                  ["Traduction audio (transcription et traduction)", "1 crédit / min"],
+                  ["Voix de synthèse de la traduction (option)", "+ 1 crédit / min"],
                   ["Transcription de réunion", "0,5 crédit / min"],
                   ["Identification des intervenants (option)", "+ 0,5 crédit / min"],
                   ["Compte-rendu de réunion", "inclus"],
@@ -200,7 +201,9 @@ export default function TarifsPage() {
               </tbody>
             </table>
             <p style={{ fontSize: "12px", color: "var(--muted)", margin: "12px 0 0", lineHeight: 1.6 }}>
-              Les crédits sont décomptés à la durée réelle de l&apos;audio. Les crédits Pro non
+              Les crédits sont décomptés à la durée réelle de l&apos;audio. La voix de synthèse est
+              générée à la demande, quand vous choisissez de l&apos;écouter : 1 crédit par tranche de
+              900 caractères, soit environ une minute de parole. Les crédits Pro non
               utilisés sont reportés au mois suivant, dans la limite de 400.
             </p>
           </div>

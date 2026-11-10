@@ -124,8 +124,31 @@ def grant_trial(db: Session, user_id: int) -> models.UserCredits:
 
 
 # ── Allocation / refill mensuel ──────────────────────────────────────────────
-def apply_tier(db: Session, user_id: int, tier: str, period_resets_at: datetime | None = None) -> models.UserCredits:
-    """Configure les quotas mensuels + alloue tout de suite les credits de la periode.
+def _aware(dt: datetime | None) -> datetime | None:
+    """SQLite relit les dates sans fuseau : on les considere en UTC."""
+    return dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt
+
+
+def allocation_due(db: Session, user_id: int, newly_subscribed: bool) -> bool:
+    """Faut-il crediter l'allocation mensuelle maintenant ?
+
+    Stripe envoie un evenement « abonnement mis a jour » pour bien d'autres
+    raisons qu'un renouvellement (resiliation demandee puis annulee, changement
+    de carte...). Crediter a chacun offrirait des credits a volonte : on ne
+    credite qu'a la souscription, puis une fois la periode de credits ecoulee.
+    """
+    if newly_subscribed:
+        return True
+    resets_at = _aware(_get_or_create(db, user_id).period_resets_at)
+    # 2 jours de marge : l'evenement de renouvellement peut preceder l'echeance
+    return resets_at is None or datetime.now(timezone.utc) >= resets_at - timedelta(days=2)
+
+
+def apply_tier(
+    db: Session, user_id: int, tier: str,
+    period_resets_at: datetime | None = None, allocate: bool = True,
+) -> models.UserCredits:
+    """Configure les quotas mensuels et, si `allocate`, credite la periode en cours.
 
     Appele depuis le webhook Stripe sur customer.subscription.created ou updated.
     Si tier passe de pro -> business, on remet aussi a jour le monthly immediatement.
@@ -139,8 +162,8 @@ def apply_tier(db: Session, user_id: int, tier: str, period_resets_at: datetime 
     row.live_carryover_max       = cfg["live_carryover_max"]
 
     if tier in ("pro", "business"):
-        # Alloue immediatement les credits de la periode en cours
-        allocate_monthly(db, row, tier, period_resets_at=period_resets_at)
+        if allocate:
+            allocate_monthly(db, row, tier, period_resets_at=period_resets_at)
     else:
         # free : pas de monthly, mais garde le reliquat et le trial
         row.period_resets_at = None
@@ -180,11 +203,15 @@ def allocate_monthly(
                 reason=f"tier={tier}",
             )
 
-    # Prochain refill dans ~30 jours (sera resynchronise par le webhook Stripe)
-    if period_resets_at:
-        row.period_resets_at = period_resets_at
+    # Les credits sont mensuels quelle que soit la formule. Mensuel : prochain
+    # refill a l'echeance Stripe. Annuel : l'echeance est dans un an, le refill
+    # suit donc un pas de 30 jours (refill_if_due).
+    now = datetime.now(timezone.utc)
+    period_end = _aware(period_resets_at)
+    if period_end and period_end <= now + timedelta(days=32):
+        row.period_resets_at = period_end
     else:
-        row.period_resets_at = datetime.now(timezone.utc) + timedelta(days=30)
+        row.period_resets_at = now + timedelta(days=30)
 
     # Reset du flag d'alerte quota : nouvelle periode = user peut retre alerte.
     row.low_credits_alerted = False
@@ -389,6 +416,19 @@ def refund(
     )
     db.commit()
     return row
+
+
+def revoke_subscription_credits(db: Session, user_id: int, reason: str) -> int:
+    """Retire les credits apportes par l'abonnement (remboursement apres
+    retractation). On ne retire pas plus que le solde : pas de dette."""
+    row = _get_or_create(db, user_id)
+    revoked = min(row.processing_balance, row.processing_monthly)
+    if revoked > 0:
+        row.processing_balance -= revoked
+        _record_tx(db, user_id, "processing", "withdrawal", amount=-revoked,
+                   balance_after=row.processing_balance, reason=reason)
+    db.commit()
+    return revoked
 
 
 # ── Pondération business ─────────────────────────────────────────────────────

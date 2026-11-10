@@ -64,7 +64,16 @@ def transcribe_with_openai(
     """
     if not OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY manquante — impossible d'utiliser le backend OpenAI STT.")
+    return transcribe_compatible(
+        url=OPENAI_STT_URL, api_key=OPENAI_API_KEY, model=OPENAI_STT_MODEL,
+        audio_path=audio_path, language=language, provider="OpenAI",
+    )
 
+
+def transcribe_compatible(
+    url: str, api_key: str, model: str, audio_path: str, language: str, provider: str,
+) -> dict:
+    """Transcription via une API compatible OpenAI (OpenAI, Groq)."""
     lang = None if language == "auto" else language
 
     upload_path, mime = _fit_upload(audio_path)
@@ -73,7 +82,7 @@ def transcribe_with_openai(
         with open(upload_path, "rb") as f:
             files = {"file": (Path(upload_path).name, f, mime)}
             data: dict[str, str] = {
-                "model":           OPENAI_STT_MODEL,
+                "model":           model,
                 "response_format": "verbose_json",
             }
             if lang:
@@ -81,8 +90,8 @@ def transcribe_with_openai(
 
             with httpx.Client(timeout=600) as client:
                 r = client.post(
-                    OPENAI_STT_URL,
-                    headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                    url,
+                    headers={"Authorization": f"Bearer {api_key}"},
                     files=files,
                     data=data,
                 )
@@ -91,7 +100,7 @@ def transcribe_with_openai(
             Path(upload_path).unlink(missing_ok=True)
 
     if not r.is_success:
-        raise RuntimeError(f"OpenAI STT HTTP {r.status_code}: {r.text[:300]}")
+        raise RuntimeError(f"{provider} STT HTTP {r.status_code}: {r.text[:300]}")
 
     resp = r.json()
 
@@ -102,13 +111,13 @@ def transcribe_with_openai(
             "end":   seg.get("end", 0),
             "text":  seg.get("text", ""),
         }
-        for seg in resp.get("segments", [])
+        for seg in resp.get("segments") or []
     ]
 
     return {
         "text":                 resp.get("text", ""),
         "language":             resp.get("language", lang or "fr"),
-        # OpenAI ne renvoie pas de probabilite → on met 1.0 (certitude assumee)
+        # Ces API ne renvoient pas de probabilite → on met 1.0 (certitude assumee)
         "language_probability": 1.0,
         "duration":             resp.get("duration", 0),
         "segments":             segments,

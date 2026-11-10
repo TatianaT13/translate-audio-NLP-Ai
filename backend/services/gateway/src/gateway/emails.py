@@ -159,6 +159,37 @@ def send_payment_confirmation(to: str, monthly_credits: int) -> None:
     _send(to, subject, _wrap(body), text)
 
 
+def send_renewal_notice(to: str, renewal_date: str) -> None:
+    """Avis avant reconduction d'un abonnement annuel (art. L. 215-1 C. conso.) :
+    la date limite de non-reconduction doit figurer dans un encadre apparent."""
+    subject = f"Votre abonnement annuel sera renouvelé le {renewal_date}"
+    box = (
+        '<div style="border:2px solid #c9a96e;border-radius:10px;padding:16px 20px;margin:20px 0;'
+        'font-size:15px;line-height:1.6;color:#f5efe4;">'
+        f"<strong>Date limite pour ne pas renouveler : {renewal_date}</strong><br>"
+        "Passé cette date, votre abonnement est reconduit pour un an au tarif en vigueur."
+        "</div>"
+    )
+    body = (
+        f"<h1 {_H1}>Votre abonnement arrive à échéance.</h1>"
+        f"<p {_P}>Votre abonnement Pro annuel sera reconduit automatiquement le "
+        f"<strong>{renewal_date}</strong> pour une nouvelle période d'un an.</p>"
+        + box
+        + f"<p {_P}>Si vous ne souhaitez pas le renouveler, vous pouvez le résilier gratuitement et à tout "
+        "moment avant cette date. Il restera actif jusqu'à son terme.</p>"
+        + _button(f"{APP_BASE_URL}/consommation", "Gérer ou résilier mon abonnement")
+        + f"<p {_SM}>Vous n'avez rien à faire si vous souhaitez continuer.</p>"
+    )
+    text = (
+        f"Votre abonnement Pro annuel sera reconduit automatiquement le {renewal_date} pour un an.\n\n"
+        f"*** DATE LIMITE POUR NE PAS RENOUVELER : {renewal_date} ***\n\n"
+        "Si vous ne souhaitez pas le renouveler, vous pouvez le résilier gratuitement avant cette date :\n"
+        f"{APP_BASE_URL}/consommation\n\n"
+        "Vous n'avez rien à faire si vous souhaitez continuer.\n"
+    )
+    _send(to, subject, _wrap(body), text)
+
+
 def send_cancellation_confirmation(to: str, end_date: str | None) -> None:
     """Accuse de reception d'une resiliation, sur support durable (art. L. 215-1-1 C. conso.)."""
     until = f"le <strong>{end_date}</strong>" if end_date else "la fin de la période en cours"

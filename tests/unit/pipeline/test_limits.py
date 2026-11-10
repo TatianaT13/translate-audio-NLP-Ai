@@ -95,8 +95,9 @@ class TestJobsPerUser:
         async def noop(*args, **kwargs):
             return None
 
-        monkeypatch.setattr(main, "_run_pipeline", boom)
+        monkeypatch.setattr(main, "_stt_step", boom)
         monkeypatch.setattr(main, "_release_credits", noop)
+        monkeypatch.setattr(main, "_job_slots", asyncio.Semaphore(8))
         main._enter_user(7)
 
         async def run():

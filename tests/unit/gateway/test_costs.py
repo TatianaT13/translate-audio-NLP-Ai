@@ -29,6 +29,15 @@ class TestUsageCost:
     def test_meeting_chunk_has_only_stt(self):
         assert costs.usage_cost_usd({"seconds": 30, "stt_backend": "openai"}) == pytest.approx(0.003)
 
+    def test_groq_transcription_is_nine_times_cheaper_than_openai(self):
+        groq = costs.usage_cost_usd({"seconds": 600, "stt_backend": "groq"})
+        openai = costs.usage_cost_usd({"seconds": 600, "stt_backend": "openai"})
+        assert groq == pytest.approx(0.0067) and openai / groq == pytest.approx(9, abs=0.1)
+
+    def test_voice_on_demand_costs_only_the_synthesis(self):
+        meta = {"seconds": 0, "stt_backend": "none", "tts_chars": 4500, "tts_backend": "mistral"}
+        assert costs.usage_cost_usd(meta) == pytest.approx(0.072)
+
     def test_unknown_backend_uses_the_highest_rate(self):
         """Ne jamais sous-estimer un coût."""
         unknown = costs.usage_cost_usd({"seconds": 60, "stt_backend": "unknown"})

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getMe } from "@/lib/auth";
+import { getMe, authFetch } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
 import { FooterMinimal } from "@/components/Footer";
@@ -92,11 +92,7 @@ export default function LivePage() {
 
     try {
       // 1) Ephemeral token depuis notre backend (la vraie clé OpenAI reste serveur)
-      const token = localStorage.getItem("access_token");
-      const r = await fetch(`${GATEWAY_URL}/realtime/session`, {
-        method:  "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const r = await authFetch(`${GATEWAY_URL}/realtime/session`, { method: "POST" });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.detail || `Session HTTP ${r.status}`);

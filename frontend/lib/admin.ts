@@ -1,4 +1,4 @@
-import { getAccessToken, refreshAccessToken } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8004";
 
@@ -55,24 +55,12 @@ export interface LangfuseMetrics {
   model_stats:       LangfuseModelStat[];
 }
 
-async function authHeaders(): Promise<HeadersInit> {
-  let token = getAccessToken();
-  if (!token) token = await refreshAccessToken();
-  return token ? { "Authorization": `Bearer ${token}` } : {};
-}
-
-async function apiFetch<T>(path: string, init?: RequestInit, _retried = false): Promise<T> {
-  const headers = await authHeaders();
-  const res = await fetch(`${GATEWAY_URL}${path}`, {
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // authFetch : cookies de session, renouvellement automatique sur 401
+  const res = await authFetch(`${GATEWAY_URL}${path}`, {
     ...init,
-    headers: { ...headers, "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
-
-  // Token expiré → refresh + retry une fois
-  if (res.status === 401 && !_retried) {
-    const newToken = await refreshAccessToken();
-    if (newToken) return apiFetch<T>(path, init, true);
-  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -171,10 +159,9 @@ export const getServicesHealth = () =>
 // desactivation du service watcher (v0.2 — mise en production commerciale).
 
 export async function synthesizeTTS(text: string, lang: string): Promise<Blob> {
-  const headers = await authHeaders();
-  const res = await fetch(`${GATEWAY_URL}/admin/tts`, {
+  const res = await authFetch(`${GATEWAY_URL}/admin/tts`, {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, lang }),
   });
   if (!res.ok) throw new Error(`TTS erreur ${res.status}`);

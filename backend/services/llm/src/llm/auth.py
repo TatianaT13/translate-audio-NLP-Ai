@@ -2,7 +2,7 @@
 import hmac
 import os
 
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException
 from jose import JWTError, jwt
 
 JWT_SECRET    = os.getenv("JWT_SECRET", "")
@@ -18,14 +18,23 @@ def _is_service(x_service_token: str | None) -> bool:
 def require_caller(
     authorization: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
 ) -> int | None:
-    """user_id pour un JWT valide, None pour un appel interne ; sinon 401."""
+    """user_id pour un JWT valide, None pour un appel interne ; sinon 401.
+
+    Le JWT vient de l'en-tete Authorization (clients d'API) ou du cookie de
+    session pose par la Gateway (navigateur).
+    """
     if _is_service(x_service_token):
         return None
-    if JWT_SECRET and authorization and authorization.startswith("Bearer "):
+    tokens = [access_token]
+    if authorization and authorization.startswith("Bearer "):
+        tokens.insert(0, authorization.removeprefix("Bearer ").strip())
+    for token in tokens:
+        if not (JWT_SECRET and token):
+            continue
         try:
-            payload = jwt.decode(authorization.removeprefix("Bearer ").strip(), JWT_SECRET, algorithms=["HS256"])
-            return int(payload["sub"])
+            return int(jwt.decode(token, JWT_SECRET, algorithms=["HS256"])["sub"])
         except (JWTError, KeyError, ValueError):
             pass
     raise HTTPException(status_code=401, detail="Authentification requise")
