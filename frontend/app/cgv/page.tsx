@@ -4,7 +4,7 @@ export const metadata = { title: "Conditions générales de vente — traduction
 
 export default function CGV() {
   return (
-    <LegalLayout title="Conditions générales de vente" updated="15 septembre 2026">
+    <LegalLayout title="Conditions générales de vente" updated="10 novembre 2026">
       <p>
         Les présentes Conditions générales de vente (« <strong>CGV</strong> ») régissent la
         souscription aux offres payantes proposées par <strong>Tetyana Tarasenko</strong>,
@@ -93,18 +93,19 @@ export default function CGV() {
         Conformément aux articles L. 611-1 et suivants du Code de la consommation, tout consommateur
         a le droit de recourir gratuitement à un médiateur de la consommation en vue de la résolution
         amiable de tout litige. En cas d&apos;échec d&apos;une réclamation formulée par écrit auprès
-        de l&apos;éditeur, le consommateur peut également saisir la plateforme européenne de
-        règlement en ligne des litiges :
-        {" "}
-        <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
-          ec.europa.eu/consumers/odr
-        </a>.
+        de l&apos;éditeur, le consommateur peut saisir gratuitement le médiateur de la consommation
+        auquel l&apos;éditeur a adhéré :
       </p>
-      <p style={{ fontSize: "12px", opacity: 0.7 }}>
-        <em>
-          Note : l&apos;adhésion à un service de médiation de la consommation agréé sera indiquée
-          ici dès qu&apos;elle sera effective.
-        </em>
+      <p style={{ paddingLeft: "16px", borderLeft: "2px solid var(--accent-dim)" }}>
+        <strong>Centre de la Médiation de la Consommation de Conciliateurs de Justice (CM2C)</strong><br />
+        49 rue de Ponthieu, 75008 Paris<br />
+        Site web :{" "}
+        <a href="https://cm2c.net" target="_blank" rel="noopener noreferrer">cm2c.net</a>
+        {" "}·{" "}
+        Formulaire de saisine :{" "}
+        <a href="https://cm2c.net/declarer-un-litige.php" target="_blank" rel="noopener noreferrer">
+          cm2c.net/declarer-un-litige.php
+        </a>
       </p>
 
       <h2>11. Droit applicable et juridiction</h2>
