@@ -258,6 +258,7 @@ function DropdownMenu({ user, onNavigate, onChangePwd, onDelete, onLogout }: Dro
     { type: "separator" },
     ...(user.is_admin ? [{ type: "link" as const, label: "Admin",       href: "/admin",     Icon: AdminIcon }] : []),
     { type: "link",   label: "Tarifs & abonnement",     href: "/tarifs",    Icon: CardIcon },
+    { type: "link",   label: "Mon historique",          href: "/historique", Icon: DocumentIcon },
     { type: "link",   label: "Ma consommation",         href: "/consommation", Icon: CardIcon },
     { type: "separator" },
     { type: "action", label: "Changer le mot de passe", onClick: onChangePwd, Icon: KeyIcon },
