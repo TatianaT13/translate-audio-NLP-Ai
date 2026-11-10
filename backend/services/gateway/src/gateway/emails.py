@@ -145,8 +145,8 @@ def send_payment_confirmation(to: str, monthly_credits: int) -> None:
         f"{monthly_credits} crédits sont alloués chaque mois, avec report des crédits non utilisés "
         "dans la limite du plafond.</p>"
         + _button(f"{APP_BASE_URL}/translate", "Utiliser mes crédits")
-        + f"<p {_SM}>Pour changer de carte ou résilier, rendez-vous sur "
-        f'<a href="{APP_BASE_URL}/tarifs" style="color:#c9a96e;">la page Tarifs</a>. '
+        + f"<p {_SM}>Vous pouvez résilier à tout moment depuis "
+        f'<a href="{APP_BASE_URL}/consommation" style="color:#c9a96e;">Ma consommation</a>. '
         "Votre facture vous est envoyée séparément par Stripe.</p>"
     )
     text = (
@@ -154,7 +154,30 @@ def send_payment_confirmation(to: str, monthly_credits: int) -> None:
         f"Votre abonnement Pro est actif : {monthly_credits} crédits par mois, avec report "
         "des crédits non utilisés dans la limite du plafond.\n\n"
         f"Utiliser mes crédits : {APP_BASE_URL}/translate\n"
-        f"Gérer mon abonnement : {APP_BASE_URL}/tarifs\n"
+        f"Résilier à tout moment : {APP_BASE_URL}/consommation\n"
+    )
+    _send(to, subject, _wrap(body), text)
+
+
+def send_cancellation_confirmation(to: str, end_date: str | None) -> None:
+    """Accuse de reception d'une resiliation, sur support durable (art. L. 215-1-1 C. conso.)."""
+    until = f"le <strong>{end_date}</strong>" if end_date else "la fin de la période en cours"
+    until_txt = f"le {end_date}" if end_date else "la fin de la période en cours"
+    subject = "Résiliation de votre abonnement Pro enregistrée"
+    body = (
+        f"<h1 {_H1}>Résiliation enregistrée.</h1>"
+        f"<p {_P}>Nous avons bien reçu votre demande de résiliation. Votre abonnement Pro reste actif "
+        f"jusqu'à {until}, puis s'arrête : aucun nouveau prélèvement ne sera effectué.</p>"
+        f"<p {_P}>Les crédits qu'il vous restera à cette date restent utilisables.</p>"
+        + _button(f"{APP_BASE_URL}/consommation", "Voir mon abonnement")
+        + f"<p {_SM}>Vous avez changé d'avis ? Vous pouvez reprendre votre abonnement depuis la même page "
+        "tant qu'il n'est pas arrivé à son terme.</p>"
+    )
+    text = (
+        "Résiliation enregistrée.\n\n"
+        f"Votre abonnement Pro reste actif jusqu'à {until_txt}, puis s'arrête : aucun nouveau "
+        "prélèvement ne sera effectué. Les crédits restants à cette date restent utilisables.\n\n"
+        f"Voir mon abonnement : {APP_BASE_URL}/consommation\n"
     )
     _send(to, subject, _wrap(body), text)
 

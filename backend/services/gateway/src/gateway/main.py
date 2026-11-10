@@ -55,6 +55,11 @@ def _run_lightweight_migrations() -> None:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
 
+    if "cancel_at_period_end" not in existing_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN cancel_at_period_end BOOLEAN DEFAULT 0 NOT NULL"))
+            print("[gateway] migration : ajout colonne users.cancel_at_period_end", flush=True)
+
     # Verification d'email (ajoute 2026-11) : les comptes existants sont consideres verifies
     if "email_verified" not in existing_cols:
         with engine.begin() as conn:
@@ -460,6 +465,7 @@ def delete_account(
     db: Session = Depends(get_db),
 ):
     """Supprimer définitivement le compte et toutes ses données."""
+    _billing.cancel_subscriptions_now(current_user)   # sinon le client resterait preleve
     _delete_user_data(db, current_user.id)
     db.delete(current_user)
     db.commit()
@@ -629,6 +635,7 @@ def admin_delete_user(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    _billing.cancel_subscriptions_now(user)
     _delete_user_data(db, user_id)
     db.delete(user)
     db.commit()

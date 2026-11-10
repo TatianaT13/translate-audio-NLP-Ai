@@ -24,6 +24,32 @@ export async function getCredits(): Promise<CreditsState | null> {
   return res.json();
 }
 
+export interface SubscriptionState {
+  tier:                 string;
+  status:               string | null;
+  current_period_end:   string | null;
+  /** Résiliation demandée : actif jusqu'à current_period_end, puis arrêt. */
+  cancel_at_period_end: boolean;
+}
+
+export async function getSubscription(): Promise<SubscriptionState | null> {
+  const res = await authFetch(`${GATEWAY_URL}/billing/subscription`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function changeSubscription(action: "cancel" | "resume"): Promise<SubscriptionState> {
+  const res = await authFetch(`${GATEWAY_URL}/billing/${action}`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Opération impossible. Réessayez dans quelques instants.");
+  }
+  return res.json();
+}
+
+export const cancelSubscription = () => changeSubscription("cancel");
+export const resumeSubscription = () => changeSubscription("resume");
+
 export interface CreditTransaction {
   date:          string | null;
   op:            string;

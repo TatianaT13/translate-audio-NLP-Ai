@@ -457,6 +457,7 @@ function DeleteAccountModal({ onClose, onDeleted }: { onClose: () => void; onDel
         </h2>
         <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "24px", lineHeight: 1.6 }}>
           Cette action est irréversible. Toutes vos données seront supprimées définitivement.
+          Si vous avez un abonnement, il est résilié immédiatement et la période en cours n&apos;est pas remboursée.
         </p>
         <div style={{ display: "flex", gap: "10px" }}>
           <button onClick={onClose} style={{

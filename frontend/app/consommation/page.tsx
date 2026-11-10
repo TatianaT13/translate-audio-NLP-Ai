@@ -6,18 +6,21 @@ import { AppHeader } from "@/components/AppHeader";
 import { FooterMinimal } from "@/components/Footer";
 import {
   getCredits, getTransactions, describeTransaction, getDailyUsage, formatDuration, SERVICE_LABEL,
-  type CreditsState, type CreditTransaction, type DailyUsage,
+  getSubscription, cancelSubscription, resumeSubscription,
+  type CreditsState, type CreditTransaction, type DailyUsage, type SubscriptionState,
 } from "@/lib/credits";
 
 export default function ConsommationPage() {
   const [credits, setCredits] = useState<CreditsState | null>(null);
   const [rows, setRows]       = useState<CreditTransaction[] | null>(null);
   const [usage, setUsage]     = useState<DailyUsage[] | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
 
   useEffect(() => {
     getCredits().then(setCredits).catch(() => {});
     getTransactions().then(setRows).catch(() => setRows([]));
     getDailyUsage().then(setUsage).catch(() => setUsage([]));
+    getSubscription().then(setSubscription).catch(() => {});
   }, []);
 
   const fmtDate = (iso: string | null) =>
@@ -45,7 +48,7 @@ export default function ConsommationPage() {
                 {credits.tier === "free"
                   ? "Offre Découverte"
                   : `Offre Pro · ${credits.processing.monthly} crédits par mois`}
-                {credits.period_resets_at && credits.tier !== "free" &&
+                {credits.period_resets_at && credits.tier !== "free" && !subscription?.cancel_at_period_end &&
                   ` · prochaine recharge le ${new Date(credits.period_resets_at).toLocaleDateString("fr-FR")}`}
               </div>
             </div>
@@ -53,6 +56,10 @@ export default function ConsommationPage() {
               {credits.tier === "free" ? "Passer à Pro" : "Voir les tarifs"}
             </Link>
           </div>
+        )}
+
+        {subscription && subscription.tier !== "free" && (
+          <SubscriptionPanel subscription={subscription} onChange={setSubscription} />
         )}
 
         <h2 style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 12px" }}>
@@ -123,5 +130,90 @@ export default function ConsommationPage() {
       </main>
       <FooterMinimal />
     </>
+  );
+}
+
+// ── Abonnement : résiliation en ligne (art. L. 215-1-1 du Code de la consommation) ──
+
+function SubscriptionPanel({ subscription, onChange }: {
+  subscription: SubscriptionState;
+  onChange: (s: SubscriptionState) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy]             = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+
+  const end = subscription.current_period_end
+    ? new Date(subscription.current_period_end).toLocaleDateString("fr-FR")
+    : null;
+
+  const run = async (action: () => Promise<SubscriptionState>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await action());
+      setConfirming(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Opération impossible");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const box: React.CSSProperties = {
+    padding: "18px 24px", borderRadius: "16px", marginBottom: "32px",
+    background: "var(--surface)", border: "1px solid var(--border)", fontSize: "13px", lineHeight: 1.6,
+  };
+  const action: React.CSSProperties = {
+    background: "none", border: "none", padding: 0, font: "inherit", fontSize: "13px",
+    cursor: busy ? "wait" : "pointer", textDecoration: "underline",
+  };
+
+  return (
+    <div style={box}>
+      <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", marginBottom: "6px" }}>
+        Mon abonnement
+      </div>
+
+      {subscription.cancel_at_period_end ? (
+        <>
+          <p style={{ color: "var(--foreground)", margin: "0 0 10px" }}>
+            Résiliation enregistrée. Votre abonnement Pro reste actif{end ? ` jusqu'au ${end}` : " jusqu'à la fin de la période en cours"},
+            puis s&apos;arrête : aucun nouveau prélèvement ne sera effectué. Vos crédits restants resteront utilisables.
+          </p>
+          <button onClick={() => run(resumeSubscription)} disabled={busy} style={{ ...action, color: "var(--accent)" }}>
+            Reprendre mon abonnement
+          </button>
+        </>
+      ) : confirming ? (
+        <>
+          <p style={{ color: "var(--foreground)", margin: "0 0 4px" }}>Vous allez résilier votre abonnement Pro.</p>
+          <ul style={{ color: "var(--muted)", margin: "0 0 14px", paddingLeft: "18px" }}>
+            <li>Il reste actif{end ? ` jusqu'au ${end}` : " jusqu'à la fin de la période déjà payée"}.</li>
+            <li>Aucun nouveau prélèvement ne sera effectué ensuite.</li>
+            <li>La période en cours n&apos;est pas remboursée ; vos crédits restants resteront utilisables.</li>
+          </ul>
+          <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+            <button onClick={() => run(cancelSubscription)} disabled={busy} style={{ ...action, color: "#e87070" }}>
+              {busy ? "Résiliation…" : "Confirmer la résiliation"}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={busy} style={{ ...action, color: "var(--muted)" }}>
+              Garder mon abonnement
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={{ color: "var(--muted)", margin: "0 0 10px" }}>
+            Offre Pro{end ? ` · prochain renouvellement le ${end}` : ""}. Sans engagement.
+          </p>
+          <button onClick={() => setConfirming(true)} style={{ ...action, color: "var(--muted)" }}>
+            Résilier mon abonnement
+          </button>
+        </>
+      )}
+
+      {error && <p style={{ color: "#e87070", margin: "10px 0 0" }}>{error}</p>}
+    </div>
   );
 }
