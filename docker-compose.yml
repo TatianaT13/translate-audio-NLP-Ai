@@ -206,7 +206,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
       - LLM_FALLBACKS=${LLM_FALLBACKS:-openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022}
-      - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+      - PROMPT_VERSION=${PROMPT_VERSION:-v2.0}
       - GATEWAY_URL=http://gateway:8004
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}

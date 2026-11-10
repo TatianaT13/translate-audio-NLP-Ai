@@ -161,8 +161,8 @@ async def _stt_step(state: dict) -> dict:
             )
         else:
             detail = (
-                "Contenu audio suspect détecté. Cette plateforme traduit uniquement "
-                "des messages d'information routière — merci de réessayer avec un audio approprié."
+                "Contenu audio suspect détecté : il ressemble à une instruction adressée au "
+                "modèle plutôt qu'à un contenu à traduire. Merci de réessayer avec un autre audio."
             )
         raise HTTPException(status_code=422, detail=detail)
 
@@ -681,7 +681,7 @@ async def process(
     file: UploadFile = File(...),
     target_lang: str = Form("en"),
     llm_model: str = Form("openai/gpt-4o-mini"),
-    prompt_version: str = Form("v1.1"),
+    prompt_version: str = Form("v2.0"),
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
     user_id: int | None = Depends(_job_owner),
@@ -692,7 +692,7 @@ async def process(
     - **file**          : fichier audio (MP3, WAV, M4A...)
     - **target_lang**   : langue cible (en, uk, es, de)
     - **llm_model**     : modèle LiteLLM (openai/gpt-4o-mini par défaut)
-    - **prompt_version**: version du prompt (v1.0, v1.1, v1.2)
+    - **prompt_version**: version du prompt (v2.0 par défaut, v1.x historiques)
     - **whisper_model** : modèle Whisper (small, large-v3...)
     """
     # Alias auto : redirige les modèles obsolètes / instables vers un modèle stable
@@ -998,7 +998,7 @@ async def process_async(
     file: UploadFile = File(...),
     target_lang: str = Form("en"),
     llm_model: str = Form("openai/gpt-4o-mini"),
-    prompt_version: str = Form("v1.1"),
+    prompt_version: str = Form("v2.0"),
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
     authorization: str | None = Header(default=None),
