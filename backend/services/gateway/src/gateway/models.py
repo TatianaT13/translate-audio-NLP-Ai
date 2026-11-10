@@ -37,6 +37,10 @@ class User(Base):
     # cette date apres une resiliation.
     current_period_end  = Column(DateTime(timezone=True), nullable=True)
 
+    # Resiliation demandee : l'abonnement reste actif jusqu'a current_period_end
+    # puis s'arrete, sans renouvellement.
+    cancel_at_period_end = Column(Boolean, default=False, nullable=False)
+
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

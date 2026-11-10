@@ -75,16 +75,66 @@ def _ensure_customer(user: models.User, db: Session) -> str:
     return customer.id
 
 
+def _period_end_ts(sub: dict) -> int | None:
+    """Fin de la periode en cours. Les versions recentes de l'API Stripe la
+    portent sur les lignes de l'abonnement et plus sur l'abonnement lui-meme."""
+    ts = sub.get("current_period_end")
+    if not ts:
+        items = (sub.get("items") or {}).get("data") or []
+        ts = items[0].get("current_period_end") if items else None
+    return ts
+
+
 def _sync_subscription_state(user: models.User, sub: dict, db: Session) -> None:
     """Met a jour le tier / status / periode fin depuis un objet Subscription Stripe."""
     status_ = sub.get("status")
-    period_end_ts = sub.get("current_period_end")
+    period_end_ts = _period_end_ts(sub)
     period_end = datetime.fromtimestamp(period_end_ts, tz=timezone.utc) if period_end_ts else None
     is_active = status_ in ("active", "trialing")
     user.subscription_tier   = "pro" if is_active else "free"
     user.subscription_status = status_
     user.current_period_end  = period_end
+    user.cancel_at_period_end = bool(sub.get("cancel_at_period_end")) and is_active
     db.commit()
+
+
+# Abonnements encore susceptibles de donner lieu a un prelevement
+_LIVE_STATUSES = ("active", "trialing", "past_due", "unpaid")
+
+
+def _as_dict(obj) -> dict:
+    return obj.to_dict() if hasattr(obj, "to_dict") else dict(obj)
+
+
+def _live_subscriptions(user: models.User) -> list[dict]:
+    """Abonnements Stripe en cours de ce client."""
+    if not user.stripe_customer_id:
+        return []
+    subs = stripe.Subscription.list(customer=user.stripe_customer_id, status="all", limit=20)
+    return [s for s in (_as_dict(s) for s in subs.data) if s.get("status") in _LIVE_STATUSES]
+
+
+def cancel_subscriptions_now(user: models.User) -> int:
+    """Resilie immediatement tout abonnement du compte (suppression du compte).
+
+    Sans cela, un client qui supprime son compte resterait preleve. Si Stripe ne
+    repond pas, on leve une erreur : mieux vaut refuser la suppression que
+    laisser un abonnement actif sans compte pour le resilier.
+    """
+    if not user.stripe_customer_id or not stripe.api_key:
+        return 0
+    try:
+        subs = _live_subscriptions(user)
+        for sub in subs:
+            stripe.Subscription.cancel(sub["id"])
+    except stripe.StripeError as e:
+        print(f"[billing] resiliation impossible pour user {user.id}: {e}", flush=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Votre abonnement n'a pas pu être résilié, le compte n'a donc pas été supprimé. "
+                   "Réessayez dans quelques instants ou contactez le support.",
+        )
+    return len(subs)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -105,6 +155,7 @@ class SubscriptionResponse(BaseModel):
     status:             str | None
     current_period_end: str | None
     stripe_customer_id: str | None
+    cancel_at_period_end: bool = False   # resiliation demandee, actif jusqu'a current_period_end
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -246,7 +297,44 @@ def register_routes(app, get_current_user):
                 if current_user.current_period_end else None
             ),
             stripe_customer_id=current_user.stripe_customer_id,
+            cancel_at_period_end=bool(current_user.cancel_at_period_end),
         )
+
+    def _set_cancel_at_period_end(user: models.User, db: Session, cancel: bool) -> dict:
+        _require_stripe()
+        try:
+            subs = _live_subscriptions(user)
+            if not subs:
+                raise HTTPException(status_code=400, detail="Aucun abonnement en cours.")
+            sub = _as_dict(stripe.Subscription.modify(subs[0]["id"], cancel_at_period_end=cancel))
+        except stripe.StripeError as e:
+            print(f"[billing] modification d'abonnement impossible pour user {user.id}: {e}", flush=True)
+            raise HTTPException(status_code=502, detail="Stripe ne répond pas. Réessayez dans quelques instants.")
+        _sync_subscription_state(user, sub, db)
+        return sub
+
+    @router.post("/cancel", response_model=SubscriptionResponse)
+    def cancel_subscription(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Resilie l'abonnement : il reste actif jusqu'a la fin de la periode payee,
+        puis s'arrete sans nouveau prelevement. Un email confirme la demande."""
+        already = bool(current_user.cancel_at_period_end)
+        _set_cancel_at_period_end(current_user, db, True)
+        if not already:
+            end = current_user.current_period_end
+            emails.send_cancellation_confirmation(current_user.email, end.strftime("%d/%m/%Y") if end else None)
+        return get_subscription(current_user)
+
+    @router.post("/resume", response_model=SubscriptionResponse)
+    def resume_subscription(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Annule une resiliation tant que la periode payee n'est pas terminee."""
+        _set_cancel_at_period_end(current_user, db, False)
+        return get_subscription(current_user)
 
     @router.post("/webhook")
     async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
@@ -300,6 +388,7 @@ def register_routes(app, get_current_user):
         elif event_type == "customer.subscription.deleted":
             user.subscription_tier   = "free"
             user.subscription_status = "canceled"
+            user.cancel_at_period_end = False
             db.commit()
             # Downgrade free : on garde le solde existant (user peut consommer le reliquat)
             try:

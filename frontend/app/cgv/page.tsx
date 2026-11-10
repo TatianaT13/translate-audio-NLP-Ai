@@ -63,8 +63,10 @@ export default function CGV() {
       <p>
         Les abonnements sont conclus pour la durée choisie (mensuelle, annuelle). Ils se renouvellent
         tacitement à échéance, sauf résiliation par l&apos;utilisateur avant la date de renouvellement
-        depuis son espace personnel. La résiliation prend effet à la fin de la période en cours ;
-        aucun remboursement au prorata n&apos;est effectué.
+        depuis son espace personnel (page « Ma consommation », bouton « Résilier mon abonnement »).
+        La résiliation prend effet à la fin de la période en cours ;
+        aucun remboursement au prorata n&apos;est effectué. Les crédits non utilisés à cette date
+        restent utilisables. La suppression du compte entraîne la résiliation immédiate de l&apos;abonnement.
       </p>
 
       <h2>8. Suspension et défaut de paiement</h2>

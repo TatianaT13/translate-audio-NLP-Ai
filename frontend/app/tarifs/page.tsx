@@ -209,7 +209,8 @@ export default function TarifsPage() {
           <div style={{ textAlign: "center", marginTop: "56px", maxWidth: "640px", marginLeft: "auto", marginRight: "auto" }}>
             <p style={{ fontSize: "12px", color: "var(--muted)", lineHeight: 1.6 }}>
               Paiement sécurisé par <strong>Stripe</strong>. Vos données bancaires ne transitent pas
-              par nos serveurs. Résiliation en un clic depuis votre espace personnel.
+              par nos serveurs. Résiliation à tout moment depuis{" "}
+              <a href="/consommation" style={{ color: "var(--accent)", textDecoration: "none" }}>Ma consommation</a>.
               TVA non applicable, art. 293 B du CGI.
             </p>
             <p style={{ fontSize: "12px", color: "var(--muted)", marginTop: "12px" }}>
