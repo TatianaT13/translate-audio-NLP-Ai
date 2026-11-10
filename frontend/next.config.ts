@@ -37,6 +37,11 @@ const nextConfig: NextConfig = {
   // 30 min = couvre un audio de 60 min qui prend ~15 min de pipeline complet.
   experimental: {
     proxyTimeout: 1_800_000, // 30 minutes en ms
+    // Next ne relaie par défaut que les 10 premiers Mo du corps d'une requête
+    // proxyée (rewrites ci-dessus) : au-delà, l'envoi d'un fichier audio échouait
+    // en 500. Aligné sur MAX_UPLOAD_MB (100 Mo) du pipeline, plus une marge pour
+    // l'enveloppe du formulaire.
+    middlewareClientMaxBodySize: "110mb",
   },
 };
 
