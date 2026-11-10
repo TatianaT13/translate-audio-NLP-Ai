@@ -31,6 +31,17 @@ err()   { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; }
 
 START_TIME=$(date +%s)
 
+# 0. Place disque. Chaque déploiement reconstruit les images : sur un disque
+# plein, le build passe mais la base ne peut plus écrire et le site ne
+# redémarre pas. Mieux vaut refuser avant d'avoir arrêté quoi que ce soit.
+readonly MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-10}"
+FREE_GB=$(df -Pk . | awk 'NR==2 {print int($4 / 1024 / 1024)}')
+if [ "$FREE_GB" -lt "$MIN_FREE_GB" ]; then
+    err "Seulement ${FREE_GB} Go libres (minimum : ${MIN_FREE_GB} Go). Déploiement annulé, le site n'a pas été touché."
+    err "Libérer de la place : docker image prune -f && docker builder prune -f"
+    exit 1
+fi
+
 # 1. Pull dernière version
 info "Étape 1/5 — git pull"
 git fetch origin main
@@ -54,6 +65,14 @@ echo ""
 info "Étape 3/5 — docker compose up -d --force-recreate"
 docker compose up -d --force-recreate
 ok "Containers recréés"
+echo ""
+
+# Nettoyage : les images que ce build vient de remplacer n'ont plus de nom et ne
+# servent plus à rien, de même que le cache d'un build fait sans cache. Sans ce
+# nettoyage, chaque déploiement laissait plusieurs Go sur le disque.
+docker image prune -f > /dev/null
+docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
+ok "Anciennes images et cache de construction nettoyés ($(df -Pk . | awk 'NR==2 {print int($4 / 1024 / 1024)}') Go libres)"
 echo ""
 
 # 4. Wait for health
