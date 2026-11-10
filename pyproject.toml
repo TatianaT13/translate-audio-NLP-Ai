@@ -32,6 +32,7 @@ dev = [
     "pytest-mock>=3.12",
     # Deps nécessaires aux tests unitaires cross-service :
     "python-jose[cryptography]>=3.3",  # gateway JWT
+    "cryptography>=42",                # gateway historique chiffre
     "bcrypt>=4.0",                     # gateway password hashing
     "litellm>=1.40",                   # llm service (imports)
     "langchain-core>=0.2",             # pipeline service (imports)

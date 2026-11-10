@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from gateway import auth as auth_utils
 from gateway import emails, models, schemas
-from gateway.database import Base, engine, get_db
+from gateway.database import Base, SessionLocal, engine, get_db
 from gateway.captcha import verify_turnstile
 from gateway.ratelimit import client_ip, rate_limit
 
@@ -460,15 +460,26 @@ def delete_account(
     db: Session = Depends(get_db),
 ):
     """Supprimer définitivement le compte et toutes ses données."""
-    db.query(models.RefreshToken).filter(
-        models.RefreshToken.user_id == current_user.id
-    ).delete()
-    db.query(models.PasswordResetToken).filter(
-        models.PasswordResetToken.user_id == current_user.id
-    ).delete()
+    _delete_user_data(db, current_user.id)
     db.delete(current_user)
     db.commit()
     return {"message": "Compte supprimé définitivement"}
+
+
+def _delete_user_data(db: Session, user_id: int) -> None:
+    """Supprime tout ce qui appartient a un compte (sans commit).
+
+    SQLite n'applique pas les ON DELETE CASCADE ici et peut reattribuer
+    l'identifiant d'un compte supprime : sans ce nettoyage, le compte suivant
+    heriterait du solde de credits et de l'historique de l'ancien.
+    """
+    from gateway import history as _history
+    _history.delete_for_user(db, user_id)
+    for model in (
+        models.CreditHold, models.CreditTransaction, models.UserCredits,
+        models.EmailVerificationToken, models.RefreshToken, models.PasswordResetToken,
+    ):
+        db.query(model).filter(model.user_id == user_id).delete()
 
 
 # ── Admin endpoints ────────────────────────────────────────────────────────────
@@ -618,8 +629,7 @@ def admin_delete_user(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-    db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user_id).delete()
-    db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == user_id).delete()
+    _delete_user_data(db, user_id)
     db.delete(user)
     db.commit()
     return {"message": "Utilisateur supprimé"}
@@ -1165,3 +1175,8 @@ async def realtime_session(current_user: models.User = Depends(get_current_user)
 # ── Stripe billing routes ────────────────────────────────────────────────────
 from gateway import billing as _billing
 _billing.register_routes(app, get_current_user)
+
+from gateway import history as _history
+_history.register_routes(app, get_current_user)
+with SessionLocal() as _db:
+    _history.purge_expired(_db)   # elements arrives a expiration pendant l'arret
