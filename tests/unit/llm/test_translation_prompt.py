@@ -60,3 +60,31 @@ class TestTemperature:
 
     def test_unsupported_parameters_are_dropped_not_fatal(self):
         assert llm_main.litellm.drop_params is True
+
+
+class TestContext:
+    """Le passage est traduit avec ce qui le précède, fourni comme simple référence."""
+
+    def test_context_is_placed_before_the_text_and_marked_as_reference(self):
+        prompt = llm_main.build_prompt("v2.0", "English", "Oui, elle aussi.", "Paul reprend le dossier. Et Marie ?")
+        assert "<context>\nPaul reprend le dossier. Et Marie ?\n</context>" in prompt
+        assert "Do NOT translate it" in prompt
+        assert prompt.index("</context>") < prompt.index("<user_text>\nOui, elle aussi.\n</user_text>")
+
+    def test_no_context_leaves_the_prompt_unchanged(self):
+        assert llm_main.build_prompt("v2.0", "English", "Bonjour.") == \
+               llm_main.PROMPTS["v2.0"].format(lang="English", text="Bonjour.")
+        assert "<context>" not in llm_main.build_prompt("v2.0", "English", "Bonjour.", "   ")
+
+    def test_braces_in_text_or_context_do_not_break_the_prompt(self):
+        prompt = llm_main.build_prompt("v2.0", "English", "Le total est {x}.", "Voir {annexe}.")
+        assert "Le total est {x}." in prompt and "Voir {annexe}." in prompt
+
+    @pytest.mark.parametrize("version", ["v1.0", "v1.1", "v1.2", "v2.0"])
+    def test_every_prompt_version_accepts_a_context(self, version):
+        assert "<context>\nAvant.\n</context>" in llm_main.build_prompt(version, "English", "Après.", "Avant.")
+
+    def test_translate_endpoint_passes_the_context_to_the_model(self):
+        with patch.object(llm_main.litellm, "completion", return_value=_mock_response()) as mock:
+            llm_main.translate(llm_main.TranslateRequest(text="Oui, elle aussi.", context="Et Marie ?"))
+        assert "<context>\nEt Marie ?\n</context>" in mock.call_args.kwargs["messages"][0]["content"]

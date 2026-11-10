@@ -17,9 +17,11 @@ def _rate(env: str, default: str) -> float:
 # USD par minute d'audio transcrite, selon le backend STT utilise.
 STT_USD_PER_MIN = {
     "openai":     _rate("COST_STT_OPENAI_USD_PER_MIN", "0.006"),
+    "groq":       _rate("COST_STT_GROQ_USD_PER_MIN", "0.00067"),   # 0,04 $/h
     # 0,21 $/h (modele le plus cher) + 0,02 $/h de diarisation : hypothese haute
     "assemblyai": _rate("COST_STT_ASSEMBLYAI_USD_PER_MIN", "0.0038"),
     "local":      0.0,  # Whisper self-hosted : cout fixe du serveur, pas a l'usage
+    "none":       0.0,  # debit sans transcription (voix a la demande)
 }
 
 # USD pour 1 000 caracteres synthetises, selon le backend TTS.

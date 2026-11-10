@@ -17,6 +17,8 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from pydantic import BaseModel
 from jose import JWTError, jwt
 from langchain_core.runnables import RunnableLambda
 
@@ -257,12 +259,24 @@ def _split_into_chunks(text: str, max_chars: int = LLM_CHUNK_MAX_CHARS) -> list[
     return chunks
 
 
+# Ce qui precede un passage est fourni au modele comme contexte, sans etre
+# traduit : sans lui, « Oui, lui aussi » est traduit a l'aveugle et un meme
+# terme peut changer d'un passage a l'autre.
+CONTEXT_MAX_CHARS = 600
+
+
+def _contexts(texts: list[str], previous: int) -> list[str]:
+    """Pour chaque passage, la fin des `previous` passages qui le precedent."""
+    return [" ".join(texts[max(0, i - previous):i])[-CONTEXT_MAX_CHARS:] for i in range(len(texts))]
+
+
 async def _translate_chunk(
     client: httpx.AsyncClient,
     text: str,
     target_lang: str,
     llm_model: str,
     prompt_version: str,
+    context: str = "",
 ) -> dict:
     """Traduit un chunk unique via le service LLM. Renvoie le dict de réponse."""
     resp = await client.post(
@@ -270,6 +284,7 @@ async def _translate_chunk(
         headers=_SERVICE_HEADERS,
         json={
             "text": sandbox_user_text(text),
+            "context": sandbox_user_text(context) if context else "",
             "target_lang": target_lang,
             "model": llm_model,
             "prompt_version": prompt_version,
@@ -315,12 +330,17 @@ async def _llm_step(state: dict) -> dict:
         print(f"[pipeline] LLM: {len(source_text)} chars → {len(texts)} appels "
               f"({LLM_CONCURRENCY} en parallèle)", flush=True)
 
+    # Segments d'une conversation : les 2 repliques precedentes. Blocs d'un
+    # texte long : la fin du bloc precedent.
+    contexts = _contexts(texts, previous=2 if has_diarize else 1)
+
     async with httpx.AsyncClient(timeout=300) as client:
         results = await _map_concurrent(
-            lambda text: _translate_chunk(
-                client, text, state["target_lang"], state["llm_model"], state["prompt_version"],
+            lambda item: _translate_chunk(
+                client, item[0], state["target_lang"], state["llm_model"], state["prompt_version"],
+                context=item[1],
             ),
-            texts,
+            list(zip(texts, contexts)),
             LLM_CONCURRENCY,
         )
 
@@ -384,6 +404,10 @@ async def _tts_step(state: dict) -> dict:
     Les audios chunks sont concaténés en un seul buffer côté serveur.
     """
     from datetime import datetime, timezone
+    if not state.get("with_tts", True):
+        # Voix a la demande : generee plus tard par /tts si l'utilisateur l'ecoute
+        return {**state, "audio_b64": "", "audio_content_type": "", "latency_tts_ms": 0,
+                "audio_out_size_kb": 0, "n_tts_chunks": 0}
     t0 = time.perf_counter()
     tts_start_iso = datetime.now(timezone.utc).isoformat()
     translation = state["translation"]
@@ -545,11 +569,24 @@ def _usage_meta(result: dict, duration_sec: float) -> dict:
         "seconds":      round(duration_sec, 1),
         "stt_backend":  result.get("stt_backend") or "unknown",
         "stt_model":    result.get("stt_model"),
-        "tts_chars":    len(result.get("translation") or ""),
+        "tts_chars":    len(result.get("translation") or "") if result.get("audio_b64") else 0,
         # Voxtral renvoie du MP3, le MMS local du WAV
         "tts_backend":  "local" if "wav" in (result.get("audio_content_type") or "") else "mistral",
         "llm_cost_usd": result.get("cost_usd") or 0.0,
     }
+
+
+def _job_charge(result: dict, audio_bytes: int, with_tts: bool, diarize: bool, prefix: str) -> tuple[int, str, dict]:
+    """(credits, motif, usage) du debit d'un job termine, a la duree reelle.
+
+    Bareme (page /tarifs) : traduction 1 credit/min, voix de synthese +1,
+    identification des intervenants +0,5.
+    """
+    duration_sec = _billable_seconds(result, audio_bytes)
+    rate = (2 if with_tts else 1) + (0.5 if diarize else 0)
+    credits = max(1, int((duration_sec / 60) * rate + 0.999))
+    kind = ("audio" if with_tts else "text") + "_translated" + ("_diarized" if diarize else "")
+    return credits, f"{prefix}:{int(duration_sec)}s:{kind}", _usage_meta(result, duration_sec)
 
 
 async def _reserve_credits(user_id: int, amount: int, kind: str = "processing") -> str:
@@ -710,6 +747,7 @@ async def process(
     prompt_version: str = Form("v2.0"),
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
+    with_tts: bool = Form(True),
     user_id: int | None = Depends(_job_owner),
 ):
     """
@@ -738,7 +776,7 @@ async def process(
     hold_id = None
     if user_id is not None:
         estimated_credits = _estimate_credits_from_filesize(
-            len(audio_bytes), with_tts=True, with_diarize=diarize,
+            len(audio_bytes), with_tts=with_tts, with_diarize=diarize,
         )
         hold_id = await _reserve_credits(user_id, estimated_credits, kind="processing")
 
@@ -750,6 +788,7 @@ async def process(
         "prompt_version": prompt_version,
         "whisper_model": whisper_model,
         "diarize": diarize,
+        "with_tts": with_tts,
     }
 
     t_total = time.perf_counter()
@@ -899,14 +938,7 @@ async def process(
 
     # ── Consomme les credits reels (duree audio mesuree par le STT) ──
     if hold_id is not None:
-        duration_sec = _billable_seconds(result, len(audio_bytes))
-        rate = 2 + (0.5 if diarize else 0)  # 2 crédits/min TTS, +0.5 si diarisation
-        credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
-        reason = (
-            f"pipeline_process:{int(duration_sec)}s:"
-            + ("audio_translated_diarized" if diarize else "audio_translated")
-        )
-        await _settle_credits(hold_id, credits_real, reason, _usage_meta(result, duration_sec))
+        await _settle_credits(hold_id, *_job_charge(result, len(audio_bytes), with_tts, diarize, "pipeline_process"))
 
     return {
         "source_text":        result["source_text"],
@@ -946,8 +978,11 @@ async def _execute_job(
     diarize:        bool,
     hold_id:        str | None,
     user_id:        int | None,
+    with_tts:       bool = True,
 ) -> None:
-    """Executeur de job en background. Met a jour le store a chaque etape."""
+    """Executeur de job en background. Publie chaque etape des qu'elle est
+    terminee (job.partial) : le client affiche la transcription, puis la
+    traduction, sans attendre la fin."""
     try:
         await _jobs.store.update(job_id, status="running", progress=5)
 
@@ -959,28 +994,38 @@ async def _execute_job(
             "prompt_version": prompt_version,
             "whisper_model":  whisper_model,
             "diarize":        diarize,
+            "with_tts":       with_tts,
         }
         t_total = time.perf_counter()
 
-        # On ne peut pas trivialement observer la progression intra-chain
-        # (STT→LLM→TTS), donc on affiche des paliers coherents : 5 → 85 au
-        # lancement du pipeline, 90 apres completion, 100 apres consume credits.
-        await _jobs.store.update(job_id, progress=15)
-        result = await _run_pipeline(initial_state)
-        await _jobs.store.update(job_id, progress=85)
+        await _jobs.store.update(job_id, progress=10)
+        async with _job_slots:   # un creneau du serveur pour toute la duree du job
+            state = await _stt_step(initial_state)
+            partial = {
+                "source_text":   state["source_text"],
+                "language":      state["language"],
+                "language_prob": state["language_prob"],
+            }
+            await _jobs.store.update(job_id, progress=50, partial=partial)
+
+            state = await _llm_step(state)
+            partial = {
+                **partial,
+                "translation":          state["translation"],
+                "translation_segments": state.get("translation_segments"),
+                "speakers":             state.get("stt_speakers"),
+            }
+            await _jobs.store.update(job_id, progress=85 if with_tts else 95, partial=partial)
+
+            result = await _tts_step(state)
 
         latency_total_ms = round((time.perf_counter() - t_total) * 1000)
 
         # Consomme les credits reels (meme logique que /process)
         if hold_id is not None:
-            duration_sec = _billable_seconds(result, len(audio_bytes))
-            rate = 2 + (0.5 if diarize else 0)
-            credits_real = max(1, int((duration_sec / 60) * rate + 0.999))
-            reason = (
-                f"pipeline_process_async:{int(duration_sec)}s:"
-                + ("audio_translated_diarized" if diarize else "audio_translated")
+            await _settle_credits(
+                hold_id, *_job_charge(result, len(audio_bytes), with_tts, diarize, "pipeline_process_async"),
             )
-            await _settle_credits(hold_id, credits_real, reason, _usage_meta(result, duration_sec))
             hold_id = None  # regle : ne plus l'annuler si la suite echoue
 
         await _jobs.store.update(job_id, progress=95)
@@ -1019,6 +1064,53 @@ async def _execute_job(
         _leave_user(user_id)
 
 
+# ── Voix a la demande ────────────────────────────────────────────────────────
+# La voix de synthese est le poste le plus couteux d'une traduction : elle n'est
+# generee que si l'utilisateur veut l'ecouter.
+VOICE_CHARS_PER_CREDIT = 900      # environ une minute de parole
+MAX_VOICE_CHARS        = 60_000
+
+
+class VoiceRequest(BaseModel):
+    text:        str
+    target_lang: str = "en"
+
+
+def _voice_credits(chars: int) -> int:
+    return max(1, -(-chars // VOICE_CHARS_PER_CREDIT))   # arrondi superieur
+
+
+@app.post("/tts")
+async def synthesize_voice(req: VoiceRequest, user_id: int | None = Depends(_job_owner)):
+    """Synthese vocale d'une traduction deja obtenue. 1 credit par tranche de
+    900 caracteres (≈ 1 min de parole), debite seulement si l'audio est produit."""
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Le texte est vide.")
+    if len(text) > MAX_VOICE_CHARS:
+        raise HTTPException(status_code=413, detail="Texte trop long pour la synthèse vocale.")
+
+    credits = _voice_credits(len(text))
+    hold_id = await _reserve_credits(user_id, credits) if user_id is not None else None
+    try:
+        async with _job_slots:
+            out = await _tts_step({"translation": text, "target_lang": req.target_lang})
+    except HTTPException:
+        await _release_credits(hold_id)
+        raise
+    except Exception as e:
+        await _release_credits(hold_id)
+        print(f"[pipeline] /tts en erreur : {e!r}", flush=True)
+        raise HTTPException(status_code=502, detail="La synthèse vocale a échoué. Aucun crédit n'a été débité.")
+
+    if hold_id is not None:
+        await _settle_credits(hold_id, credits, f"voice:{len(text)}c", {
+            "seconds": 0, "stt_backend": "none", "tts_chars": len(text),
+            "tts_backend": "local" if "wav" in out["audio_content_type"] else "mistral",
+        })
+    return Response(content=base64.b64decode(out["audio_b64"]), media_type=out["audio_content_type"])
+
+
 @app.post("/process-async", status_code=202)
 async def process_async(
     file: UploadFile = File(...),
@@ -1027,6 +1119,7 @@ async def process_async(
     prompt_version: str = Form("v2.0"),
     whisper_model: str = Form("small"),
     diarize: bool = Form(False),
+    with_tts: bool = Form(True),
     authorization: str | None = Header(default=None),
     x_service_token: str | None = Header(default=None),
 ):
@@ -1050,7 +1143,7 @@ async def process_async(
         # Reservation des credits (meme logique que /process)
         hold_id = None
         if user_id is not None:
-            estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=True, with_diarize=diarize)
+            estimated = _estimate_credits_from_filesize(len(audio_bytes), with_tts=with_tts, with_diarize=diarize)
             hold_id = await _reserve_credits(user_id, estimated, kind="processing")
 
         # Lance le cleanup au premier job (idempotent)
@@ -1071,6 +1164,7 @@ async def process_async(
         diarize=diarize,
         hold_id=hold_id,
         user_id=user_id,
+        with_tts=with_tts,
     ))
     return {"job_id": job.id, "status": "pending"}
 
@@ -1094,6 +1188,8 @@ async def get_job(
         "status":   job.status,
         "progress": job.progress,
     }
+    if job.status == "running" and job.partial:
+        response["partial"] = job.partial   # transcription puis traduction, des qu'elles sont pretes
     if job.status == "done" and job.result:
         response["result"] = job.result
     if job.status == "error" and job.error:

@@ -255,6 +255,8 @@ def service_of(reason: str) -> str:
         return "meeting_transcription"
     if reason.startswith("pipeline_process"):
         return "translation_diarized" if "diarized" in reason else "translation"
+    if reason.startswith("voice"):
+        return "voice"
     return "other"
 
 

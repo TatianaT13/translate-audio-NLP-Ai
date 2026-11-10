@@ -74,8 +74,10 @@ class TestMapConcurrent:
         assert asyncio.run(main._map_concurrent(fn, [], limit=3)) == []
 
 
-def _fake_translate(delays: dict[str, float] | None = None):
-    async def translate(client, text, target_lang, llm_model, prompt_version):
+def _fake_translate(delays: dict[str, float] | None = None, seen: dict[str, str] | None = None):
+    async def translate(client, text, target_lang, llm_model, prompt_version, context=""):
+        if seen is not None:
+            seen[text] = context
         await asyncio.sleep((delays or {}).get(text, 0))
         return {"translation": f"EN({text})", "prompt_tokens": 10, "completion_tokens": 5,
                 "total_tokens": 15, "cost_usd": 0.001}
@@ -122,6 +124,39 @@ class TestLlmStep:
         ]
         assert out["translation"] == "EN(Bonjour à tous.) EN(Merci, on commence.)"
         assert out["total_tokens"] == 30
+
+
+class TestTranslationContext:
+    """Chaque passage est traduit avec ce qui le précède pour contexte."""
+
+    def test_meeting_segments_get_the_two_previous_lines(self, monkeypatch):
+        seen: dict[str, str] = {}
+        monkeypatch.setattr(main, "_translate_chunk", _fake_translate(seen=seen))
+        segments = [
+            {"speaker": "A", "text": "Paul reprend le dossier Durand."},
+            {"speaker": "B", "text": "Et Marie ?"},
+            {"speaker": "A", "text": "Oui, elle aussi."},
+            {"speaker": "B", "text": "Parfait."},
+        ]
+        source = " ".join(s["text"] for s in segments)
+        asyncio.run(main._llm_step(_state(source_text=source, diarize=True, stt_segments=segments)))
+
+        assert seen["Paul reprend le dossier Durand."] == ""                       # rien avant
+        assert seen["Oui, elle aussi."] == "Paul reprend le dossier Durand. Et Marie ?"
+        assert seen["Parfait."] == "Et Marie ? Oui, elle aussi."                    # 2 répliques, pas plus
+
+    def test_long_text_chunks_get_the_end_of_the_previous_chunk(self, monkeypatch):
+        seen: dict[str, str] = {}
+        monkeypatch.setattr(main, "LLM_CHUNK_MAX_CHARS", 30)
+        monkeypatch.setattr(main, "_translate_chunk", _fake_translate(seen=seen))
+        source = "Phrase un premier. Phrase deux ok. Phrase trois voilà."
+        chunks = main._split_into_chunks(source, 30)
+        asyncio.run(main._llm_step(_state(source_text=source)))
+        assert [seen[c] for c in chunks] == ["", chunks[0], chunks[1]]
+
+    def test_context_is_capped(self):
+        long = ["x" * 5000, "suite"]
+        assert len(main._contexts(long, previous=1)[1]) == main.CONTEXT_MAX_CHARS
 
 
 class _FakeTts:

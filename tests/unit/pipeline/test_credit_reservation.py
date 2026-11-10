@@ -147,14 +147,19 @@ class TestUsageMeta:
 
     def test_reports_what_the_job_consumed(self):
         result = {"stt_backend": "openai", "stt_model": "whisper-1", "translation": "x" * 3900,
-                  "audio_content_type": "audio/mpeg", "cost_usd": 0.00075}
+                  "audio_b64": "QUJD", "audio_content_type": "audio/mpeg", "cost_usd": 0.00075}
         assert main._usage_meta(result, 312.44) == {
             "seconds": 312.4, "stt_backend": "openai", "stt_model": "whisper-1",
             "tts_chars": 3900, "tts_backend": "mistral", "llm_cost_usd": 0.00075,
         }
 
+    def test_no_voice_generated_means_no_voice_cost(self):
+        """Voix à la demande : sans audio produit, aucun caractère synthétisé à compter."""
+        meta = main._usage_meta({"translation": "x" * 3900, "audio_b64": "", "audio_content_type": ""}, 300)
+        assert meta["tts_chars"] == 0
+
     def test_local_tts_is_detected_from_wav_output(self):
-        meta = main._usage_meta({"translation": "Hello.", "audio_content_type": "audio/wav"}, 5)
+        meta = main._usage_meta({"translation": "Hello.", "audio_b64": "QUJD", "audio_content_type": "audio/wav"}, 5)
         assert meta["tts_backend"] == "local"
         assert meta["stt_backend"] == "unknown"   # la Gateway appliquera le tarif le plus haut
 
