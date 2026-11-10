@@ -2,9 +2,9 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { runPipeline, audioFromBase64, submitPipelineJob, trackJob, ASYNC_SIZE_THRESHOLD } from "@/lib/api";
+import { audioFromBase64, submitPipelineJob, trackJob, synthesizeVoice, voiceCredits } from "@/lib/api";
 import { downloadSRT, segmentsToSrt, downloadPDF } from "@/lib/exports";
-import type { ProcessResult, TranslationSegment } from "@/lib/api";
+import type { ProcessResult, TranslationSegment, PipelineJob } from "@/lib/api";
 import { saveHistory } from "@/lib/history";
 import { getMe, refreshAccessToken } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -259,6 +259,9 @@ interface ResultsViewProps {
   onDownloadTranscript: () => void;
   onDownloadPdf: () => void;
   onDownloadSrt: () => void;
+  onListen: () => void;          // voix à la demande
+  voiceLoading: boolean;
+  voiceError: string | null;
   showCost: boolean;   // cout fournisseur en dollars : reserve a l'admin
 }
 
@@ -323,19 +326,40 @@ function SpeakerSegments({ segments }: { segments: TranslationSegment[] }) {
   );
 }
 
-function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript, onDownloadPdf, onDownloadSrt, showCost }: ResultsViewProps) {
+function ResultsView({ result, audioUrl, langLabel, copied, onCopy, onDownload, onDownloadTranscript, onDownloadPdf, onDownloadSrt, onListen, voiceLoading, voiceError, showCost }: ResultsViewProps) {
   const latencies = [
     { label: "STT",   ms: result.latency_stt_ms,   color: "#7eb8c9" },
     { label: "LLM",   ms: result.latency_llm_ms,   color: "#c9a96e" },
     { label: "TTS",   ms: result.latency_tts_ms,   color: "#9b7ec9" },
     { label: "Total", ms: result.latency_total_ms, color: "var(--muted)" },
-  ];
+  ].filter((l) => l.label !== "TTS" || l.ms > 0);   // pas de voix générée : pas de ligne TTS
+  const credits = voiceCredits(result.translation);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: S.gap24, animation: "fadeUp 0.5s ease forwards" }}>
 
       {/* Ticker mini */}
       <WaveTransform mini />
+
+      {/* Voix à la demande : générée (et décomptée) seulement si on veut l'écouter */}
+      {!audioUrl && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: S.gap12, flexWrap: "wrap",
+          padding: "14px 18px", borderRadius: "16px",
+          background: "var(--surface)", border: "1px solid var(--border)",
+        }}>
+          <button onClick={onListen} disabled={voiceLoading} style={{
+            padding: "10px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 500,
+            cursor: voiceLoading ? "wait" : "pointer",
+            background: "rgba(201,169,110,0.10)", border: "1px solid var(--accent-dim)", color: "var(--accent)",
+          }}>
+            {voiceLoading ? "Génération de la voix…" : "Écouter la traduction"}
+          </button>
+          <span style={{ fontSize: "12px", color: voiceError ? "#e87070" : "var(--muted)" }}>
+            {voiceError ?? `Voix de synthèse · ${credits} crédit${credits > 1 ? "s" : ""}`}
+          </span>
+        </div>
+      )}
 
       {/* Audio player */}
       {audioUrl && (
@@ -576,6 +600,11 @@ export default function Home() {
   } | null>(null);
   const [subStep, setSubStep] = useState<SubStep>(null);
   const [asyncProgress, setAsyncProgress] = useState<number | null>(null);
+  // Étapes déjà terminées du traitement en cours (affichage au fur et à mesure)
+  const [partial, setPartial] = useState<PipelineJob["partial"] | null>(null);
+  // Voix à la demande
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [voiceError, setVoiceError]     = useState<string | null>(null);
   const [errorSuggestion, setErrorSuggestion] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -685,39 +714,23 @@ export default function Home() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    // Estimation grossière des durées de chaque étape en secondes :
-    //   STT ~= 0.3s / seconde d'audio (Whisper large-v3 CPU ~0.4x realtime)
-    //   LLM ~= 3s fixe (petit texte flash trafic)
-    //   TTS ~= 4s fixe (Voxtral)
-    const audioSec  = pendingFile?.durationSec ?? Math.max(10, Math.round(file.size / (16 * 1024)));  // fallback via taille
-    const sttMs     = Math.max(3000, audioSec * 300);
-    const llmDelay  = sttMs;
-    const tsDelay   = llmDelay + 3000;
-    const t1 = setTimeout(() => setSubStep("translating"),  llmDelay);
-    const t2 = setTimeout(() => setSubStep("synthesizing"), tsDelay);
-
+    setVoiceError(null);
     setStep("processing");
     setSubStep("transcribing");
     try {
-      // Gros fichiers → flow async (job_id + polling). Sinon synchrone comme avant.
-      const useAsync = file.size > ASYNC_SIZE_THRESHOLD;
-      let res;
-      if (useAsync) {
-        const { job_id } = await submitPipelineJob(file, {
-          targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
-        });
-        res = await trackJob(job_id, (job) => {
-          setAsyncProgress(job.progress);
-          if (job.progress >= 15 && job.progress < 70) setSubStep("transcribing");
-          else if (job.progress >= 70 && job.progress < 90) setSubStep("translating");
-          else if (job.progress >= 90) setSubStep("synthesizing");
-        }, { signal: ctrl.signal, intervalMs: 2500 });
-        setAsyncProgress(null);
-      } else {
-        res = await runPipeline(file, {
-          targetLang, llmModel, promptVersion, whisperModel, diarize, signal: ctrl.signal,
-        });
-      }
+      // Le traitement est suivi étape par étape : la transcription s'affiche dès
+      // qu'elle est prête, puis la traduction. La voix n'est pas générée ici mais
+      // à la demande (bouton « Écouter la traduction »).
+      const { job_id } = await submitPipelineJob(file, {
+        targetLang, llmModel, promptVersion, whisperModel, diarize, withTts: false, signal: ctrl.signal,
+      });
+      const res = await trackJob(job_id, (job) => {
+        setAsyncProgress(job.progress);
+        if (job.partial) setPartial(job.partial);
+        setSubStep(job.partial?.source_text ? "translating" : "transcribing");
+      }, { signal: ctrl.signal, intervalMs: 1000 });
+      setAsyncProgress(null);
+      setPartial(null);
       setResult(res);
       // Historique : en arrière-plan, sans retarder l'affichage (l'audio n'est pas conservé)
       saveHistory({
@@ -759,10 +772,30 @@ export default function Home() {
       setStep(msg === "Requête annulée" ? "idle" : "error");
       setSubStep(null);
     } finally {
-      clearTimeout(t1); clearTimeout(t2);
+      setAsyncProgress(null);
+      setPartial(null);
       abortRef.current = null;
     }
-  }, [targetLang, llmModel, promptVersion, whisperModel, pendingFile]);
+  }, [targetLang, llmModel, promptVersion, whisperModel, diarize, pendingFile]);
+
+  // ── Voix à la demande ────────────────────────────────────────────────────
+  const listen = useCallback(async () => {
+    if (!result) return;
+    setVoiceLoading(true);
+    setVoiceError(null);
+    try {
+      const blob = await synthesizeVoice(result.translation, targetLang);
+      audioBlobRef.current = blob;
+      setAudioUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      const pe = e as { userMessage?: string; detail?: string; status?: number };
+      setVoiceError(pe.status === 402 || pe.status === 502 || pe.status === 422
+        ? (pe.detail || "La voix n'a pas pu être générée.")
+        : (pe.userMessage || "La voix n'a pas pu être générée."));
+    } finally {
+      setVoiceLoading(false);
+    }
+  }, [result, targetLang]);
 
   const cancelRun = () => {
     abortRef.current?.abort();
@@ -1275,12 +1308,11 @@ ${result.translation}
           <div style={{ textAlign: "center", padding: "48px 0", animation: "fadeUp 0.5s ease forwards" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: S.gap12, marginBottom: S.gap24 }}>
               {([
-                { key: "transcribing",  label: "STT", full: "Transcription (Whisper)" },
-                { key: "translating",   label: "LLM", full: "Traduction (LLM)" },
-                { key: "synthesizing",  label: "TTS", full: "Synthèse vocale (TTS)" },
+                { key: "transcribing",  label: "Transcription", full: "Transcription (Whisper)" },
+                { key: "translating",   label: "Traduction",    full: "Traduction (LLM)" },
               ] as const).map((sw, i, arr) => {
-                const stepOrder = ["transcribing", "translating", "synthesizing"] as const;
-                const currentIdx = subStep ? stepOrder.indexOf(subStep) : -1;
+                const stepOrder = ["transcribing", "translating"] as const;
+                const currentIdx = subStep ? stepOrder.indexOf(subStep as typeof stepOrder[number]) : -1;
                 const isDone     = currentIdx > i;
                 const isActive   = subStep === sw.key;
                 const isPending  = currentIdx < i;
@@ -1328,9 +1360,30 @@ ${result.translation}
                     background: "var(--accent)", transition: "width 0.4s ease",
                   }} />
                 </div>
-                <p style={{ fontSize: "10px", color: "var(--muted)", textAlign: "center", marginTop: "6px" }}>
-                  Gros fichier · {asyncProgress}% · traitement async
+              </div>
+            )}
+            {partial?.source_text && (
+              <div style={{
+                maxWidth: "640px", margin: "0 auto 20px", textAlign: "left", borderRadius: "16px",
+                background: "var(--surface)", border: "1px solid var(--border)", padding: "16px 20px",
+                animation: "fadeUp 0.4s ease forwards",
+              }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>
+                  Transcription
+                </div>
+                <p style={{ fontSize: "14px", lineHeight: 1.7, color: "var(--foreground)", margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
+                  {partial.source_text}
                 </p>
+                {partial.translation && (
+                  <>
+                    <div style={{ fontSize: "10px", letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 600, marginTop: "16px" }}>
+                      Traduction
+                    </div>
+                    <p style={{ fontSize: "14px", lineHeight: 1.7, color: "var(--foreground)", margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
+                      {partial.translation}
+                    </p>
+                  </>
+                )}
               </div>
             )}
             <button onClick={cancelRun} style={{
@@ -1355,6 +1408,9 @@ ${result.translation}
             onDownloadTranscript={downloadTranscript}
             onDownloadPdf={downloadPdfFile}
             onDownloadSrt={downloadSrtFile}
+            onListen={listen}
+            voiceLoading={voiceLoading}
+            voiceError={voiceError}
             showCost={!!user?.is_admin}
           />
         )}

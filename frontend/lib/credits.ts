@@ -71,20 +71,21 @@ export function describeTransaction(t: CreditTransaction): string {
   if (t.op === "monthly_refill" || r.startsWith("tier=")) return "Crédits mensuels de l'abonnement";
   if (t.op === "refund") return "Remboursement";
   if (t.op === "withdrawal") return "Crédits de l'abonnement retirés (remboursement)";
+  if (r.startsWith("voice")) return "Voix de synthèse";
   if (r.startsWith("meeting_diarization")) return "Identification des intervenants (réunion)";
   if (r.startsWith("meeting_transcription")) return "Transcription de réunion";
   const m = r.match(/^pipeline_process(?:_async)?:(\d+)s:(\w+)/);
   if (m) {
     const min = Math.max(1, Math.round(Number(m[1]) / 60));
     const label = m[2].includes("diarized") ? "Traduction audio avec intervenants" : "Traduction audio";
-    return `${label} · ${min} min`;
+    return `${label}${m[2].startsWith("audio") ? " avec voix" : ""} · ${min} min`;
   }
   return t.amount >= 0 ? "Crédit" : "Consommation";
 }
 
 export interface DailyUsage {
   date:          string;   // YYYY-MM-DD
-  service:       "translation" | "translation_diarized" | "meeting_transcription" | "meeting_diarization" | "other";
+  service:       "translation" | "translation_diarized" | "meeting_transcription" | "meeting_diarization" | "voice" | "other";
   seconds:       number;
   seconds_known: boolean;  // false : anciens mouvements enregistres sans duree
   credits:       number;
@@ -101,6 +102,7 @@ export const SERVICE_LABEL: Record<DailyUsage["service"], string> = {
   translation_diarized:  "Traduction audio avec intervenants",
   meeting_transcription: "Transcription de réunion",
   meeting_diarization:   "Identification des intervenants",
+  voice:                 "Voix de synthèse",
   other:                 "Autre",
 };
 

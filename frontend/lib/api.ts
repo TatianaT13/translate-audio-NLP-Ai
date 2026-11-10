@@ -81,6 +81,7 @@ export interface RunPipelineOptions {
   promptVersion?: string;
   whisperModel?:  string;
   diarize?:       boolean;        // Identification des intervenants (AssemblyAI)
+  withTts?:       boolean;        // false : pas de voix, générée à la demande (synthesizeVoice)
   signal?:        AbortSignal;   // permet un cancel côté UI
   maxRetries?:    number;         // 502/503/504 uniquement (default: 2)
 }
@@ -168,6 +169,9 @@ export interface PipelineJob {
   job_id:   string;
   status:   "pending" | "running" | "done" | "error";
   progress: number;              // 0..100
+  /** Étapes déjà terminées d'un job en cours : transcription, puis traduction. */
+  partial?: Pick<ProcessResult, "source_text" | "language" | "language_prob">
+            & Partial<Pick<ProcessResult, "translation" | "translation_segments" | "speakers">>;
   result?:  ProcessResult;
   error?:   string;
 }
@@ -183,6 +187,7 @@ export async function submitPipelineJob(
     promptVersion = "v2.0",
     whisperModel  = "small",
     diarize       = false,
+    withTts       = true,
     signal,
   } = opts;
 
@@ -193,6 +198,7 @@ export async function submitPipelineJob(
   form.append("llm_model",      llmModel);
   form.append("prompt_version", promptVersion);
   form.append("whisper_model",  whisperModel);
+  form.append("with_tts",       withTts ? "true" : "false");
   if (diarize) form.append("diarize", "true");
 
   const res = await authFetch(`${PIPELINE_URL}/process-async`, {
@@ -237,6 +243,28 @@ export async function trackJob(
     if (job.status === "error") throw new PipelineError(500, job.error || "Erreur job inconnue");
     await new Promise((r) => setTimeout(r, intervalMs));
   }
+}
+
+/** Crédits d'une voix de synthèse : 1 par tranche de 900 caractères (≈ 1 min de parole). */
+export function voiceCredits(text: string): number {
+  return Math.max(1, Math.ceil(text.trim().length / 900));
+}
+
+/** Génère la voix de synthèse d'une traduction déjà obtenue (voix à la demande). */
+export async function synthesizeVoice(text: string, targetLang: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await authFetch(`${PIPELINE_URL}/tts`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ text, target_lang: targetLang }),
+    signal,
+  });
+  if (!res.ok) {
+    const raw = await res.text();
+    let detail = ""; try { detail = JSON.parse(raw).detail || ""; } catch { detail = raw; }
+    if (res.status === 402) detail = "Crédits insuffisants pour générer la voix.";
+    throw new PipelineError(res.status, typeof detail === "string" ? detail : "", raw);
+  }
+  return res.blob();
 }
 
 /** Seuil (octets) au-dela duquel l'UI preferera un envoi async. ~15 Mo. */
