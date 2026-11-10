@@ -70,6 +70,7 @@ export function describeTransaction(t: CreditTransaction): string {
   if (r === "signup_trial") return "Crédits offerts à l'inscription";
   if (t.op === "monthly_refill" || r.startsWith("tier=")) return "Crédits mensuels de l'abonnement";
   if (t.op === "refund") return "Remboursement";
+  if (t.op === "withdrawal") return "Crédits de l'abonnement retirés (remboursement)";
   if (r.startsWith("meeting_diarization")) return "Identification des intervenants (réunion)";
   if (r.startsWith("meeting_transcription")) return "Transcription de réunion";
   const m = r.match(/^pipeline_process(?:_async)?:(\d+)s:(\w+)/);

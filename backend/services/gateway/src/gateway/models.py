@@ -41,6 +41,11 @@ class User(Base):
     # puis s'arrete, sans renouvellement.
     cancel_at_period_end = Column(Boolean, default=False, nullable=False)
 
+    # "month" | "year" : periodicite de facturation (Stripe)
+    subscription_interval = Column(String, nullable=True)
+    # Echeance pour laquelle l'avis de renouvellement annuel a deja ete envoye
+    renewal_notice_for    = Column(DateTime(timezone=True), nullable=True)
+
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

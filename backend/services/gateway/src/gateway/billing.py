@@ -95,7 +95,16 @@ def _sync_subscription_state(user: models.User, sub: dict, db: Session) -> None:
     user.subscription_status = status_
     user.current_period_end  = period_end
     user.cancel_at_period_end = bool(sub.get("cancel_at_period_end")) and is_active
+    user.subscription_interval = _interval(sub) or user.subscription_interval
     db.commit()
+
+
+def _interval(sub: dict) -> str | None:
+    """Periodicite de facturation : "month" ou "year"."""
+    items = (sub.get("items") or {}).get("data") or []
+    first = items[0] if items else {}
+    recurring = ((first.get("price") or {}).get("recurring") or {})
+    return recurring.get("interval") or (first.get("plan") or {}).get("interval") or (sub.get("plan") or {}).get("interval")
 
 
 # Abonnements encore susceptibles de donner lieu a un prelevement
@@ -112,6 +121,35 @@ def _live_subscriptions(user: models.User) -> list[dict]:
         return []
     subs = stripe.Subscription.list(customer=user.stripe_customer_id, status="all", limit=20)
     return [s for s in (_as_dict(s) for s in subs.data) if s.get("status") in _LIVE_STATUSES]
+
+
+# ── Avis de renouvellement des abonnements annuels ───────────────────────────
+# Art. L. 215-1 C. conso. : le client doit etre prevenu par ecrit, au plus tot
+# trois mois et au plus tard un mois avant la date limite pour ne pas renouveler.
+RENEWAL_NOTICE_WINDOW = timedelta(days=75)
+
+
+def send_due_renewal_notices(db: Session, now: datetime | None = None) -> int:
+    """Envoie l'avis de renouvellement aux abonnes annuels dont l'echeance approche.
+    Un seul avis par echeance. Retourne le nombre d'avis envoyes."""
+    now = now or datetime.now(timezone.utc)
+    sent = 0
+    for user in db.query(models.User).filter(
+        models.User.subscription_tier == "pro",
+        models.User.subscription_interval == "year",
+        models.User.cancel_at_period_end == False,  # noqa: E712
+        models.User.current_period_end.isnot(None),
+    ).all():
+        end = _credits._aware(user.current_period_end)
+        if not (now < end <= now + RENEWAL_NOTICE_WINDOW):
+            continue
+        if user.renewal_notice_for is not None and _credits._aware(user.renewal_notice_for) == end:
+            continue
+        emails.send_renewal_notice(user.email, end.strftime("%d/%m/%Y"))
+        user.renewal_notice_for = end
+        db.commit()
+        sent += 1
+    return sent
 
 
 def cancel_subscriptions_now(user: models.User) -> int:
@@ -342,6 +380,7 @@ def register_routes(app, get_current_user):
 
         Configure dans Stripe Dashboard -> Developpeurs -> Webhooks avec l'URL
         https://traduction-audio.fr/api/billing/webhook et les events :
+          - charge.refunded
           - customer.subscription.created
           - customer.subscription.updated
           - customer.subscription.deleted
@@ -377,14 +416,32 @@ def register_routes(app, get_current_user):
 
         # Sync selon le type d'event
         if event_type in ("customer.subscription.created", "customer.subscription.updated"):
+            was_pro = user.subscription_tier == "pro"
             _sync_subscription_state(user, data, db)
-            # Allouer / mettre a jour les credits selon le nouveau tier
+            # Mettre a jour les quotas ; ne crediter qu'a la souscription ou au
+            # debut d'une nouvelle periode (voir credits.allocation_due)
             tier = "pro" if user.subscription_tier == "pro" else "free"
             period_end = user.current_period_end
             try:
-                _credits.apply_tier(db, user.id, tier, period_resets_at=period_end)
+                _credits.apply_tier(
+                    db, user.id, tier, period_resets_at=period_end,
+                    allocate=_credits.allocation_due(db, user.id, newly_subscribed=not was_pro),
+                )
             except Exception as e:
                 print(f"[billing] credits.apply_tier error for user {user.id}: {e}", flush=True)
+        elif event_type == "charge.refunded":
+            # Remboursement integral (retractation) : l'abonnement s'arrete tout de
+            # suite et ses credits sont retires, sinon rembourser laisserait un
+            # abonnement actif ou 200 credits gratuits. Si Stripe ne repond pas,
+            # l'erreur fait rejouer l'evenement plus tard.
+            if data.get("refunded") and user.subscription_tier == "pro":
+                cancel_subscriptions_now(user)
+                _credits.revoke_subscription_credits(db, user.id, reason="retractation")
+                user.subscription_tier    = "free"
+                user.subscription_status  = "canceled"
+                user.cancel_at_period_end = False
+                db.commit()
+                _credits.apply_tier(db, user.id, "free")
         elif event_type == "customer.subscription.deleted":
             user.subscription_tier   = "free"
             user.subscription_status = "canceled"

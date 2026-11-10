@@ -49,14 +49,27 @@ export default function CGV() {
 
       <h2>6. Droit de rétractation</h2>
       <p>
-        Conformément à l&apos;article <strong>L. 221-28 du Code de la consommation</strong>, le droit
-        de rétractation ne peut être exercé pour les contrats de fourniture de contenu numérique non
-        fourni sur un support matériel dont l&apos;exécution a commencé après accord préalable exprès
-        du consommateur et renoncement exprès à son droit de rétractation.
+        Conformément aux articles <strong>L. 221-18 et suivants du Code de la consommation</strong>,
+        l&apos;utilisateur consommateur dispose d&apos;un délai de <strong>quatorze (14) jours</strong> à
+        compter de la souscription de son abonnement pour se rétracter, sans avoir à motiver sa décision
+        et sans frais, y compris s&apos;il a déjà commencé à utiliser le Service.
       </p>
       <p>
-        Lors de la souscription, l&apos;utilisateur consent expressément à l&apos;exécution immédiate
-        du Service et renonce à son droit de rétractation.
+        Pour exercer ce droit, il suffit d&apos;adresser avant l&apos;expiration de ce délai une
+        déclaration dénuée d&apos;ambiguïté à{" "}
+        <a href="mailto:facturation@traduction-audio.fr">facturation@traduction-audio.fr</a>, depuis
+        l&apos;adresse email du compte ou en l&apos;indiquant. Le texte suivant peut être utilisé :
+      </p>
+      <p style={{ paddingLeft: "16px", borderLeft: "2px solid var(--accent-dim)" }}>
+        « Je vous notifie par la présente ma rétractation du contrat portant sur l&apos;abonnement Pro
+        souscrit le [date] sur traduction-audio.fr. Nom : [nom]. Adresse email du compte : [email].
+        Date : [date]. »
+      </p>
+      <p>
+        L&apos;éditeur accuse réception de la demande par email et rembourse la totalité des sommes
+        versées au plus tard quatorze (14) jours après l&apos;avoir reçue, par le moyen de paiement
+        utilisé lors de la souscription. L&apos;abonnement prend alors fin immédiatement et les crédits
+        qu&apos;il a apportés sont retirés du compte.
       </p>
 
       <h2>7. Durée et résiliation</h2>

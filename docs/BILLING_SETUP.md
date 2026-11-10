@@ -55,6 +55,7 @@ Dashboard → **Développeurs → Webhooks → + Add endpoint**.
 - URL : `https://traduction-audio.fr/api/billing/webhook`
 - Description : `Traduction Audio production`
 - Événements à sélectionner :
+  - `charge.refunded` (remboursement après rétractation : arrête l'abonnement et retire ses crédits)
   - `customer.subscription.created`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`

@@ -55,6 +55,12 @@ def _run_lightweight_migrations() -> None:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
 
+    for col_name, col_def in [("subscription_interval", "VARCHAR"), ("renewal_notice_for", "TIMESTAMP")]:
+        if col_name not in existing_cols:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
+                print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
+
     if "cancel_at_period_end" not in existing_cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE users ADD COLUMN cancel_at_period_end BOOLEAN DEFAULT 0 NOT NULL"))
@@ -1185,5 +1191,28 @@ _billing.register_routes(app, get_current_user)
 
 from gateway import history as _history
 _history.register_routes(app, get_current_user)
+
+
+def _daily_tasks() -> None:
+    """Taches de fond de la Gateway (mono-instance) : avis de renouvellement des
+    abonnements annuels, purge de l'historique arrive a expiration."""
+    import time
+    time.sleep(60)   # laisser le service demarrer
+    while True:
+        try:
+            with SessionLocal() as db:
+                sent = _billing.send_due_renewal_notices(db)
+                purged = _history.purge_expired(db)
+            if sent or purged:
+                print(f"[gateway] taches quotidiennes : {sent} avis de renouvellement, "
+                      f"{purged} element(s) d'historique expires", flush=True)
+        except Exception as e:
+            print(f"[gateway] taches quotidiennes en erreur : {e}", flush=True)
+        time.sleep(6 * 3600)
+
+
+if os.getenv("BACKGROUND_TASKS", "true").lower() == "true":
+    import threading
+    threading.Thread(target=_daily_tasks, daemon=True, name="daily-tasks").start()
 with SessionLocal() as _db:
     _history.purge_expired(_db)   # elements arrives a expiration pendant l'arret

@@ -9,3 +9,4 @@ import tempfile
 
 os.environ.setdefault("DATA_DIR", tempfile.mkdtemp(prefix="gateway-tests-"))
 os.environ.setdefault("GATEWAY_SERVICE_TOKEN", "test-service-token")
+os.environ.setdefault("BACKGROUND_TASKS", "false")   # pas de tache de fond pendant les tests

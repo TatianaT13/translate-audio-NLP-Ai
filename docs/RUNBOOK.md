@@ -266,6 +266,22 @@ docker compose up -d --force-recreate gateway pipeline llm tts watcher
 
 ---
 
+## 5 bis. Rembourser un client qui se rétracte (14 jours)
+
+Les CGV (art. 6) accordent 14 jours pour se rétracter, avec remboursement intégral.
+
+1. Vérifier que la demande arrive dans les 14 jours suivant la souscription, et répondre
+   au client pour en accuser réception.
+2. Dashboard Stripe → **Paiements** → le paiement du client → **Rembourser** (montant total).
+3. C'est tout : Stripe envoie l'événement `charge.refunded`, la Gateway résilie l'abonnement
+   immédiatement et retire les crédits qu'il avait apportés.
+
+Prérequis : l'événement `charge.refunded` doit être coché sur le webhook (voir
+`docs/BILLING_SETUP.md` § 4). Un remboursement **partiel** ne touche ni à l'abonnement
+ni aux crédits.
+
+---
+
 ## 6. Backup / Restore
 
 ### Sauvegarde de la base des comptes et des crédits
