@@ -4,7 +4,7 @@ export const metadata = { title: "Politique de confidentialité — traduction-a
 
 export default function Confidentialite() {
   return (
-    <LegalLayout title="Politique de confidentialité" updated="15 septembre 2026">
+    <LegalLayout title="Politique de confidentialité" updated="10 novembre 2026">
       <p>
         La présente politique décrit la manière dont <strong>traduction-audio.fr</strong> collecte,
         utilise et protège les données personnelles de ses utilisateurs, conformément au
@@ -28,9 +28,11 @@ export default function Confidentialite() {
       </ul>
       <h3>Données d&apos;usage</h3>
       <ul>
-        <li>Fichiers audio téléversés — traités puis <strong>supprimés à la fin du traitement</strong>, non conservés</li>
-        <li>Textes transcrits et traductions générées — conservés dans votre espace personnel jusqu&apos;à suppression manuelle</li>
-        <li>Métriques techniques anonymisées (durée de traitement, langue cible, taille du fichier)</li>
+        <li>Fichiers audio téléversés ou enregistrés — transmis à nos sous-traitants d&apos;IA pour traitement, puis <strong>supprimés de nos serveurs à la fin du traitement</strong></li>
+        <li>Transcriptions, traductions et comptes-rendus — affichés dans votre navigateur, <strong>non conservés sur nos serveurs</strong> : pensez à les télécharger</li>
+        <li>Extraits des transcriptions et traductions (2 000 premiers caractères) — journalisés auprès de notre outil de suivi qualité (Langfuse)</li>
+        <li>Historique de consommation de crédits (date, durée traitée, type de traitement)</li>
+        <li>Métriques techniques (durée de traitement, langue cible, taille du fichier)</li>
       </ul>
       <h3>Données de facturation</h3>
       <ul>
@@ -43,7 +45,8 @@ export default function Confidentialite() {
         <li>Fournir et faire fonctionner le Service (transcription, traduction, synthèse)</li>
         <li>Gérer votre compte et l&apos;authentification</li>
         <li>Assurer la facturation et le suivi comptable</li>
-        <li>Améliorer la qualité du Service via des statistiques anonymisées</li>
+        <li>Suivre et améliorer la qualité du Service</li>
+        <li>Protéger le Service contre les abus (vérification anti-robot à l&apos;inscription, limitation du nombre de tentatives)</li>
         <li>Répondre à vos demandes de support</li>
         <li>Respecter nos obligations légales</li>
       </ul>
@@ -52,15 +55,16 @@ export default function Confidentialite() {
       <ul>
         <li><strong>Exécution du contrat</strong> — pour les données nécessaires à la fourniture du Service</li>
         <li><strong>Obligation légale</strong> — pour les données de facturation et comptables</li>
-        <li><strong>Intérêt légitime</strong> — pour les métriques techniques anonymisées</li>
+        <li><strong>Intérêt légitime</strong> — pour le suivi qualité, les métriques techniques et la protection contre les abus</li>
         <li><strong>Consentement</strong> — pour les cookies non essentiels et communications marketing</li>
       </ul>
 
       <h2>5. Durée de conservation</h2>
       <ul>
         <li>Compte utilisateur : jusqu&apos;à suppression par l&apos;utilisateur ou après 3 ans d&apos;inactivité</li>
-        <li>Fichiers audio : supprimés à la fin du traitement (aucune conservation)</li>
-        <li>Transcriptions et traductions : jusqu&apos;à suppression manuelle depuis votre espace</li>
+        <li>Fichiers audio : supprimés de nos serveurs à la fin du traitement ; nos sous-traitants d&apos;IA peuvent les conserver temporairement selon leurs propres politiques (voir section 6)</li>
+        <li>Transcriptions et traductions : non conservées sur nos serveurs ; extraits journalisés chez Langfuse : 12 mois maximum</li>
+        <li>Historique de consommation de crédits : durée de vie du compte</li>
         <li>Factures : 10 ans (obligation légale)</li>
         <li>Logs techniques : 12 mois maximum</li>
       </ul>
@@ -71,14 +75,34 @@ export default function Confidentialite() {
         Elles peuvent être partagées avec :
       </p>
       <ul>
-        <li>Nos sous-traitants techniques (hébergeur, prestataire de paiement, fournisseurs de modèles d&apos;IA), strictement pour l&apos;exécution du Service</li>
+        <li>Nos sous-traitants, strictement pour l&apos;exécution du Service :</li>
+      </ul>
+      <dl>
+        <dt>Hetzner Online GmbH — Allemagne</dt>
+        <dd>Hébergement du Service</dd>
+        <dt>Stripe Payments Europe, Ltd. — Irlande</dt>
+        <dd>Paiement des abonnements</dd>
+        <dt>OpenAI — États-Unis</dt>
+        <dd>Transcription de l&apos;audio, traduction et rédaction des comptes-rendus. OpenAI peut conserver les données jusqu&apos;à 30 jours pour la détection d&apos;abus et ne les utilise pas pour entraîner ses modèles.</dd>
+        <dt>Anthropic — États-Unis</dt>
+        <dd>Traduction de secours, uniquement en cas d&apos;indisponibilité d&apos;OpenAI</dd>
+        <dt>AssemblyAI — États-Unis</dt>
+        <dd>Identification des intervenants, uniquement lorsque vous activez cette option</dd>
+        <dt>Mistral AI — France</dt>
+        <dd>Synthèse vocale de la traduction</dd>
+        <dt>Langfuse — Union européenne</dt>
+        <dd>Suivi de la qualité des traitements (extraits des transcriptions et traductions)</dd>
+        <dt>Cloudflare — États-Unis</dt>
+        <dd>Vérification anti-robot lors de l&apos;inscription (adresse IP et caractéristiques techniques du navigateur)</dd>
+      </dl>
+      <ul>
         <li>Les autorités compétentes, sur réquisition légale</li>
       </ul>
 
       <h2>7. Transferts hors Union européenne</h2>
       <p>
-        Certains sous-traitants (fournisseurs de modèles d&apos;IA) peuvent traiter vos données hors
-        de l&apos;Union européenne, notamment aux États-Unis. Ces transferts sont encadrés par des
+        Certains sous-traitants (OpenAI, Anthropic, AssemblyAI, Cloudflare) traitent vos données
+        aux États-Unis. Ces transferts sont encadrés par des
         clauses contractuelles types approuvées par la Commission européenne ou par des mécanismes
         équivalents.
       </p>
