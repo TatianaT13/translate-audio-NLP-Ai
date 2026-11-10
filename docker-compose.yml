@@ -82,6 +82,7 @@ services:
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
       - MLFLOW_URL=http://mlflow:5000
+      - AIRFLOW_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_REALTIME_MODEL=${OPENAI_REALTIME_MODEL:-gpt-realtime}
       # ── Stripe billing (voir docs/BILLING_SETUP.md) ─────────────────────
@@ -365,13 +366,13 @@ services:
       _AIRFLOW_DB_MIGRATE:        'true'
       _AIRFLOW_WWW_USER_CREATE:   'true'
       _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
     user: "50000:0"
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@local || true"
+    command: -c "airflow db migrate && airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email admin@local || true"
 
   airflow-webserver:
     profiles: ["lab"]

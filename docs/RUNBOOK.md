@@ -22,16 +22,16 @@ Accès :
 - Frontend : http://localhost:3000
 
 Outillage MLOps (profil `lab`, non démarré par défaut) : `docker compose --profile lab up -d`
-- Grafana : http://localhost:3001 (admin/admin)
+- Grafana : http://localhost:3001 (lecture seule, sans connexion)
 - MLflow : http://localhost:5050
-- Airflow : http://localhost:8080 (admin/admin)
+- Airflow : http://localhost:8080 (utilisateur `admin`, mot de passe `AIRFLOW_ADMIN_PASSWORD` du `.env`, `admin` par défaut en local)
 
 ### 1.2 Production (hermes VPS Hetzner)
 
 **Utiliser le script de déploiement** qui garantit toujours la dernière version :
 
 ```bash
-ssh tanya@144.76.165.54
+ssh <utilisateur>@<serveur>
 cd ~/traudio
 ./scripts/deploy.sh              # rebuild tous les services
 # OU pour un seul service :
@@ -216,7 +216,7 @@ docker compose start watcher            # avant la soutenance
 # Vérifier que le frontend écoute bien
 curl -sI http://127.0.0.1:3000
 
-# Recharger nginx (nécessite sudo — Arnaud gère)
+# Recharger nginx (nécessite sudo — géré par l'administrateur du serveur)
 sudo nginx -t && sudo systemctl reload nginx
 
 # Logs nginx
