@@ -643,24 +643,37 @@ async def _release_credits(hold_id: str | None) -> None:
 # attendent leur tour.
 MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "8"))
 MAX_JOBS_PER_USER   = int(os.getenv("MAX_JOBS_PER_USER", "2"))
+# Un job en attente garde deja son audio en memoire : la file aussi est bornee.
+MAX_QUEUED_JOBS     = int(os.getenv("MAX_QUEUED_JOBS", "40"))
 
 _job_slots = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 _user_jobs: dict[int, int] = {}   # user_id -> jobs en cours ou en attente
+_jobs_total = 0                   # tous les jobs en cours ou en attente
 
 
 def _enter_user(user_id: int | None) -> None:
-    """Compte un job de plus pour ce compte ; 429 s'il en a deja trop."""
-    if user_id is None:
-        return
-    if _user_jobs.get(user_id, 0) >= MAX_JOBS_PER_USER:
+    """Compte un job de plus. 503 si le serveur est sature, 429 si ce compte
+    en a deja trop."""
+    global _jobs_total
+    if _jobs_total >= MAX_CONCURRENT_JOBS + MAX_QUEUED_JOBS:
         raise HTTPException(
-            status_code=429,
-            detail=f"Tu as déjà {MAX_JOBS_PER_USER} traitements en cours. Attends la fin de l'un d'eux.",
+            status_code=503,
+            detail="Le service est très sollicité. Réessaie dans quelques minutes.",
+            headers={"Retry-After": "120"},
         )
-    _user_jobs[user_id] = _user_jobs.get(user_id, 0) + 1
+    if user_id is not None:
+        if _user_jobs.get(user_id, 0) >= MAX_JOBS_PER_USER:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Tu as déjà {MAX_JOBS_PER_USER} traitements en cours. Attends la fin de l'un d'eux.",
+            )
+        _user_jobs[user_id] = _user_jobs.get(user_id, 0) + 1
+    _jobs_total += 1
 
 
 def _leave_user(user_id: int | None) -> None:
+    global _jobs_total
+    _jobs_total = max(0, _jobs_total - 1)
     if user_id is None:
         return
     remaining = _user_jobs.get(user_id, 0) - 1
