@@ -97,7 +97,7 @@ export async function runPipeline(
   file: File | Blob,
   targetLangOrOpts: string | RunPipelineOptions = "en",
   llmModel      = "openai/gpt-4o-mini",
-  promptVersion = "v1.1",
+  promptVersion = "v2.0",
   whisperModel  = "small",
 ): Promise<ProcessResult> {
   // Backward-compat : positional args OU objet options
@@ -107,7 +107,7 @@ export async function runPipeline(
   const {
     targetLang    = "en",
     llmModel:     m = "openai/gpt-4o-mini",
-    promptVersion: p = "v1.1",
+    promptVersion: p = "v2.0",
     whisperModel: w  = "small",
     diarize       = false,
     signal,
@@ -180,7 +180,7 @@ export async function submitPipelineJob(
   const {
     targetLang    = "en",
     llmModel      = "openai/gpt-4o-mini",
-    promptVersion = "v1.1",
+    promptVersion = "v2.0",
     whisperModel  = "small",
     diarize       = false,
     signal,

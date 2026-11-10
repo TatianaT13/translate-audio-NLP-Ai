@@ -20,6 +20,8 @@ from llm.auth import require_caller, require_service
 load_dotenv()
 
 litellm.set_verbose = False
+# Un modele qui n'accepte pas un parametre (ex. temperature) l'ignore au lieu d'echouer.
+litellm.drop_params = True
 
 _SAFETY_FOOTER = (
     "\n\n"
@@ -52,7 +54,23 @@ PROMPTS = {
         "Use clear, broadcast-quality language."
         + _SAFETY_FOOTER
     ),
+    # v2.0 — generaliste : reunions, interviews, podcasts. Les v1.x datent du
+    # projet d'origine (flashs trafic) et restent disponibles pour comparaison.
+    "v2.0": (
+        "You are a professional French-to-{lang} translator. The text below is a "
+        "transcript of spoken French (meeting, interview, podcast, voice message). "
+        "Translate it faithfully and naturally, keeping the speaker's meaning, tone and register. "
+        "Keep names of people, companies and products, numbers, dates and acronyms exactly as they are. "
+        "Do not correct, complete or reorganize what the speaker said."
+        + _SAFETY_FOOTER.replace(
+            "- DO NOT generate a fake traffic announcement when the source is short or off-topic.\n",
+            "- If the source is short, unclear or off-topic, translate it as it is.\n",
+        )
+    ),
 }
+
+# La traduction doit etre fidele et reproductible : peu de hasard.
+TRANSLATION_TEMPERATURE = float(os.getenv("TRANSLATION_TEMPERATURE", "0.2"))
 
 LANG_LABELS = {
     "en": "English",
@@ -90,7 +108,9 @@ _FALLBACKS = [
 ]
 
 
-def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> tuple[str, float, dict]:
+def call_llm(
+    prompt: str, model: str, timeout: int = 60, clean: bool = True, temperature: float | None = None,
+) -> tuple[str, float, dict]:
     """Retourne (output, latency_ms, usage_info).
     usage_info = {prompt_tokens, completion_tokens, total_tokens, cost_usd}
 
@@ -100,6 +120,7 @@ def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> 
                        (les regex de cleanup mangeraient les ":" du markdown)."""
     t0 = time.perf_counter()
     fallbacks = [m for m in _FALLBACKS if m != model]
+    extra = {} if temperature is None else {"temperature": temperature}
     try:
         response = litellm.completion(
             model=model,
@@ -107,6 +128,7 @@ def call_llm(prompt: str, model: str, timeout: int = 60, clean: bool = True) -> 
             timeout=timeout,
             num_retries=2,
             fallbacks=fallbacks or None,
+            **extra,
         )
     except Exception as e:
         raise HTTPException(
@@ -169,7 +191,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(app).expose(app)
 
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "openai/gpt-4o-mini")
-DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v1.1")
+DEFAULT_PROMPT = os.getenv("PROMPT_VERSION", "v2.0")
 
 
 class TranslateRequest(BaseModel):
@@ -209,7 +231,7 @@ def translate(req: TranslateRequest):
     - **text** : texte source (français)
     - **target_lang** : langue cible (en, uk...)
     - **model** : modèle LiteLLM (groq/llama-3.1-8b-instant, ollama/mistral...)
-    - **prompt_version** : version du prompt (v1.0, v1.1, v1.2)
+    - **prompt_version** : version du prompt (v2.0 par défaut, v1.x historiques)
     """
     if req.prompt_version not in PROMPTS:
         raise HTTPException(
@@ -223,7 +245,9 @@ def translate(req: TranslateRequest):
     prompt = PROMPTS[req.prompt_version].format(lang=lang_label, text=req.text)
 
     try:
-        translation, latency_ms, usage_info = call_llm(prompt=prompt, model=req.model)
+        translation, latency_ms, usage_info = call_llm(
+            prompt=prompt, model=req.model, temperature=TRANSLATION_TEMPERATURE,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

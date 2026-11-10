@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 // Les pages features (/translate, /live, /meeting, /admin) restent protegees.
 // Les pages legales et informatives sont publiques (obligation LCEN + SEO).
 const PUBLIC_PATHS  = [
-  "/login", "/register", "/forgot-password", "/reset-password",
+  "/login", "/register", "/forgot-password", "/reset-password", "/verify-email",
   "/mentions-legales", "/cgu", "/cgv",
   "/confidentialite", "/cookies", "/contact", "/a-propos",
   "/tarifs",  // page publique + /tarifs/succes + /tarifs/annule

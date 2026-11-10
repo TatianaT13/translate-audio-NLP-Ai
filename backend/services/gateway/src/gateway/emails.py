@@ -96,6 +96,27 @@ def send_welcome(to: str) -> None:
     _send(to, subject, _wrap(body), text)
 
 
+def send_verification(to: str, verify_url: str) -> None:
+    subject = "Confirmez votre adresse email"
+    body = (
+        f"<h1 {_H1}>Confirmez votre adresse</h1>"
+        f"<p {_P}>Un clic pour activer votre compte et recevoir vos "
+        '<strong style="color:#c9a96e;">10 crédits offerts</strong>. Ce lien est valable '
+        "<strong>48 heures</strong>.</p>"
+        + _button(verify_url, "Confirmer mon adresse")
+        + f"<p {_SM}>Si vous n'avez pas créé de compte sur traduction-audio.fr, ignorez cet email.</p>"
+        f'<p style="font-size:12px;color:#6a6558;margin:16px 0 0;word-break:break-all;">{verify_url}</p>'
+    )
+    text = (
+        "Confirmez votre adresse email\n\n"
+        "Un clic pour activer votre compte et recevoir vos 10 crédits offerts "
+        "(lien valable 48 heures) :\n\n"
+        f"{verify_url}\n\n"
+        "Si vous n'avez pas créé de compte sur traduction-audio.fr, ignorez cet email.\n"
+    )
+    _send(to, subject, _wrap(body), text)
+
+
 def send_reset_password(to: str, reset_url: str) -> None:
     subject = "Réinitialisation de votre mot de passe"
     body = (

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  getMe, logout, changePassword, deleteAccount,
+  getMe, logout, changePassword, deleteAccount, resendVerification,
   refreshAccessToken, checkPasswordStrength,
 } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -194,7 +194,47 @@ export function AppHeader({ variant = "feature", current = null }: AppHeaderProp
           )}
         </div>
       </header>
+      {user && user.email_verified === false && <VerifyEmailBanner />}
     </>
+  );
+}
+
+// ── Adresse email à confirmer ─────────────────────────────────────────────────
+
+function VerifyEmailBanner() {
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy]     = useState(false);
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      setStatus((await resendVerification()).message);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Envoi impossible");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      padding: "10px 32px", fontSize: "13px", lineHeight: 1.5, textAlign: "center",
+      background: "rgba(201,169,110,0.08)", borderBottom: "1px solid var(--border)",
+      color: "var(--foreground)",
+    }}>
+      {status ?? (
+        <>
+          Confirmez votre adresse email pour recevoir vos 10 crédits offerts : le lien est dans l&apos;email
+          que nous vous avons envoyé.{" "}
+          <button onClick={resend} disabled={busy} style={{
+            background: "none", border: "none", padding: 0, font: "inherit",
+            color: "var(--accent)", cursor: busy ? "wait" : "pointer", textDecoration: "underline",
+          }}>
+            Renvoyer l&apos;email
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -219,9 +259,6 @@ function DropdownMenu({ user, onNavigate, onChangePwd, onDelete, onLogout }: Dro
     ...(user.is_admin ? [{ type: "link" as const, label: "Admin",       href: "/admin",     Icon: AdminIcon }] : []),
     { type: "link",   label: "Tarifs & abonnement",     href: "/tarifs",    Icon: CardIcon },
     { type: "link",   label: "Ma consommation",         href: "/consommation", Icon: CardIcon },
-    // Support de soutenance : masque du menu utilisateur (garde sur disque et
-    // sur git dans frontend/public/soutenance-pitch.html pour reference).
-    // { type: "link",   label: "Support de soutenance", href: "/soutenance-pitch.html", Icon: ExternalLinkIcon },
     { type: "separator" },
     { type: "action", label: "Changer le mot de passe", onClick: onChangePwd, Icon: KeyIcon },
     { type: "action", label: "Se déconnecter",          onClick: onLogout,     Icon: LogoutIcon },

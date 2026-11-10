@@ -37,7 +37,8 @@ const LLM_MODELS = [
 
 const PROMPT_VERSIONS = [
   { value: "v1.0", label: "v1.0 — basique" },
-  { value: "v1.1", label: "v1.1 — pro traffic (défaut)" },
+  { value: "v2.0", label: "v2.0 — généraliste (défaut)" },
+  { value: "v1.1", label: "v1.1 — pro traffic" },
   { value: "v1.2", label: "v1.2 — broadcast quality" },
 ];
 
@@ -536,20 +537,21 @@ export default function Home() {
   const [llmModel,      setLlmModel]      = useState(
     process.env.NEXT_PUBLIC_DEFAULT_LLM_MODEL || "openai/gpt-4o-mini"
   );
-  const [promptVersion, setPromptVersion] = useState("v1.1");
+  const [promptVersion, setPromptVersion] = useState("v2.0");
   const [showAdvanced,  setShowAdvanced]  = useState(false);
 
   // Persister les choix avancés dans localStorage — migration auto des valeurs obsolètes.
   // Clé versionnée pour invalider les anciennes configs sans intervention user
-  // (v1 contenait des modèles Groq dépréciés → v2 utilise le default env du frontend).
-  const CONFIG_STORAGE_KEY = "translate_config_v2";
+  // (v1 contenait des modèles Groq dépréciés → v2 utilise le default env du frontend ;
+  // v3 : le prompt par défaut passe à v2.0, les anciens choix v1.1 ne doivent pas rester).
+  const CONFIG_STORAGE_KEY = "translate_config_v3";
 
   useEffect(() => {
     try {
       // Migration : purger l'ancienne clé (v1) et forcer le user à repartir des defaults
       // du build. Sans ça, les visiteurs récurrents restent bloqués sur un modèle mort.
-      if (typeof window !== "undefined" && localStorage.getItem("translate_config")) {
-        localStorage.removeItem("translate_config");
+      for (const old of ["translate_config", "translate_config_v2"]) {
+        if (localStorage.getItem(old)) localStorage.removeItem(old);
       }
 
       const saved = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}");

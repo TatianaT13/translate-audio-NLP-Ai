@@ -4,6 +4,8 @@ export interface User {
   id: number;
   email: string;
   is_admin: boolean;
+  /** false tant que l'adresse n'est pas confirmée : crédits offerts en attente. */
+  email_verified?: boolean;
   created_at: string;
 }
 
@@ -185,6 +187,28 @@ export async function resetPassword(token: string, newPassword: string) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Lien invalide ou expiré");
+  }
+  return res.json();
+}
+
+export async function verifyEmail(token: string): Promise<{ message: string }> {
+  const res = await fetch(`${GATEWAY_URL}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Lien invalide ou expiré");
+  }
+  return res.json();
+}
+
+export async function resendVerification(): Promise<{ message: string }> {
+  const res = await authFetch(`${GATEWAY_URL}/auth/resend-verification`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(res.status === 429 ? "Trop de demandes. Réessayez dans une heure." : err.detail || "Envoi impossible");
   }
   return res.json();
 }

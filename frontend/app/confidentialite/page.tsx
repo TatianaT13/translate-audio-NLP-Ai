@@ -29,7 +29,7 @@ export default function Confidentialite() {
       <h3>Données d&apos;usage</h3>
       <ul>
         <li>Fichiers audio téléversés ou enregistrés — transmis à nos sous-traitants d&apos;IA pour traitement, puis <strong>supprimés de nos serveurs à la fin du traitement</strong></li>
-        <li>Transcriptions, traductions et comptes-rendus — affichés dans votre navigateur, <strong>non conservés sur nos serveurs</strong> : pensez à les télécharger</li>
+        <li>Transcriptions, traductions et comptes-rendus — affichés dans votre navigateur ; le résultat d&apos;un traitement long reste sur nos serveurs <strong>au plus une heure</strong>, le temps de vous être remis, puis est supprimé : pensez à le télécharger</li>
         <li>Extraits des transcriptions et traductions (2 000 premiers caractères) — journalisés auprès de notre outil de suivi qualité (Langfuse)</li>
         <li>Historique de consommation de crédits (date, durée traitée, type de traitement)</li>
         <li>Métriques techniques (durée de traitement, langue cible, taille du fichier)</li>
@@ -63,7 +63,7 @@ export default function Confidentialite() {
       <ul>
         <li>Compte utilisateur : jusqu&apos;à suppression par l&apos;utilisateur ou après 3 ans d&apos;inactivité</li>
         <li>Fichiers audio : supprimés de nos serveurs à la fin du traitement ; nos sous-traitants d&apos;IA peuvent les conserver temporairement selon leurs propres politiques (voir section 6)</li>
-        <li>Transcriptions et traductions : non conservées sur nos serveurs ; extraits journalisés chez Langfuse : 12 mois maximum</li>
+        <li>Transcriptions et traductions : supprimées de nos serveurs au plus tard une heure après le traitement ; extraits journalisés chez Langfuse : 12 mois maximum</li>
         <li>Historique de consommation de crédits : durée de vie du compte</li>
         <li>Factures : 10 ans (obligation légale)</li>
         <li>Logs techniques : 12 mois maximum</li>

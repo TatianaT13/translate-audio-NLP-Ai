@@ -55,6 +55,12 @@ def _run_lightweight_migrations() -> None:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
                 print(f"[gateway] migration : ajout colonne users.{col_name}", flush=True)
 
+    # Verification d'email (ajoute 2026-11) : les comptes existants sont consideres verifies
+    if "email_verified" not in existing_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 1 NOT NULL"))
+            print("[gateway] migration : ajout colonne users.email_verified", flush=True)
+
     # Migration user_credits : flag d'alerte quota faible (ajoute 2026-10)
     if "user_credits" in inspector.get_table_names():
         uc_cols = {c["name"] for c in inspector.get_columns("user_credits")}
@@ -77,6 +83,10 @@ def _run_lightweight_migrations() -> None:
 _run_lightweight_migrations()
 
 DEV_MODE      = os.getenv("DEV_MODE", "false").lower() == "true"
+# Les credits offerts ne sont accordes qu'une fois l'adresse confirmee : sans
+# cela, un script cree des comptes en boucle et vide le budget API. A n'activer
+# que lorsque l'envoi d'emails fonctionne (RESEND_API_KEY + domaine verifie).
+REQUIRE_EMAIL_VERIFICATION = os.getenv("REQUIRE_EMAIL_VERIFICATION", "false").lower() == "true"
 FRONTEND_URLS = os.getenv("FRONTEND_URLS", "http://localhost:3000").split(",")
 
 LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
@@ -193,21 +203,86 @@ def register(body: schemas.RegisterRequest, request: Request, db: Session = Depe
     user = models.User(
         email           = body.email,
         hashed_password = auth_utils.hash_password(body.password),
+        email_verified  = not REQUIRE_EMAIL_VERIFICATION,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # Alloue les 10 credits trial one-time (plan tarifaire — formule Decouverte)
+    if REQUIRE_EMAIL_VERIFICATION:
+        # Credits offerts et email de bienvenue : apres confirmation de l'adresse
+        verify_url = _send_verification(db, user)
+        response = {
+            "message": "Compte créé. Ouvrez l'email que nous venons de vous envoyer "
+                       "pour confirmer votre adresse et recevoir vos crédits offerts.",
+            "email": user.email,
+            "verification_required": True,
+        }
+        if DEV_MODE:
+            response["verify_url"] = verify_url   # pratique en local, sans envoi d'email
+        return response
+
+    _welcome(db, user)
+    return {"message": "Compte créé avec succès", "email": user.email, "verification_required": False}
+
+
+def _welcome(db: Session, user: models.User) -> None:
+    """Alloue les 10 credits trial one-time (formule Decouverte) et souhaite la bienvenue."""
     try:
         from gateway import credits as _credits
         _credits.grant_trial(db, user.id)
     except Exception as e:
         print(f"[gateway] grant_trial warning for user {user.id}: {e}", flush=True)
-
     emails.send_welcome(user.email)
 
-    return {"message": "Compte créé avec succès", "email": user.email}
+
+def _send_verification(db: Session, user: models.User) -> str:
+    """Cree un lien de confirmation (les precedents sont invalides) et l'envoie."""
+    db.query(models.EmailVerificationToken).filter(
+        models.EmailVerificationToken.user_id == user.id,
+        models.EmailVerificationToken.used    == False,  # noqa: E712
+    ).update({"used": True})
+    raw_token, hash_tok = auth_utils.make_token_pair()
+    expires = datetime.now(timezone.utc) + timedelta(hours=auth_utils.VERIFY_TOKEN_EXPIRE_HOURS)
+    db.add(models.EmailVerificationToken(user_id=user.id, token_hash=hash_tok, expires_at=expires))
+    db.commit()
+    verify_url = f"{APP_BASE_URL}/verify-email?token={raw_token}"
+    emails.send_verification(user.email, verify_url)
+    return verify_url
+
+
+@app.post("/auth/verify-email", dependencies=[Depends(rate_limit("verify-email", 20, 3600))])
+def verify_email(body: schemas.VerifyEmailRequest, db: Session = Depends(get_db)):
+    """Confirme l'adresse a partir du lien recu par email, puis accorde les credits offerts."""
+    token = db.query(models.EmailVerificationToken).filter(
+        models.EmailVerificationToken.token_hash == auth_utils.hash_token(body.token),
+        models.EmailVerificationToken.used       == False,  # noqa: E712
+    ).first()
+    if not token or token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Lien invalide ou expiré. Demandez un nouvel email de confirmation.")
+    user = db.query(models.User).filter(models.User.id == token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Compte introuvable")
+
+    token.used = True
+    already_verified = user.email_verified
+    user.email_verified = True
+    db.commit()
+    if not already_verified:
+        _welcome(db, user)
+    return {"message": "Adresse confirmée. Vos crédits offerts sont disponibles."}
+
+
+@app.post("/auth/resend-verification", dependencies=[Depends(rate_limit("resend-verification", 3, 3600))])
+def resend_verification(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Renvoie l'email de confirmation au compte connecte."""
+    if current_user.email_verified:
+        return {"message": "Adresse déjà confirmée."}
+    _send_verification(db, current_user)
+    return {"message": "Email de confirmation renvoyé."}
 
 
 @app.post("/auth/login", response_model=schemas.TokenResponse,
@@ -288,6 +363,7 @@ def me(current_user: models.User = Depends(get_current_user)):
         "id":         current_user.id,
         "email":      current_user.email,
         "is_admin":   current_user.is_admin,
+        "email_verified": current_user.email_verified,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }
 

@@ -245,7 +245,11 @@ function MarginsPanel() {
   if (error)   return <Card title={title}><p style={{ fontSize: "12px", color: C.red }}>{error}</p></Card>;
   if (!report) return <Card title={title}><Loader /></Card>;
 
-  const rows: MarginRow[] = [...report.services, report.total];
+  // Un service dont tous les débits datent d'avant le suivi n'a rien à afficher.
+  const rows: MarginRow[] = [
+    ...report.services.filter((r) => r.credits > 0 || r.cost_eur > 0),
+    report.total,
+  ];
   const cell = { padding: "8px 12px", fontSize: "13px", fontVariantNumeric: "tabular-nums" } as const;
   const num  = { ...cell, textAlign: "right" } as const;
 

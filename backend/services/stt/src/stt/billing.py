@@ -1,7 +1,8 @@
 """Facturation des appels directs du navigateur (page Compte-rendu).
 
 Les appels internes (jeton de service) ne passent pas ici : le pipeline facture
-lui-meme ses traitements. Gateway injoignable : on laisse passer (le pipeline, lui, refuse).
+lui-meme ses traitements. Gateway injoignable : on refuse (503), comme le pipeline —
+sinon une panne ou un jeton de service mal configure rendrait la transcription gratuite.
 """
 import os
 
@@ -25,11 +26,11 @@ async def _pre_authorize(user_id: int) -> dict | None:
                 headers={"x-service-token": SERVICE_TOKEN},
             )
         if r.status_code != 200:
-            print(f"[billing] pre-authorize HTTP {r.status_code} (non bloquant)", flush=True)
+            print(f"[billing] pre-authorize HTTP {r.status_code}", flush=True)
             return None
         return r.json()
     except Exception as e:
-        print(f"[billing] pre-authorize injoignable (non bloquant): {e}", flush=True)
+        print(f"[billing] pre-authorize injoignable: {e}", flush=True)
         return None
 
 
@@ -45,7 +46,10 @@ async def rate_for(user_id: int, diarize: bool) -> float:
     """Taux en credit/min pour cet appel ; 402 si le solde est vide."""
     info = await _pre_authorize(user_id)
     if info is None:
-        return 0.0
+        raise HTTPException(
+            status_code=503,
+            detail="Service de facturation indisponible. Réessayez dans quelques instants.",
+        )
     rate = DIARIZATION_RATE if diarize else TRANSCRIPTION_RATE
     if not info.get("ok"):
         raise _insufficient(info)

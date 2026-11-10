@@ -64,7 +64,7 @@ Plateforme MLOps de traduction audio en temps réel. **14 microservices** orches
 
 | Service | Port | Stack | Rôle |
 |---------|------|-------|------|
-| **Frontend** | 3000 | Next.js 15 standalone | UI (traduction, meeting, admin, support de soutenance) |
+| **Frontend** | 3000 | Next.js 15 standalone | UI (traduction, meeting, admin) |
 
 Rewrites Next.js internes (`next.config.ts`) pour proxy `/api`, `/pipeline`, `/stt`, `/llm` → services Docker.
 
@@ -234,7 +234,7 @@ translate-audio-NLP-Ai/
 ├── frontend/             # Next.js 15 standalone
 │   ├── app/              # Pages (page.tsx, meeting, admin, login...)
 │   ├── lib/              # Client API + auth
-│   └── public/           # Assets + soutenance.html
+│   └── public/           # Assets (le support de soutenance est dans docs/)
 ├── scripts/
 │   ├── eval_golden.py         # Benchmark 12 configs
 │   ├── mlflow_register.py     # Log runs + evaluate() + registry

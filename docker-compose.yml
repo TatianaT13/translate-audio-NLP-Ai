@@ -73,6 +73,7 @@ services:
     environment:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - DEV_MODE=${DEV_MODE:-false}
+      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
       - FRONTEND_URLS=http://localhost:3000,http://localhost:3001
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
@@ -82,6 +83,7 @@ services:
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
       - MLFLOW_URL=http://mlflow:5000
+      - AIRFLOW_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_REALTIME_MODEL=${OPENAI_REALTIME_MODEL:-gpt-realtime}
       # ── Stripe billing (voir docs/BILLING_SETUP.md) ─────────────────────
@@ -127,6 +129,13 @@ services:
       - STT_URL=http://stt:8001
       - LLM_URL=http://llm:8002
       - TTS_URL=http://tts:8003
+      # Limites de charge : taille d'un fichier, jobs simultanes (serveur / compte)
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
+      - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-8}
+      - MAX_JOBS_PER_USER=${MAX_JOBS_PER_USER:-2}
+      - MAX_QUEUED_JOBS=${MAX_QUEUED_JOBS:-40}
+      # Jobs async gardes sur disque : ils survivent a un redeploiement
+      - JOBS_DIR=/app/jobs
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -136,6 +145,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-32chars}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+    volumes:
+      - pipeline_jobs:/app/jobs
     depends_on:
       stt:
         condition: service_healthy
@@ -164,6 +175,7 @@ services:
       # 10-20x plus rapide qu'un Whisper CPU self-hosted).
       # Laisser 'local' pour utiliser Faster-Whisper self-hosted.
       - STT_BACKEND=${STT_BACKEND:-local}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-100}
       - OPENAI_STT_MODEL=${OPENAI_STT_MODEL:-whisper-1}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # AssemblyAI (diarisation on-demand quand diarize=true)
@@ -201,7 +213,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
       - LLM_FALLBACKS=${LLM_FALLBACKS:-openai/gpt-4o-mini,anthropic/claude-3-5-haiku-20241022}
-      - PROMPT_VERSION=${PROMPT_VERSION:-v1.1}
+      - PROMPT_VERSION=${PROMPT_VERSION:-v2.0}
       - GATEWAY_URL=http://gateway:8004
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
@@ -360,13 +372,13 @@ services:
       _AIRFLOW_DB_MIGRATE:        'true'
       _AIRFLOW_WWW_USER_CREATE:   'true'
       _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
     user: "50000:0"
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@local || true"
+    command: -c "airflow db migrate && airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email admin@local || true"
 
   airflow-webserver:
     profiles: ["lab"]
@@ -412,6 +424,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  pipeline_jobs:
   whisper_cache:
   tts_models:
   gateway_data:
